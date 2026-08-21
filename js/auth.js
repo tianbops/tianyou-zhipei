@@ -3,7 +3,6 @@ const Auth = {
   // 统一用户数据管理 - 所有用户信息存储在 admin_users
   // ============================================================
   
-  // 获取所有用户
   getUsers() {
     try {
       const data = localStorage.getItem('admin_users');
@@ -13,24 +12,20 @@ const Auth = {
     }
   },
 
-  // 保存所有用户
   saveUsers(users) {
     localStorage.setItem('admin_users', JSON.stringify(users));
   },
 
-  // 根据线路查找用户
   findUserByRoute(route) {
     const users = this.getUsers();
     const formattedRoute = this.formatRouteCode(route);
     return users.find(u => u.route === formattedRoute) || null;
   },
 
-  // 检查线路是否已被注册
   isRouteRegistered(route) {
     return this.findUserByRoute(route) !== null;
   },
 
-  // 创建新用户（注册时调用）
   createUser(route, role = 'driver', name = '') {
     const users = this.getUsers();
     const formattedRoute = this.formatRouteCode(route);
@@ -56,7 +51,6 @@ const Auth = {
     return newUser;
   },
 
-  // 更新用户信息（管理中心编辑时调用）
   updateUser(route, updates) {
     const users = this.getUsers();
     const formattedRoute = this.formatRouteCode(route);
@@ -70,7 +64,6 @@ const Auth = {
     return users[idx];
   },
 
-  // 删除用户
   deleteUser(route) {
     let users = this.getUsers();
     const formattedRoute = this.formatRouteCode(route);
@@ -80,7 +73,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 用户运单数据隔离 - 每个用户独立存储
+  // 用户运单数据隔离
   // ============================================================
   
   getUserDataKey(route) {
@@ -88,7 +81,6 @@ const Auth = {
     return `user_data_${formatted}`;
   },
 
-  // 获取用户运单数据
   getUserOrderData(route) {
     try {
       const key = this.getUserDataKey(route);
@@ -99,13 +91,11 @@ const Auth = {
     }
   },
 
-  // 保存用户运单数据
   saveUserOrderData(route, data) {
     const key = this.getUserDataKey(route);
     localStorage.setItem(key, JSON.stringify(data));
   },
 
-  // 清除用户运单数据
   clearUserOrderData(route) {
     const key = this.getUserDataKey(route);
     localStorage.removeItem(key);
@@ -118,16 +108,28 @@ const Auth = {
   checkAuth() {
     const loginStatus = localStorage.getItem('loginStatus');
     const currentRoute = localStorage.getItem('currentRoute');
-    if (loginStatus !== 'true' || !currentRoute) {
-      const path = window.location.pathname;
-      if (path.includes('/pages/')) {
-        window.location.href = '../index.html';
-      } else {
-        window.location.href = 'index.html';
-      }
+    
+    // 如果已登录，允许访问
+    if (loginStatus === 'true' && currentRoute) {
+      return true;
+    }
+    
+    // 未登录状态
+    const currentPage = window.location.pathname.split('/').pop();
+    const loginPages = ['index.html', 'login.html', ''];
+    
+    // 如果在登录页，不做任何跳转（避免无限循环）
+    if (loginPages.includes(currentPage)) {
       return false;
     }
-    return true;
+    
+    // 如果在其他页面，跳转到登录页
+    if (window.location.pathname.includes('/pages/')) {
+      window.location.href = '../index.html';
+    } else {
+      window.location.href = 'index.html';
+    }
+    return false;
   },
 
   getCurrentRoute() {
@@ -170,7 +172,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 退出登录 - 保存用户数据并清除缓存
+  // 退出登录
   // ============================================================
   logout() {
     const route = this.getCurrentRoute();
@@ -200,9 +202,6 @@ const Auth = {
     }
   },
 
-  // ============================================================
-  // 清除会话缓存
-  // ============================================================
   clearSessionCache() {
     localStorage.removeItem('today_orders');
     localStorage.removeItem('today_vehicle');
@@ -251,7 +250,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 格式化线路编号（确保两位数）
+  // 格式化线路编号
   // ============================================================
   formatRouteCode(input) {
     if (!input) return '';
@@ -276,7 +275,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 验证线路是否存在（用户已注册）
+  // 验证线路是否存在
   // ============================================================
   async validateRoute(route) {
     const formattedRoute = this.formatRouteCode(route);
@@ -334,7 +333,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 创建新线路（注册时调用）- 同时创建用户
+  // 创建新线路
   // ============================================================
   async createRoute(route, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
@@ -395,9 +394,6 @@ const Auth = {
     return newRouteData;
   },
 
-  // ============================================================
-  // 缓存线路数据
-  // ============================================================
   cacheRouteData(route, data) {
     const formatted = this.formatRouteCode(route);
     localStorage.setItem(`route_cache_${formatted}`, JSON.stringify(data));
@@ -408,9 +404,6 @@ const Auth = {
     }
   },
 
-  // ============================================================
-  // 添加日志
-  // ============================================================
   addLog(action, detail) {
     try {
       const logs = JSON.parse(localStorage.getItem('admin_logs') || '[]');
@@ -429,11 +422,15 @@ const Auth = {
   }
 };
 
-// 页面加载时自动检查登录状态
+// ============================================================
+// 页面加载时检查登录状态
+// ============================================================
 document.addEventListener('DOMContentLoaded', function() {
   const currentPage = window.location.pathname.split('/').pop();
-  const loginPages = ['index.html', 'login.html'];
-  if (!loginPages.includes(currentPage) && !currentPage.includes('.')) {
+  const loginPages = ['index.html', 'login.html', ''];
+  
+  // 只在非登录页检查登录状态
+  if (!loginPages.includes(currentPage)) {
     Auth.checkAuth();
   }
 });
