@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', function() {
   loadRouteData(route);
   updateStatusDot();
   
-  // 字数统计
   const textarea = document.getElementById('manualOrderInput');
   const charCount = document.getElementById('charCount');
   if (textarea && charCount) {
@@ -73,8 +72,7 @@ function saveTodayOrders(orders) {
   localStorage.setItem('today_orders', JSON.stringify(orders));
   saveToHistory(orders);
   Auth.saveCurrentUserData();
-  const route = Auth.getCurrentRoute();
-  loadRouteData(route);
+  loadRouteData(Auth.getCurrentRoute());
 }
 
 function saveToHistory(orders) {
@@ -314,7 +312,6 @@ function submitManualOrder() {
   if (charCount) charCount.textContent = '0 字符';
 }
 
-// 点击外部关闭上传弹窗
 document.getElementById('uploadOverlay').addEventListener('click', function(e) {
   if (e.target === this) {
     toggleUpload();
@@ -322,7 +319,7 @@ document.getElementById('uploadOverlay').addEventListener('click', function(e) {
 });
 
 // ============================================================
-// 保留原有函数（兼容）
+// 兼容原有函数
 // ============================================================
 function openTodayRoute() {
   window.location.href = "pages/order_detail.html";
