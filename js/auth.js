@@ -35,7 +35,6 @@ const Auth = {
     const users = this.getUsers();
     const formattedRoute = this.formatRouteCode(route);
     
-    // 检查是否已存在
     if (users.some(u => u.route === formattedRoute)) {
       return null;
     }
@@ -143,7 +142,6 @@ const Auth = {
   // 登录 - 加载用户数据
   // ============================================================
   login(route, user = '司机') {
-    // 清除当前会话
     this.clearSessionCache();
     
     const formattedRoute = this.formatRouteCode(route);
@@ -151,7 +149,6 @@ const Auth = {
     localStorage.setItem('currentRoute', formattedRoute);
     localStorage.setItem('currentUser', user);
     
-    // 加载用户运单数据
     const userData = this.getUserOrderData(formattedRoute);
     if (userData) {
       if (userData.today_orders) {
@@ -178,7 +175,6 @@ const Auth = {
   logout() {
     const route = this.getCurrentRoute();
     
-    // 保存当前用户运单数据
     if (route) {
       const userData = {
         today_orders: this.getTodayOrders(),
@@ -191,13 +187,11 @@ const Auth = {
       this.saveUserOrderData(route, userData);
     }
     
-    // 清除会话缓存
     this.clearSessionCache();
     localStorage.removeItem('loginStatus');
     localStorage.removeItem('currentRoute');
     localStorage.removeItem('currentUser');
     
-    // 跳转登录页
     const path = window.location.pathname;
     if (path.includes('/pages/')) {
       window.location.href = '../index.html';
@@ -290,15 +284,12 @@ const Auth = {
       return null;
     }
 
-    // 1. 从用户列表中查找
     const user = this.findUserByRoute(formattedRoute);
     if (user) {
-      // 获取用户运单数据
       const userData = this.getUserOrderData(formattedRoute);
       if (userData && userData.route_cache) {
         return userData.route_cache;
       }
-      // 返回默认数据
       const defaultStores = [
         { code: "01", name: "新门店_01", nav: "" },
         { code: "02", name: "新门店_02", nav: "" },
@@ -307,13 +298,11 @@ const Auth = {
       return { route: formattedRoute, stores: defaultStores };
     }
 
-    // 2. 检查本地缓存
     const cached = this.getCachedRouteData(formattedRoute);
     if (cached) {
       return cached;
     }
 
-    // 3. 检查 base_data
     try {
       const baseData = localStorage.getItem('base_data');
       if (baseData) {
@@ -328,7 +317,6 @@ const Auth = {
       console.warn('读取本地数据失败:', e);
     }
 
-    // 4. 尝试从API获取
     try {
       const response = await fetch(`/api/route/${encodeURIComponent(formattedRoute)}`);
       if (response.ok) {
@@ -354,19 +342,16 @@ const Auth = {
       return null;
     }
 
-    // 检查是否已注册
     const existingUser = this.findUserByRoute(formattedRoute);
     if (existingUser) {
       return null;
     }
 
-    // 创建用户
     const newUser = this.createUser(formattedRoute, role, name);
     if (!newUser) {
       return null;
     }
 
-    // 初始化默认门店数据
     const defaultStores = [
       { code: "01", name: "新门店_01", nav: "" },
       { code: "02", name: "新门店_02", nav: "" },
@@ -379,11 +364,9 @@ const Auth = {
       createdAt: new Date().toISOString()
     };
 
-    // 保存到缓存
     this.cacheRouteData(formattedRoute, newRouteData);
     localStorage.setItem('base_data', JSON.stringify(defaultStores));
     
-    // 保存用户运单数据
     const emptyUserData = {
       today_orders: null,
       today_vehicle: '',
@@ -394,7 +377,6 @@ const Auth = {
     };
     this.saveUserOrderData(formattedRoute, emptyUserData);
     
-    // 尝试同步到API
     try {
       const response = await fetch(`/api/route/${encodeURIComponent(formattedRoute)}`, {
         method: 'PUT',
@@ -419,7 +401,6 @@ const Auth = {
   cacheRouteData(route, data) {
     const formatted = this.formatRouteCode(route);
     localStorage.setItem(`route_cache_${formatted}`, JSON.stringify(data));
-    // 同时保存到用户数据
     const userData = this.getUserOrderData(formatted);
     if (userData) {
       userData.route_cache = data;
