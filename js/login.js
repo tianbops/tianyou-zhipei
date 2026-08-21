@@ -1,12 +1,22 @@
-// 登录函数
+// ============================================================
+// 登录逻辑
+// ============================================================
 async function login() {
   const routeCode = document.getElementById('routeCode').value.trim();
   const password = document.getElementById('password').value.trim();
   const errorEl = document.getElementById('loginError');
   errorEl.style.display = 'none';
 
-  if (!routeCode) { errorEl.textContent = '⚠️ 请输入线路编号'; errorEl.style.display = 'block'; return; }
-  if (!password) { errorEl.textContent = '⚠️ 请输入密码'; errorEl.style.display = 'block'; return; }
+  if (!routeCode) {
+    errorEl.textContent = '⚠️ 请输入线路编号';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (!password) {
+    errorEl.textContent = '⚠️ 请输入密码';
+    errorEl.style.display = 'block';
+    return;
+  }
 
   try {
     const routeData = await Auth.validateRoute(routeCode);
@@ -54,5 +64,18 @@ function togglePassword() {
 
 // 回车触发登录
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') login();
+  if (e.key === 'Enter') {
+    login();
+  }
 });
+
+// 如果已登录，跳转到对应页面
+if (localStorage.getItem('loginStatus') === 'true') {
+  const currentRoute = Auth.getCurrentRoute();
+  const adminRoutes = ['admin', '管理员', 'ADMIN'];
+  if (adminRoutes.includes(currentRoute)) {
+    window.location.href = 'admin.html';
+  } else {
+    window.location.href = 'home.html';
+  }
+}
