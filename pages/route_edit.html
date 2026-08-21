@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>原始数据维护</title>
+  <link rel="stylesheet" href="../css/route_edit.css">
+  <style>
+    /* 新增样式 - 保持与原风格一致 */
+    .store-list-scroll {
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .store-list-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .store-list-scroll::-webkit-scrollbar-thumb {
+      background: #3A4654;
+      border-radius: 10px;
+    }
+    
+    .edit-textarea {
+      width: 100%;
+      max-height: 200px;
+      min-height: 120px;
+      background: #05070A;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 14px;
+      resize: vertical;
+      font-family: inherit;
+      outline: none;
+      overflow-y: auto;
+      line-height: 1.8;
+    }
+    .edit-textarea:focus { border-color: #2457A6; }
+    .edit-textarea::placeholder { color: #4A5568; }
+    
+    .char-count {
+      position: absolute;
+      bottom: 8px;
+      right: 14px;
+      color: #4A5568;
+      font-size: 11px;
+      pointer-events: none;
+      background: #05070A;
+      padding: 0 4px;
+    }
+    .textarea-wrapper { position: relative; margin-bottom: 12px; }
+    
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .quick-actions button {
+      flex: 1;
+      background: #303A46;
+      border: none;
+      color: #fff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .quick-actions button:hover { background: #3A4654; }
+    
+    .dialog-box .input-box {
+      margin-bottom: 14px;
+    }
+    .dialog-box .input-box input {
+      width: 100%;
+      height: 48px;
+      background: #05070A;
+      border: none;
+      border-radius: 14px;
+      padding: 0 16px;
+      color: #fff;
+      font-size: 16px;
+      text-align: center;
+    }
+    .dialog-box .input-box input::placeholder { color: #7F8B98; }
+
+    /* 按钮组 - 并列显示 */
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .btn-group .save-btn {
+      flex: 1;
+      margin-top: 0;
+    }
+    .btn-group .cancel-btn {
+      flex: 1;
+      height: 55px;
+      border-radius: 18px;
+      background: #303A46;
+      color: #fff;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-group .cancel-btn:active { transform: scale(0.97); }
+    .btn-group .cancel-btn:hover { background: #3A4654; }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="top-bar">
+      <!-- 返回按钮通过JS控制跳转 -->
+      <button class="back-btn" id="backBtn">←</button>
+      <div class="app-title">原始数据维护</div>
+      <div style="width:40px;"></div>
+    </header>
+
+    <section class="card">
+      <div class="card-title">📋 线路信息</div>
+      <div class="info-row"><span class="label">线路名称</span><span class="value" id="routeName">加载中...</span></div>
+      <div class="info-row"><span class="label">默认车辆</span><span class="value">渝DK7692</span></div>
+      <div class="info-row"><span class="label">客户总数</span><span class="value" id="storeCount">--</span></div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title">🏪 全部客户</div>
+        <button class="add-btn" onclick="openAddDialog()">+ 新增</button>
+      </div>
+      <!-- 可滚动列表 -->
+      <div class="store-list-scroll" id="storeList">
+        <div style="text-align:center;padding:20px;color:#7F8B98;">加载中...</div>
+      </div>
+    </section>
+
+    <!-- ===== 按钮组：更新数据库 + 取消 ===== -->
+    <div class="btn-group">
+      <button class="save-btn" onclick="updateDatabase()">📌 更新数据库</button>
+      <button class="cancel-btn" id="cancelBtn">取消</button>
+    </div>
+
+    <!-- ===== 新增/编辑弹窗（带编辑录入） ===== -->
+    <div id="storeDialog" class="dialog">
+      <div class="dialog-box">
+        <h3 id="dialogTitle">编辑客户</h3>
+        
+        <!-- 单个编辑模式 -->
+        <div id="singleEditMode">
+          <div class="input-box">
+            <input id="storeCode" placeholder="编号 (自动排序)">
+          </div>
+          <div class="input-box">
+            <input id="storeName" placeholder="客户名称">
+          </div>
+          <div class="input-box">
+            <input id="storeNav" placeholder="导航链接 (选填)">
+          </div>
+        </div>
+
+        <!-- 批量录入模式（新增时显示） -->
+        <div id="batchEditMode" style="display:none;">
+          <div style="color:#7F8B98; font-size:13px; text-align:center; margin-bottom:12px;">
+            批量录入客户数据，每行一条<br>格式：客户名称 | 导航链接 (选填)
+          </div>
+          <div class="textarea-wrapper">
+            <textarea id="batchInput" class="edit-textarea" rows="5" placeholder="请输入客户数据，每行一条&#10;例如：&#10;江北胡汪洋经销商 | https://surl.amap.com/xxx&#10;渝北中景隆贸易有限公司"></textarea>
+            <div class="char-count" id="batchCharCount">0 字符</div>
+          </div>
+          <div class="quick-actions">
+            <button onclick="pasteBatchContent()">📋 粘贴</button>
+            <button onclick="clearBatchInput()">🗑️ 清空</button>
+            <button onclick="loadBatchExample()">📝 示例数据</button>
+          </div>
+        </div>
+
+        <div class="dialog-btn">
+          <button onclick="closeStoreDialog()">取消</button>
+          <button onclick="saveStore()" id="saveBtn">保存</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="../js/auth.js"></script>
+  <script>
+    // ============================================================
+    // 全局变量
+    // ============================================================
+    let editIndex = -1;
+    let stores = [];
+    let isDirty = false;
+    let isBatchMode = false;
+    let currentRoute = '';
+
+    // ============================================================
+    // 获取URL参数中的线路
+    // ============================================================
+    function getRouteFromURL() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const route = urlParams.get('route');
+      if (route) {
+        return decodeURIComponent(route);
+      }
+      return Auth.getCurrentRoute();
+    }
+
+    // ============================================================
+    // 返回地址管理 - 从哪来回到哪去
+    // ============================================================
+    function getReturnUrl() {
+      // 检查URL参数
+      const urlParams = new URLSearchParams(window.location.search);
+      const from = urlParams.get('from');
+      if (from === 'admin') {
+        return '../admin.html';
+      }
+      
+      // 检查referrer
+      const referrer = document.referrer || '';
+      if (referrer.includes('admin.html')) {
+        return '../admin.html';
+      }
+      if (referrer.includes('home.html')) {
+        return '../home.html';
+      }
+      
+      // 默认返回首页
+      return '../home.html';
+    }
+
+    // ============================================================
+    // 页面初始化
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!Auth.checkAuth()) return;
+      
+      // 从URL获取线路
+      currentRoute = getRouteFromURL();
+      document.getElementById("routeName").textContent = currentRoute;
+      
+      // 设置返回按钮
+      const backBtn = document.getElementById('backBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+      const returnUrl = getReturnUrl();
+      
+      backBtn.onclick = function() {
+        goBack(returnUrl);
+      };
+      cancelBtn.onclick = function() {
+        goBack(returnUrl);
+      };
+      
+      loadStores(currentRoute);
+    });
+
+    // ============================================================
+    // 返回函数
+    // ============================================================
+    function goBack(returnUrl) {
+      if (isDirty && !confirm("有未保存的修改，确定离开吗？")) return;
+      window.location.href = returnUrl || '../home.html';
+    }
+
+    // ============================================================
+    // 加载门店数据 - 使用指定线路
+    // ============================================================
+    async function loadStores(route) {
+      const box = document.getElementById("storeList");
+      box.innerHTML = '<div style="text-align:center;padding:20px;color:#7F8B98;">加载中...</div>';
+      
+      try {
+        // 尝试从用户数据中获取
+        let data = Auth.getCachedRouteData(route);
+        if (!data) {
+          // 尝试从API获取
+          const response = await fetch(`/api/route/${encodeURIComponent(route)}`);
+          if (response.ok) data = await response.json();
+        }
+        
+        if (data && data.stores) {
+          stores = data.stores;
+        } else {
+          // 默认数据
+          stores = [
+            { code: "01", name: "新门店_01", nav: "" },
+            { code: "02", name: "新门店_02", nav: "" },
+            { code: "03", name: "新门店_03", nav: "" }
+          ];
+        }
+        document.getElementById("storeCount").textContent = stores.length;
+        renderStores();
+      } catch (error) {
+        console.error("加载失败:", error);
+        stores = [
+          { code: "01", name: "新门店_01", nav: "" },
+          { code: "02", name: "新门店_02", nav: "" },
+          { code: "03", name: "新门店_03", nav: "" }
+        ];
+        document.getElementById("storeCount").textContent = stores.length;
+        renderStores();
+      }
+    }
+
+    // ============================================================
+    // 渲染门店列表（可滚动）
+    // ============================================================
+    function renderStores() {
+      const box = document.getElementById("storeList");
+      box.innerHTML = "";
+      
+      if (stores.length === 0) {
+        box.innerHTML = '<div style="text-align:center;padding:20px;color:#7F8B98;">暂无客户，点击 + 新增</div>';
+        return;
+      }
+      
+      stores.forEach(function(store, index) {
+        box.innerHTML += `
+          <div class="store-row">
+            <div>
+              <span style="color:#7F8B98;margin-right:10px;">${store.code}</span>
+              ${store.name}
+            </div>
+            <div class="store-actions">
+              ${store.nav ? `<button onclick="window.open('${store.nav}','_blank')" style="background:#2457A6;">导航</button>` : ''}
+              <button onclick="editStore(${index})">编辑</button>
+              <button onclick="deleteStore(${index})" style="background:#C0392B;">删除</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // ============================================================
+    // 打开新增弹窗（批量录入模式）
+    // ============================================================
+    function openAddDialog() {
+      editIndex = -1;
+      isBatchMode = true;
+      document.getElementById("dialogTitle").textContent = "新增客户（批量录入）";
+      document.getElementById("singleEditMode").style.display = "none";
+      document.getElementById("batchEditMode").style.display = "block";
+      document.getElementById("batchInput").value = '';
+      document.getElementById("batchCharCount").textContent = '0 字符';
+      document.getElementById("saveBtn").textContent = '批量导入';
+      document.getElementById("storeDialog").style.display = "flex";
+      
+      const textarea = document.getElementById('batchInput');
+      const charCount = document.getElementById('batchCharCount');
+      textarea.addEventListener('input', function() {
+        charCount.textContent = this.value.length + ' 字符';
+      });
+    }
+
+    // ============================================================
+    // 编辑门店（单条编辑模式）
+    // ============================================================
+    function editStore(index) {
+      editIndex = index;
+      isBatchMode = false;
+      const store = stores[index];
+      document.getElementById("dialogTitle").textContent = "编辑客户";
+      document.getElementById("singleEditMode").style.display = "block";
+      document.getElementById("batchEditMode").style.display = "none";
+      document.getElementById("storeCode").value = store.code;
+      document.getElementById("storeName").value = store.name;
+      document.getElementById("storeNav").value = store.nav || '';
+      document.getElementById("saveBtn").textContent = '保存';
+      document.getElementById("storeDialog").style.display = "flex";
+    }
+
+    // ============================================================
+    // 关闭弹窗
+    // ============================================================
+    function closeStoreDialog() {
+      document.getElementById("storeDialog").style.display = "none";
+    }
+
+    // ============================================================
+    // 保存（根据模式选择）
+    // ============================================================
+    function saveStore() {
+      if (isBatchMode) {
+        saveBatchStores();
+      } else {
+        saveSingleStore();
+      }
+    }
+
+    // ============================================================
+    // 保存单条
+    // ============================================================
+    function saveSingleStore() {
+      const code = document.getElementById("storeCode").value.trim();
+      const name = document.getElementById("storeName").value.trim();
+      const nav = document.getElementById("storeNav").value.trim();
+      
+      if (!code) { alert("请输入编号"); return; }
+      if (!name) { alert("请输入客户名称"); return; }
+      
+      const newStore = { code, name, nav };
+      
+      if (editIndex === -1) {
+        stores.push(newStore);
+      } else {
+        stores[editIndex] = newStore;
+      }
+      
+      sortAndRenumber();
+      isDirty = true;
+      closeStoreDialog();
+      renderStores();
+      document.getElementById("storeCount").textContent = stores.length;
+      saveToCache();
+    }
+
+    // ============================================================
+    // 批量导入
+    // ============================================================
+    function saveBatchStores() {
+      const rawText = document.getElementById('batchInput').value.trim();
+      
+      if (!rawText) {
+        alert('⚠️ 请先录入客户数据');
+        return;
+      }
+
+      const lines = rawText.split('\n').filter(line => line.trim());
+      const newStores = [];
+      
+      lines.forEach((line, index) => {
+        let parts = line.split(/[|\t]/).map(s => s.trim()).filter(s => s);
+        
+        if (parts.length >= 1) {
+          const name = parts[0] || `客户_${index + 1}`;
+          const nav = parts[1] || '';
+          newStores.push({ code: '', name, nav });
+        }
+      });
+
+      if (newStores.length === 0) {
+        alert('⚠️ 未能解析有效数据，请检查格式\n格式示例：客户名称 | 导航链接');
+        return;
+      }
+
+      stores = stores.concat(newStores);
+      sortAndRenumber();
+      isDirty = true;
+      closeStoreDialog();
+      renderStores();
+      document.getElementById("storeCount").textContent = stores.length;
+      saveToCache();
+      
+      alert(`✅ 成功导入 ${newStores.length} 条客户数据`);
+    }
+
+    // ============================================================
+    // 排序和重新编号
+    // ============================================================
+    function sortAndRenumber() {
+      stores.sort((a, b) => {
+        const an = parseInt(a.code) || 999;
+        const bn = parseInt(b.code) || 999;
+        return an - bn;
+      });
+      stores.forEach((s, i) => {
+        s.code = String(i + 1).padStart(2, '0');
+      });
+    }
+
+    // ============================================================
+    // 删除门店
+    // ============================================================
+    function deleteStore(index) {
+      if (!confirm("确定删除该客户吗？")) return;
+      stores.splice(index, 1);
+      sortAndRenumber();
+      isDirty = true;
+      renderStores();
+      document.getElementById("storeCount").textContent = stores.length;
+      saveToCache();
+    }
+
+    // ============================================================
+    // 保存到缓存 - 使用当前线路
+    // ============================================================
+    function saveToCache() {
+      const route = currentRoute || Auth.getCurrentRoute();
+      Auth.cacheRouteData(route, { route, stores });
+      localStorage.setItem('base_data', JSON.stringify(stores));
+    }
+
+    // ============================================================
+    // 更新数据库 - 使用当前线路
+    // ============================================================
+    async function updateDatabase() {
+      if (!confirm("确认更新数据库吗？\n更新后将使用此数据")) return;
+      
+      const route = currentRoute || Auth.getCurrentRoute();
+      
+      try {
+        saveToCache();
+        
+        const response = await fetch(`/api/route/${encodeURIComponent(route)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stores })
+        });
+        
+        if (response.ok) {
+          Auth.addLog('数据库更新', `${route} 数据库已更新 (${stores.length}条)`);
+          isDirty = false;
+          alert("✅ 数据库更新成功");
+        } else {
+          Auth.addLog('数据库更新', `${route} 本地数据已更新 (${stores.length}条)`);
+          isDirty = false;
+          alert("✅ 数据已保存到本地（API同步失败）");
+        }
+      } catch (error) {
+        Auth.addLog('数据库更新', `${route} 本地数据已更新 (${stores.length}条)`);
+        isDirty = false;
+        alert("✅ 数据已保存到本地（网络异常）");
+      }
+      
+      Auth.saveCurrentUserData();
+    }
+
+    // ============================================================
+    // 批量录入辅助功能
+    // ============================================================
+    async function pasteBatchContent() {
+      try {
+        const text = await navigator.clipboard.readText();
+        const textarea = document.getElementById('batchInput');
+        if (textarea) {
+          textarea.value = text;
+          document.getElementById('batchCharCount').textContent = text.length + ' 字符';
+          showToast('✅ 已粘贴剪贴板内容');
+        }
+      } catch (err) {
+        alert('⚠️ 无法读取剪贴板，请手动 Ctrl+V 粘贴');
+      }
+    }
+
+    function clearBatchInput() {
+      if (confirm('确定清空输入内容吗？')) {
+        document.getElementById('batchInput').value = '';
+        document.getElementById('batchCharCount').textContent = '0 字符';
+        showToast('已清空', 'warning');
+      }
+    }
+
+    function loadBatchExample() {
+      const example = `江北胡汪洋经销商 | https://surl.amap.com/zTkZfPL2fP
+渝北中景隆贸易有限公司
+江北重庆兴农融资担保集团有限公司
+江北重庆三峡融资担保集团有限公司
+渝北Q312重庆沁园松石北路店 | https://surl.amap.com/L0E65r1hcQ0
+特渠部重庆明德商业保理有限公司`;
+      document.getElementById('batchInput').value = example;
+      document.getElementById('batchCharCount').textContent = example.length + ' 字符';
+      showToast('📝 示例数据已加载');
+    }
+
+    function showToast(msg, type = 'success') {
+      const toast = document.getElementById('toast');
+      if (!toast) {
+        const div = document.createElement('div');
+        div.id = 'toast';
+        div.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#18212B;color:#fff;padding:12px 24px;border-radius:12px;z-index:9999;font-size:14px;max-width:90%;text-align:center;border-left:4px solid #27AE60;';
+        document.body.appendChild(div);
+        div.textContent = msg;
+        setTimeout(() => div.remove(), 3000);
+        return;
+      }
+      toast.textContent = msg;
+      toast.style.display = 'block';
+      toast.className = 'toast show ' + type;
+      setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    }
+
+    // ============================================================
+    // 页面关闭提醒
+    // ============================================================
+    window.addEventListener('beforeunload', function(e) {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '有未保存的修改';
+      }
+    });
+
+    // ============================================================
+    // 暴露全局函数
+    // ============================================================
+    window.openAddDialog = openAddDialog;
+    window.editStore = editStore;
+    window.deleteStore = deleteStore;
+    window.saveStore = saveStore;
+    window.closeStoreDialog = closeStoreDialog;
+    window.updateDatabase = updateDatabase;
+    window.pasteBatchContent = pasteBatchContent;
+    window.clearBatchInput = clearBatchInput;
+    window.loadBatchExample = loadBatchExample;
+  </script>
+</body>
+</html>
