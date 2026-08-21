@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>今日运单详情</title>
+  <link rel="stylesheet" href="../css/order.css">
+  <style>
+    /* 确保配送路线列表可滚动 */
+    .store-list-scroll {
+      height: 320px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+    .store-list-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .store-list-scroll::-webkit-scrollbar-thumb {
+      background: #3A4654;
+      border-radius: 10px;
+    }
+    /* Firefox 滚动条 */
+    .store-list-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: #3A4654 transparent;
+    }
+
+    .store-item {
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 14px;
+      flex-shrink: 0;
+      padding: 0 4px;
+    }
+    .store-item:last-child { border-bottom: none; }
+    .store-item .store-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .store-item .store-info .index {
+      color: #7F8B98;
+      font-size: 12px;
+      min-width: 24px;
+    }
+    .store-item .store-info .name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .store-item .store-info .weight {
+      color: #7F8B98;
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    .store-item .store-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .store-item .store-actions .status-text {
+      font-size: 12px;
+      color: #7F8B98;
+    }
+    .store-item .store-actions button {
+      background: #2457A6;
+      border: none;
+      color: #fff;
+      border-radius: 10px;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .store-item .store-actions .deliver-btn {
+      background: #27AE60;
+    }
+    .store-item .store-actions .deliver-btn:active { transform: scale(0.95); }
+    .store-item .store-actions .nav-btn:active { transform: scale(0.95); }
+
+    .empty-tip {
+      text-align: center;
+      padding: 40px 20px;
+      color: #7F8B98;
+      font-size: 15px;
+    }
+    .empty-tip .icon {
+      font-size: 48px;
+      display: block;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="top-bar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div class="app-title">今日运单详情</div>
+      <button class="menu-btn" onclick="toggleMenu()">☰</button>
+    </header>
+
+    <div id="menuPanel" class="menu-panel">
+      <div class="menu-line" id="menuRoute">加载中...</div>
+      <div onclick="openVehicle()">🚚 更换车辆</div>
+      <div onclick="window.location.href='route_edit.html'">⚙ 原始数据</div>
+      <div onclick="shareOrder()">↗ 分享运单</div>
+      <div onclick="logout()" class="logout-item">🚪 退出登录</div>
+    </div>
+
+    <section class="task-card">
+      <div class="info-row top-row">
+        <div id="routeName">加载中...</div>
+        <div id="todayDate"></div>
+      </div>
+      <div class="info-row">
+        <span class="label">今日用车：</span>
+        <span class="value" id="vehicleText">渝DK7692</span>
+      </div>
+      <div class="info-row">
+        <span class="label">今日配送：</span>
+        <span class="value warning">总 <span id="storeCount">--</span> 家</span>
+      </div>
+      <div class="info-row">
+        <span class="label">商品总量：</span>
+        <span class="value" id="totalWeight">--</span>
+      </div>
+    </section>
+
+    <section class="task-card">
+      <div class="route-title">配送路线</div>
+      <!-- 可滚动列表 -->
+      <div class="store-list-scroll" id="routeList">
+        <div class="empty-tip">
+          <span class="icon">📭</span>
+          今日暂无配送数据
+        </div>
+      </div>
+    </section>
+
+    <div id="vehicleDialog" class="dialog">
+      <div class="dialog-box">
+        <h3>更换今日用车</h3>
+        <input id="newVehicle" placeholder="请输入车辆号码" value="渝DK7692">
+        <div class="dialog-btn">
+          <button onclick="closeVehicle()">取消</button>
+          <button onclick="saveVehicle()">确认</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/auth.js"></script>
+  <script>
+    // ============================================================
+    // 页面初始化
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!Auth.checkAuth()) return;
+      
+      const route = Auth.getCurrentRoute();
+      document.getElementById("routeName").textContent = route;
+      document.getElementById("menuRoute").textContent = route;
+      document.getElementById("todayDate").textContent = new Date().toISOString().split('T')[0];
+      
+      const vehicle = localStorage.getItem("today_vehicle") || "渝DK7692";
+      document.getElementById("vehicleText").textContent = vehicle;
+      
+      loadTodayData(route);
+    });
+
+    // ============================================================
+    // 加载今日数据
+    // ============================================================
+    function loadTodayData(route) {
+      const listEl = document.getElementById("routeList");
+      const storeCountEl = document.getElementById("storeCount");
+      const totalWeightEl = document.getElementById("totalWeight");
+      
+      const todayOrders = getTodayOrders();
+      
+      if (todayOrders && todayOrders.length > 0) {
+        const count = todayOrders.length;
+        let totalWeight = 0;
+        todayOrders.forEach(order => {
+          const weight = parseFloat(order.weight) || 0;
+          totalWeight += weight;
+        });
+        
+        storeCountEl.textContent = count;
+        totalWeightEl.textContent = totalWeight.toFixed(1) + ' kg';
+        renderRoute(todayOrders);
+      } else {
+        storeCountEl.textContent = '0';
+        totalWeightEl.textContent = '无数据';
+        listEl.innerHTML = `
+          <div class="empty-tip">
+            <span class="icon">📭</span>
+            今日暂无配送数据
+          </div>
+        `;
+      }
+    }
+
+    // ============================================================
+    // 获取今日运单
+    // ============================================================
+    function getTodayOrders() {
+      try {
+        const data = localStorage.getItem('today_orders');
+        return data ? JSON.parse(data) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    // ============================================================
+    // 渲染路线 - 可滚动
+    // ============================================================
+    function renderRoute(stores) {
+      const box = document.getElementById("routeList");
+      if (!box) return;
+      box.innerHTML = "";
+      
+      if (!stores || stores.length === 0) {
+        box.innerHTML = `
+          <div class="empty-tip">
+            <span class="icon">📭</span>
+            今日暂无配送数据
+          </div>
+        `;
+        return;
+      }
+      
+      stores.forEach(function(store, index) {
+        const statusMap = {
+          '待配送': '⏳ 待配送',
+          '配送中': '🚚 配送中',
+          '已送达': '✅ 已送达'
+        };
+        const statusText = statusMap[store.status] || '⏳ 待配送';
+        const weightText = store.weight ? store.weight + 'kg' : '';
+        
+        box.innerHTML += `
+          <div class="store-item">
+            <div class="store-info">
+              <span class="index">${index + 1}</span>
+              <span class="name">${store.name}</span>
+              ${weightText ? `<span class="weight">${weightText}</span>` : ''}
+            </div>
+            <div class="store-actions">
+              <span class="status-text">${statusText}</span>
+              <button class="nav-btn" onclick="openNavigation('${store.nav || ''}')">导航</button>
+              <button class="deliver-btn" onclick="markDelivered(${index})">送达</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function openNavigation(nav) {
+      if (nav) {
+        window.open(nav, '_blank');
+      } else {
+        alert('该门店暂无导航地址');
+      }
+    }
+
+    function markDelivered(index) {
+      if (!confirm('确认该门店已送达？')) return;
+      
+      const todayOrders = getTodayOrders();
+      if (todayOrders && todayOrders[index]) {
+        todayOrders[index].status = '已送达';
+        localStorage.setItem('today_orders', JSON.stringify(todayOrders));
+        updateHistory(todayOrders);
+        renderRoute(todayOrders);
+        Auth.addLog('门店送达', `送达门店: ${todayOrders[index].name}`);
+        alert('✅ 已标记为送达');
+      }
+    }
+
+    function updateHistory(orders) {
+      const today = new Date().toISOString().split('T')[0];
+      const route = Auth.getCurrentRoute();
+      let history = JSON.parse(localStorage.getItem('delivery_history') || '[]');
+      
+      let totalWeight = 0;
+      orders.forEach(order => {
+        const weight = parseFloat(order.weight) || 0;
+        totalWeight += weight;
+      });
+      
+      const record = {
+        date: today,
+        route: route,
+        vehicle: localStorage.getItem('today_vehicle') || '渝DK7692',
+        count: orders.length,
+        weight: totalWeight.toFixed(1) + ' kg',
+        orders: orders
+      };
+      
+      const index = history.findIndex(item => item.date === today);
+      if (index >= 0) {
+        history[index] = record;
+      } else {
+        history.unshift(record);
+      }
+      localStorage.setItem('delivery_history', JSON.stringify(history));
+      Auth.saveCurrentUserData();
+    }
+
+    // ============================================================
+    // 三横菜单
+    // ============================================================
+    function toggleMenu() {
+      const menu = document.getElementById("menuPanel");
+      menu.style.display = menu.style.display === "block" ? "none" : "block";
+    }
+
+    document.addEventListener("click", function(e) {
+      const menu = document.getElementById("menuPanel");
+      const btn = document.querySelector(".menu-btn");
+      if (menu && !menu.contains(e.target) && !btn?.contains(e.target)) {
+        menu.style.display = "none";
+      }
+    });
+
+    // ============================================================
+    // 更换车辆
+    // ============================================================
+    function openVehicle() {
+      document.getElementById("vehicleDialog").style.display = "flex";
+      document.getElementById("menuPanel").style.display = "none";
+    }
+
+    function closeVehicle() {
+      document.getElementById("vehicleDialog").style.display = "none";
+    }
+
+    function saveVehicle() {
+      const vehicle = document.getElementById("newVehicle").value.trim();
+      if (!vehicle) {
+        alert("请输入车辆号码");
+        return;
+      }
+      localStorage.setItem("today_vehicle", vehicle);
+      document.getElementById("vehicleText").textContent = vehicle;
+      closeVehicle();
+      Auth.addLog('车辆更换', `更换车辆为: ${vehicle}`);
+    }
+
+    // ============================================================
+    // 分享
+    // ============================================================
+    function shareOrder() {
+      if (navigator.share) {
+        navigator.share({
+          title: "天友智配One 今日运单",
+          text: `今日配送任务 - ${Auth.getCurrentRoute()}`,
+          url: window.location.href
+        });
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href).then(() => alert('📋 链接已复制'));
+      } else {
+        alert('分享功能: 请复制链接分享');
+      }
+    }
+
+    // ============================================================
+    // 返回首页
+    // ============================================================
+    function goBack() {
+      window.location.href = "../home.html";
+    }
+
+    // ============================================================
+    // 退出登录
+    // ============================================================
+    function logout() {
+      if (confirm("确定退出登录吗？")) {
+        Auth.logout();
+      }
+    }
+  </script>
+</body>
+</html>
