@@ -113,7 +113,7 @@
     }
 
     // ============================================================
-    // 普通用户登录
+    // 普通用户登录 - 从 Upstash 实时验证
     // ============================================================
     async function login() {
       const rawRoute = document.getElementById('routeCode').value.trim();
@@ -139,35 +139,29 @@
         return;
       }
 
-      // ===== 从 admin_users 中查找用户 =====
-      const users = Auth.getUsers();
-      const user = users.find(u => u.route === routeCode);
+      // ===== 从 Upstash 实时查找用户 =====
+      try {
+        const user = await Auth.findUserByRoute(routeCode);
 
-      if (!user) {
-        errorEl.textContent = '❌ 线路未注册，请点击「注册」创建';
-        errorEl.style.display = 'block';
-        return;
-      }
-
-      // ===== 验证密码：用用户密码 或 统一密码 =====
-      const unifiedPassword = getUnifiedPassword();
-      if (password === user.password || password === unifiedPassword) {
-        // 如果用户密码与统一密码不同，同步更新
-        if (user.password !== unifiedPassword) {
-          const updatedUsers = Auth.getUsers();
-          const idx = updatedUsers.findIndex(u => u.route === routeCode);
-          if (idx !== -1) {
-            updatedUsers[idx].password = unifiedPassword;
-            localStorage.setItem('admin_users', JSON.stringify(updatedUsers));
-            Auth.syncUsersToUpstash(updatedUsers);
-          }
+        if (!user) {
+          errorEl.textContent = '❌ 线路未注册，请点击「注册」创建';
+          errorEl.style.display = 'block';
+          return;
         }
-        Auth.login(routeCode);
-        Auth.addLog('用户登录', `${routeCode} 登录系统`);
-        window.location.href = 'home.html';
-      } else {
-        errorEl.textContent = '❌ 密码错误，请重试';
+
+        // ===== 验证密码 =====
+        if (password === user.password) {
+          Auth.login(routeCode);
+          Auth.addLog('用户登录', `${routeCode} 登录系统`);
+          window.location.href = 'home.html';
+        } else {
+          errorEl.textContent = '❌ 密码错误，请重试';
+          errorEl.style.display = 'block';
+        }
+      } catch (error) {
+        errorEl.textContent = '⚠️ 网络错误，请稍后重试';
         errorEl.style.display = 'block';
+        console.error('登录错误:', error);
       }
     }
 
@@ -213,10 +207,9 @@
       }
 
       try {
-        const users = Auth.getUsers();
-        const existingUser = users.find(u => u.route === routeCode);
-
-        if (existingUser) {
+        // ===== 从 Upstash 实时检查是否已注册 =====
+        const isRegistered = await Auth.isRouteRegistered(routeCode);
+        if (isRegistered) {
           errorEl.textContent = '❌ 该线路已被注册，请直接登录';
           errorEl.style.display = 'block';
           return;
@@ -228,7 +221,7 @@
 
         // ===== 使用当前统一密码创建用户 =====
         const unifiedPassword = getUnifiedPassword();
-        const newRouteData = await Auth.createRouteWithPassword(routeCode, unifiedPassword, 'driver', '');
+        const newRouteData = await Auth.createRoute(routeCode, unifiedPassword, 'driver', '');
 
         if (newRouteData) {
           infoEl.textContent = '✅ 线路注册成功！正在跳转...';
@@ -236,7 +229,6 @@
           infoEl.style.display = 'block';
 
           Auth.login(routeCode);
-          Auth.cacheRouteData(routeCode, newRouteData);
           Auth.addLog('线路注册', `${routeCode} 注册成功`);
 
           setTimeout(() => {
@@ -258,7 +250,7 @@
     });
 
     // ============================================================
-    // 管理员登录
+    // 管理员登录 - 从 Upstash 实时验证
     // ============================================================
     function openAdminLogin() {
       document.getElementById('adminLoginOverlay').classList.add('active');
@@ -293,23 +285,29 @@
         return;
       }
 
-      const users = Auth.getUsers();
-      const adminUser = users.find(u => u.role === 'admin' && u.name === route);
+      // ===== 从 Upstash 实时查找管理员 =====
+      try {
+        const adminUser = await Auth.findAdminByName(route);
 
-      if (!adminUser) {
-        errorEl.textContent = '❌ 管理员不存在';
-        errorEl.style.display = 'block';
-        return;
-      }
+        if (!adminUser) {
+          errorEl.textContent = '❌ 管理员不存在';
+          errorEl.style.display = 'block';
+          return;
+        }
 
-      if (password === adminUser.password) {
-        Auth.login(route, '管理员');
-        Auth.addLog('管理员登录', `${route} 登录管理系统`);
-        closeAdminLogin();
-        window.location.href = 'admin.html';
-      } else {
-        errorEl.textContent = '❌ 密码错误，请重试';
+        if (password === adminUser.password) {
+          Auth.login(route, '管理员');
+          Auth.addLog('管理员登录', `${route} 登录管理系统`);
+          closeAdminLogin();
+          window.location.href = 'admin.html';
+        } else {
+          errorEl.textContent = '❌ 密码错误，请重试';
+          errorEl.style.display = 'block';
+        }
+      } catch (error) {
+        errorEl.textContent = '⚠️ 网络错误，请稍后重试';
         errorEl.style.display = 'block';
+        console.error('管理员登录错误:', error);
       }
     }
 
