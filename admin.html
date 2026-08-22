@@ -110,7 +110,7 @@
         <div class="icon">💾</div><div class="title">数据备份</div><div class="desc">导出/导入</div>
       </button>
       <button class="admin-card" onclick="openLogManagement()">
-        <div class="icon">📝</div><div class="title">修改日志</div><div class="desc">操作记录</div><div class="badge" id="logBadge">0</div>
+        <div class>📝</div><div class="title">修改日志</div><div class="desc">操作记录</div><div class="badge" id="logBadge">0</div>
       </button>
       <button class="admin-card full-width" onclick="logout()" style="background:#2C1A1A;">
         <div class="icon">🚪</div><div class="title">退出登录</div><div class="desc">返回登录页面</div>
@@ -199,16 +199,13 @@
   <div class="admin-dialog" id="adminEditDialog">
     <div class="admin-dialog-box">
       <h3 id="adminEditTitle">修改管理员信息</h3>
-      <!-- 第一行：修改管理员名称 -->
       <div class="input-box">
         <input id="adminEditName" placeholder="修改管理员名称">
       </div>
-      <!-- 第二行：修改管理员密码 -->
       <div class="admin-password-box">
         <input id="adminEditPassword" type="password" placeholder="修改管理员密码">
         <button type="button" class="admin-eye-btn" onclick="toggleAdminEditPassword()">👁</button>
       </div>
-      <!-- 第三行：修改企业统一密码 -->
       <div class="admin-password-box">
         <input id="adminEditUnifiedPassword" type="password" placeholder="修改企业统一密码">
         <button type="button" class="admin-eye-btn" onclick="toggleAdminEditUnifiedPassword()">👁</button>
@@ -534,6 +531,9 @@
 
     function openUserManagement() { openDialog('userDialog'); renderUsers(); }
 
+    // ============================================================
+    // 渲染用户列表 - 管理员有编辑按钮，无删除按钮
+    // ============================================================
     async function renderUsers(filter = '') {
       let users = await Auth.fetchUsersFromUpstash();
       users.sort((a, b) => {
@@ -547,13 +547,17 @@
       }
       
       const container = document.getElementById('userList');
-      if (!users.length) { container.innerHTML = '<div class="admin-empty">暂无用户</div>'; return; }
+      if (!users.length) { 
+        container.innerHTML = '<div class="admin-empty">暂无用户</div>'; 
+        return; 
+      }
       
       const roleMap = { admin: '管理员', driver: '司机', delivery: '配送' };
       const roleClass = { admin: 'admin', driver: 'driver', delivery: 'delivery' };
       
       container.innerHTML = users.map(u => {
         const isAdmin = u.role === 'admin';
+        // 管理员只显示编辑按钮，不显示删除按钮
         const deleteBtn = isAdmin ? '' : `<button class="del-btn" onclick="deleteUser(${u.id})">删除</button>`;
         
         return `
