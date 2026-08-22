@@ -1,4 +1,4 @@
-// functions/api/users.js - 用户数据 API
+// functions/api/users.js
 export async function onRequest(context) {
   const { request } = context;
   const method = request.method;
@@ -32,8 +32,6 @@ export async function onRequest(context) {
           });
         }
       }
-      
-      // 没有数据返回空数组
       return new Response(JSON.stringify({ users: [] }), {
         headers: { 'Content-Type': 'application/json' }
       });
