@@ -263,4 +263,643 @@
       min-width: 50px;
       padding: 6px 8px;
       border-radius: 10px;
-      backgro
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.03);
+      color: #5A6A7A;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .quick-actions button:hover {
+      background: rgba(255,255,255,0.06);
+      color: #B8C2CC;
+    }
+    .quick-actions button:active { transform: scale(0.94); }
+    .quick-actions button .emoji { font-size: 14px; }
+
+    .sheet-footer {
+      display: flex;
+      gap: 10px;
+      margin-top: 2px;
+    }
+    .sheet-footer .btn-cancel {
+      flex: 1;
+      height: 44px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: none;
+      color: #5A6A7A;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .sheet-footer .btn-cancel:hover {
+      background: rgba(255,255,255,0.08);
+    }
+    .sheet-footer .btn-confirm {
+      flex: 2;
+      height: 44px;
+      border-radius: 14px;
+      background: #2457A6;
+      border: none;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .sheet-footer .btn-confirm:active { transform: scale(0.96); }
+    .sheet-footer .btn-confirm:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #18212B;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 12px;
+      z-index: 9999;
+      font-size: 13px;
+      max-width: 90%;
+      text-align: center;
+      display: none;
+      border-left: 3px solid #27AE60;
+    }
+    .toast.show { display: block; }
+    .toast.warning { border-left-color: #FFB020; }
+    .toast.error { border-left-color: #E74C3C; }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="top-bar">
+      <div class="brand-info">
+        <div class="brand-name">智配One</div>
+        <div class="brand-sub">智能配送 · 一路领先</div>
+      </div>
+      <button class="menu-btn" onclick="openHomeMenu()">☰</button>
+    </header>
+
+    <div id="homeMenu" class="home-menu">
+      <div class="current-line" id="menuRoute">加载中...</div>
+      <div class="home-menu-item" onclick="goToRouteEdit()">⚙ 原始数据</div>
+      <div class="home-menu-item" onclick="logout()" style="color:#FFB020;">🚪 退出登录</div>
+    </div>
+
+    <section class="task-card">
+      <div class="task-title">
+        <div class="task-name">今日任务 <span class="status-dot" id="statusDot"></span></div>
+        <div class="vehicle-area" id="homeRoute">加载中...</div>
+      </div>
+      <div class="task-main">
+        <div class="task-info">
+          <div>待配送：<strong id="storeCount">无数据</strong></div>
+          <div>总重量：<strong id="totalWeight">无数据</strong></div>
+        </div>
+        <div class="delivery-man">
+          <img src="assets/delivery-route.png" alt="配送路线" onerror="this.style.display='none';this.parentElement.textContent='🚚'">
+        </div>
+      </div>
+    </section>
+
+    <div class="function-list">
+      <button class="function-btn upload-btn" onclick="toggleUpload()">
+        <span>📷</span> 上传运单
+      </button>
+      <button class="function-btn" onclick="goToOrderDetail()">
+        <span>🗺</span> 今日路线
+      </button>
+      <button class="function-btn" onclick="goToHistory()">
+        <span>◷</span> 历史查询
+      </button>
+    </div>
+
+    <!-- ===== Uber风格上传弹窗 ===== -->
+    <div class="upload-overlay" id="uploadOverlay">
+      <div class="upload-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">📤 上传运单</div>
+        <div class="sheet-subtitle">从相册选取或上传文件</div>
+
+        <div class="upload-icons">
+          <div class="upload-icon-btn" id="albumBtn" onclick="triggerUpload('album')">
+            <span class="icon">🖼️</span>
+            <span class="icon-label">相册</span>
+            <span class="ripple"></span>
+            <span class="badge-dot"></span>
+          </div>
+          <div class="upload-icon-btn" id="fileBtn" onclick="triggerUpload('file')">
+            <span class="icon">📄</span>
+            <span class="icon-label">文件</span>
+            <span class="ripple"></span>
+            <span class="badge-dot"></span>
+          </div>
+        </div>
+
+        <div class="divider-line"><hr><span>或手动输入</span><hr></div>
+
+        <div class="parse-status" id="parseStatus">
+          <div class="status-row">
+            <span class="status-icon" id="statusIcon">⏳</span>
+            <span class="status-text" id="statusText">正在解析运单信息...</span>
+          </div>
+          <div class="status-progress"><div class="bar" id="progressBar"></div></div>
+          <div class="status-count" id="statusCount"></div>
+          <div class="parsed-tags" id="parsedTags"></div>
+        </div>
+
+        <div class="input-area">
+          <textarea id="manualOrderInput" rows="3" placeholder="输入门店名称，每行一个&#10;或粘贴运单列表"></textarea>
+          <span class="char-count" id="charCount">0</span>
+        </div>
+
+        <div class="quick-actions">
+          <button onclick="pasteFromClipboard()"><span class="emoji">📋</span> 粘贴</button>
+          <button onclick="clearManualInput()"><span class="emoji">🗑️</span> 清空</button>
+          <button onclick="loadExampleData()"><span class="emoji">📝</span> 示例</button>
+          <button onclick="parseManualInput()"><span class="emoji">🔍</span> 解析</button>
+        </div>
+
+        <div class="sheet-footer">
+          <button class="btn-cancel" onclick="toggleUpload()">取消</button>
+          <button class="btn-confirm" id="confirmBtn" onclick="submitManualOrder()">确认录入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script>
+    // ============================================================
+    // 全局变量
+    // ============================================================
+    let baseStores = [];
+    let parsedOrders = [];
+
+    // ============================================================
+    // 页面初始化
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!Auth.checkAuth()) return;
+      const route = Auth.getCurrentRoute();
+      document.getElementById("menuRoute").textContent = route;
+      document.getElementById("homeRoute").textContent = route;
+      loadRouteData(route);
+      updateStatusDot();
+
+      const textarea = document.getElementById('manualOrderInput');
+      const charCount = document.getElementById('charCount');
+      if (textarea && charCount) {
+        textarea.addEventListener('input', function() {
+          charCount.textContent = this.value.length;
+          document.getElementById('parseStatus').classList.remove('active');
+          document.getElementById('parseStatus').classList.remove('done');
+        });
+      }
+    });
+
+    // ============================================================
+    // 加载基准门店
+    // ============================================================
+    async function loadRouteData(route) {
+      try {
+        let data = Auth.getCachedRouteData(route);
+        if (!data) {
+          const response = await fetch(`/api/route/${encodeURIComponent(route)}`);
+          if (response.ok) data = await response.json();
+        }
+        if (data && data.stores) {
+          baseStores = data.stores;
+        }
+        const todayOrders = getTodayOrders();
+        if (todayOrders && todayOrders.length > 0) {
+          const count = todayOrders.length;
+          let totalWeight = 0;
+          todayOrders.forEach(order => {
+            const weight = parseFloat(order.weight) || 0;
+            totalWeight += weight;
+          });
+          document.getElementById("storeCount").textContent = count + ' 家门店';
+          document.getElementById("totalWeight").textContent = totalWeight.toFixed(1) + ' kg';
+        } else {
+          document.getElementById("storeCount").textContent = '无数据';
+          document.getElementById("totalWeight").textContent = '无数据';
+        }
+        updateStatusDot();
+      } catch (error) {
+        console.error("加载数据失败:", error);
+        document.getElementById("storeCount").textContent = '无数据';
+        document.getElementById("totalWeight").textContent = '无数据';
+        updateStatusDot();
+      }
+    }
+
+    function getTodayOrders() {
+      try {
+        const data = localStorage.getItem('today_orders');
+        return data ? JSON.parse(data) : null;
+      } catch { return null; }
+    }
+
+    function saveTodayOrders(orders) {
+      localStorage.setItem('today_orders', JSON.stringify(orders));
+      saveToHistory(orders);
+      Auth.saveCurrentUserData();
+      loadRouteData(Auth.getCurrentRoute());
+    }
+
+    function saveToHistory(orders) {
+      const today = new Date().toISOString().split('T')[0];
+      const route = Auth.getCurrentRoute();
+      let history = JSON.parse(localStorage.getItem('delivery_history') || '[]');
+      let totalWeight = 0;
+      orders.forEach(order => { totalWeight += order.weight || 0; });
+      const record = {
+        date: today, route, vehicle: localStorage.getItem('today_vehicle') || '渝DK7692',
+        count: orders.length, weight: totalWeight.toFixed(1) + ' kg', orders
+      };
+      const index = history.findIndex(item => item.date === today);
+      if (index >= 0) history[index] = record;
+      else history.unshift(record);
+      if (history.length > 100) history.length = 100;
+      localStorage.setItem('delivery_history', JSON.stringify(history));
+      Auth.saveCurrentUserData();
+    }
+
+    function updateStatusDot() {
+      const dot = document.getElementById('statusDot');
+      const todayOrders = getTodayOrders();
+      if (todayOrders && todayOrders.length > 0) {
+        dot.style.background = '#E74C3C';
+      } else {
+        dot.style.background = '#3498DB';
+      }
+    }
+
+    // ============================================================
+    // 菜单控制
+    // ============================================================
+    function openHomeMenu() {
+      const menu = document.getElementById("homeMenu");
+      menu.style.display = menu.style.display === "block" ? "none" : "block";
+    }
+    document.addEventListener("click", function(e) {
+      const menu = document.getElementById("homeMenu");
+      const btn = document.querySelector(".menu-btn");
+      if (menu && !menu.contains(e.target) && !btn?.contains(e.target)) {
+        menu.style.display = "none";
+      }
+    });
+
+    function goToRouteEdit() { window.location.href = "pages/route_edit.html"; }
+    function goToOrderDetail() { window.location.href = "pages/order_detail.html"; }
+    function goToHistory() { window.location.href = "pages/history.html"; }
+    function logout() {
+      if (confirm("确定退出登录吗？")) Auth.logout();
+    }
+
+    // ============================================================
+    // 上传弹窗
+    // ============================================================
+    function toggleUpload() {
+      const overlay = document.getElementById("uploadOverlay");
+      overlay.classList.toggle('active');
+      if (!overlay.classList.contains('active')) {
+        document.getElementById('parseStatus').classList.remove('active');
+        document.getElementById('parseStatus').classList.remove('done');
+      }
+    }
+
+    // ============================================================
+    // 解析引擎（纯前端备用）
+    // ============================================================
+    function parseAndSortOrders(rawText) {
+      const cleaned = rawText.replace(/ZW\w+/g, '').replace(/\s+/g, ' ').trim();
+      const separators = /[->\n,，、；;]+/;
+      let items = cleaned.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+      if (baseStores.length > 0) {
+        const storeNames = baseStores.map(s => s.name);
+        items.sort((a, b) => {
+          const idxA = storeNames.findIndex(name => a.includes(name) || name.includes(a));
+          const idxB = storeNames.findIndex(name => b.includes(name) || name.includes(b));
+          return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
+        });
+      }
+      return items;
+    }
+
+    // ============================================================
+    // 显示解析进度动画
+    // ============================================================
+    function showParsingProgress(callback) {
+      const statusEl = document.getElementById('parseStatus');
+      const iconEl = document.getElementById('statusIcon');
+      const textEl = document.getElementById('statusText');
+      const barEl = document.getElementById('progressBar');
+      const countEl = document.getElementById('statusCount');
+      const tagsEl = document.getElementById('parsedTags');
+
+      statusEl.classList.add('active');
+      statusEl.classList.remove('done');
+      iconEl.textContent = '⏳';
+      textEl.textContent = '正在解析运单信息...';
+      barEl.style.width = '0%';
+      countEl.textContent = '';
+      tagsEl.innerHTML = '';
+
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 10 + 2;
+        if (progress > 90) progress = 90;
+        barEl.style.width = progress + '%';
+      }, 100);
+
+      setTimeout(() => {
+        clearInterval(interval);
+        barEl.style.width = '100%';
+        setTimeout(() => {
+          const result = callback();
+          if (result && result.length > 0) {
+            statusEl.classList.add('done');
+            iconEl.textContent = '✅';
+            textEl.textContent = `解析完成，识别到 ${result.length} 家门店`;
+            countEl.textContent = '已按路线顺序排列';
+            tagsEl.innerHTML = result.slice(0, 10).map((name, i) =>
+              `<span class="tag"><span class="idx">${i+1}</span>${name}</span>`
+            ).join('');
+            if (result.length > 10) {
+              tagsEl.innerHTML += `<span class="tag">+${result.length - 10} 家...</span>`;
+            }
+            parsedOrders = result;
+            document.getElementById('manualOrderInput').value = result.join('\n');
+            document.getElementById('charCount').textContent = result.join('\n').length;
+            document.getElementById('confirmBtn').disabled = false;
+          } else {
+            iconEl.textContent = '⚠️';
+            textEl.textContent = '未能识别到有效门店，请手动输入';
+            barEl.style.width = '0%';
+          }
+        }, 300);
+      }, 1200 + Math.random() * 800);
+    }
+
+    // ============================================================
+    // 图片压缩
+    // ============================================================
+    async function compressImage(file) {
+      try {
+        const options = {
+          maxSizeMB: 0.5,
+          maxWidthOrHeight: 1024,
+          useWebWorker: true
+        };
+        const compressedFile = await imageCompression(file, options);
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsDataURL(compressedFile);
+        });
+      } catch (e) {
+        // 压缩失败则返回原始文件
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsDataURL(file);
+        });
+      }
+    }
+
+    // ============================================================
+    // 调用 OCR API
+    // ============================================================
+    async function callOCR(base64Image) {
+      const route = Auth.getCurrentRoute();
+      showParsingProgress(() => {}); // 显示进度
+
+      try {
+        const response = await fetch('/api/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Image, route: route })
+        });
+        const result = await response.json();
+        if (result.success && result.data) {
+          const { stores, totalWeight, vehicle, matchRate, warning } = result.data;
+          fillParsedResult(stores, totalWeight, vehicle);
+          if (warning) {
+            showToast('⚠️ ' + warning, 'warning');
+          }
+        } else {
+          showToast('❌ 识别失败，请手动输入', 'error');
+        }
+      } catch (e) {
+        showToast('❌ 网络错误，请重试', 'error');
+      }
+    }
+
+    // ============================================================
+    // 填充解析结果
+    // ============================================================
+    function fillParsedResult(stores, totalWeight, vehicle) {
+      const textarea = document.getElementById('manualOrderInput');
+      textarea.value = stores.join('\n');
+      document.getElementById('charCount').textContent = textarea.value.length;
+
+      const statusEl = document.getElementById('parseStatus');
+      statusEl.classList.add('active');
+      statusEl.classList.remove('done');
+      document.getElementById('statusIcon').textContent = '✅';
+      document.getElementById('statusText').textContent = `解析完成，${stores.length} 家门店`;
+      document.getElementById('statusCount').textContent = `总重量: ${totalWeight || '未识别'} | 车牌: ${vehicle || '未识别'}`;
+      const tagsEl = document.getElementById('parsedTags');
+      tagsEl.innerHTML = stores.slice(0, 10).map((name, i) =>
+        `<span class="tag"><span class="idx">${i+1}</span>${name}</span>`
+      ).join('');
+      if (stores.length > 10) {
+        tagsEl.innerHTML += `<span class="tag">+${stores.length - 10} 家...</span>`;
+      }
+      parsedOrders = stores;
+      document.getElementById('confirmBtn').disabled = false;
+    }
+
+    // ============================================================
+    // 上传处理（相册/文件）
+    // ============================================================
+    function triggerUpload(type) {
+      const input = document.createElement("input");
+      input.type = "file";
+      if (type === 'album') {
+        input.accept = "image/*";
+      } else {
+        input.accept = ".jpg,.png,.jpeg,.pdf,.xls,.xlsx,.csv,.txt";
+      }
+      input.click();
+      input.onchange = function() {
+        if (input.files && input.files[0]) {
+          const file = input.files[0];
+          Auth.addLog('文件上传', `上传: ${file.name}`);
+          if (file.type.startsWith('image/')) {
+            compressImage(file).then(compressedBase64 => {
+              callOCR(compressedBase64);
+            });
+          } else {
+            // 文本文件直接读取
+            const reader = new FileReader();
+            reader.onload = function(e) {
+              const text = e.target.result;
+              const sorted = parseAndSortOrders(text);
+              fillParsedResult(sorted, '', '');
+            };
+            reader.readAsText(file);
+          }
+        }
+        toggleUpload();
+      };
+    }
+
+    // ============================================================
+    // 手动输入解析
+    // ============================================================
+    function parseManualInput() {
+      const rawText = document.getElementById('manualOrderInput').value.trim();
+      if (!rawText) {
+        showToast('⚠️ 请先输入运单信息', 'error');
+        return;
+      }
+      showParsingProgress(() => {
+        return parseAndSortOrders(rawText);
+      });
+    }
+
+    // ============================================================
+    // 快捷操作
+    // ============================================================
+    async function pasteFromClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        document.getElementById('manualOrderInput').value = text;
+        document.getElementById('charCount').textContent = text.length;
+        showToast('✅ 已粘贴');
+        parseManualInput();
+      } catch (err) {
+        alert('⚠️ 无法读取剪贴板，请手动 Ctrl+V');
+      }
+    }
+
+    function clearManualInput() {
+      if (confirm('清空内容？')) {
+        document.getElementById('manualOrderInput').value = '';
+        document.getElementById('charCount').textContent = '0';
+        document.getElementById('parseStatus').classList.remove('active');
+        document.getElementById('parseStatus').classList.remove('done');
+        showToast('已清空', 'warning');
+      }
+    }
+
+    function loadExampleData() {
+      const example = `江北胡汪洋经销商 | 12.5 | 已送达
+渝北中景隆贸易有限公司 | 8.3 | 配送中
+江北重庆兴农融资担保集团 | 15.6 | 待配送`;
+      document.getElementById('manualOrderInput').value = example;
+      document.getElementById('charCount').textContent = example.length;
+      showToast('📝 示例已加载');
+      parseManualInput();
+    }
+
+    function showToast(msg, type = 'success') {
+      let toast = document.getElementById('toast');
+      if (!toast) {
+        const div = document.createElement('div');
+        div.id = 'toast';
+        div.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#18212B;color:#fff;padding:10px 20px;border-radius:12px;z-index:9999;font-size:13px;max-width:90%;text-align:center;border-left:3px solid #27AE60;';
+        document.body.appendChild(div);
+        toast = div;
+      }
+      toast.textContent = msg;
+      toast.style.display = 'block';
+      toast.className = 'toast show ' + type;
+      setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    }
+
+    // ============================================================
+    // 提交录入（云端保存）
+    // ============================================================
+    function submitManualOrder() {
+      const rawText = document.getElementById('manualOrderInput').value.trim();
+      if (!rawText) {
+        alert('⚠️ 请先录入运单数据');
+        return;
+      }
+      if (parsedOrders.length === 0) {
+        parsedOrders = rawText.split('\n').filter(s => s.trim());
+      }
+      if (parsedOrders.length === 0) {
+        alert('⚠️ 请至少录入一条门店');
+        return;
+      }
+      doSaveAndNavigate();
+    }
+
+    function doSaveAndNavigate() {
+      const route = Auth.getCurrentRoute();
+      const orders = parsedOrders;
+      const countEl = document.getElementById('statusCount');
+      let totalWeight = '';
+      let vehicle = '';
+      if (countEl) {
+        const text = countEl.textContent;
+        const weightMatch = text.match(/总重量:\s*([^\s|]+)/);
+        if (weightMatch) totalWeight = weightMatch[1];
+        const vehicleMatch = text.match(/车牌:\s*([^\s|]+)/);
+        if (vehicleMatch) vehicle = vehicleMatch[1];
+      }
+
+      fetch('/api/order/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route, orders, totalWeight, vehicle })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          Auth.addLog('运单录入', `录入 ${orders.length} 条运单`);
+          toggleUpload();
+          window.location.href = "pages/order_detail.html";
+        } else {
+          alert('❌ 保存失败，请重试');
+        }
+      })
+      .catch(err => {
+        alert('❌ 网络错误，请重试');
+      });
+    }
+
+    // ============================================================
+    // 点击外部关闭
+    // ============================================================
+    document.getElementById('uploadOverlay').addEventListener('click', function(e) {
+      if (e.target === this) toggleUpload();
+    });
+
+    // ============================================================
+    // 兼容原有函数
+    // ============================================================
+    function openTodayRoute() { window.location.href = "pages/order_detail.html"; }
+    function openHistory() { window.location.href = "pages/history.html"; }
+  </script>
+</body>
+</html>
