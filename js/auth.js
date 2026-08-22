@@ -1,6 +1,6 @@
 const Auth = {
   // ============================================================
-  // 从 Upstash 获取用户数据（实时）
+  // 获取用户数据（优先 Upstash）
   // ============================================================
   async fetchUsersFromUpstash() {
     try {
@@ -8,7 +8,6 @@ const Auth = {
       if (response.ok) {
         const data = await response.json();
         if (data.users && data.users.length > 0) {
-          // 同步到 localStorage 作为缓存
           localStorage.setItem('admin_users', JSON.stringify(data.users));
           return data.users;
         }
@@ -16,13 +15,9 @@ const Auth = {
     } catch (e) {
       console.log('从 Upstash 获取用户数据失败');
     }
-    // 如果 Upstash 没有数据，返回 localStorage 中的缓存
     return this.getLocalUsers();
   },
 
-  // ============================================================
-  // 获取本地缓存用户数据（备用）
-  // ============================================================
   getLocalUsers() {
     try {
       const data = localStorage.getItem('admin_users');
@@ -33,7 +28,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 保存用户数据到 Upstash（实时同步）
+  // 保存用户数据到 Upstash
   // ============================================================
   async saveUsersToUpstash(users) {
     try {
@@ -43,28 +38,23 @@ const Auth = {
         body: JSON.stringify({ users: users })
       });
       if (response.ok) {
-        console.log('用户数据已同步到 Upstash');
-        // 同步到 localStorage 作为缓存
+        console.log('✅ 用户数据已同步到 Upstash');
         localStorage.setItem('admin_users', JSON.stringify(users));
         return true;
       }
     } catch (e) {
-      console.log('Upstash 同步失败');
+      console.log('⚠️ Upstash 同步失败');
     }
-    // 同步失败时保存到 localStorage
     localStorage.setItem('admin_users', JSON.stringify(users));
     return false;
   },
 
-  // ============================================================
-  // 获取统一密码（从 localStorage 读取）
-  // ============================================================
   getUnifiedPassword() {
     return localStorage.getItem('unified_password') || 'tianyou2024';
   },
 
   // ============================================================
-  // 根据线路查找用户（实时从 Upstash 获取）
+  // 查找用户
   // ============================================================
   async findUserByRoute(route) {
     const users = await this.fetchUsersFromUpstash();
@@ -72,35 +62,24 @@ const Auth = {
     return users.find(u => u.route === formattedRoute) || null;
   },
 
-  // ============================================================
-  // 根据用户名查找管理员（实时从 Upstash 获取）
-  // ============================================================
   async findAdminByName(name) {
     const users = await this.fetchUsersFromUpstash();
     return users.find(u => u.role === 'admin' && u.name === name) || null;
   },
 
-  // ============================================================
-  // 检查线路是否已被注册
-  // ============================================================
   async isRouteRegistered(route) {
     const user = await this.findUserByRoute(route);
     return user !== null;
   },
 
   // ============================================================
-  // 创建新用户（注册时调用）
+  // 创建用户
   // ============================================================
   async createUser(route, password, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
-    
-    // 检查是否已存在
     const existing = await this.findUserByRoute(formattedRoute);
-    if (existing) {
-      return null;
-    }
+    if (existing) return null;
 
-    // 获取当前用户列表
     const users = await this.fetchUsersFromUpstash();
     const maxId = users.reduce((max, u) => Math.max(max, u.id || 0), 0);
     
@@ -116,12 +95,11 @@ const Auth = {
     users.push(newUser);
     await this.saveUsersToUpstash(users);
     this.addLog('用户注册', `新用户注册: ${formattedRoute} (${role})`);
-    
     return newUser;
   },
 
   // ============================================================
-  // 更新用户信息
+  // 更新用户
   // ============================================================
   async updateUser(route, updates) {
     const formattedRoute = this.formatRouteCode(route);
@@ -132,7 +110,6 @@ const Auth = {
     users[idx] = { ...users[idx], ...updates };
     await this.saveUsersToUpstash(users);
     this.addLog('用户更新', `更新用户: ${formattedRoute}`);
-    
     return users[idx];
   },
 
@@ -148,7 +125,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 用户运单数据隔离（localStorage 存储）
+  // 运单数据
   // ============================================================
   getUserDataKey(route) {
     const formatted = this.formatRouteCode(route);
@@ -176,22 +153,18 @@ const Auth = {
   },
 
   // ============================================================
-  // 登录状态管理
+  // 登录状态
   // ============================================================
   checkAuth() {
     const loginStatus = localStorage.getItem('loginStatus');
     const currentRoute = localStorage.getItem('currentRoute');
     
-    if (loginStatus === 'true' && currentRoute) {
-      return true;
-    }
+    if (loginStatus === 'true' && currentRoute) return true;
     
     const currentPage = window.location.pathname.split('/').pop();
     const loginPages = ['index.html', 'login.html', ''];
     
-    if (loginPages.includes(currentPage)) {
-      return false;
-    }
+    if (loginPages.includes(currentPage)) return false;
     
     if (window.location.pathname.includes('/pages/')) {
       window.location.href = '../index.html';
@@ -211,7 +184,6 @@ const Auth = {
 
   login(route, user = '司机') {
     this.clearSessionCache();
-    
     const formattedRoute = this.formatRouteCode(route);
     localStorage.setItem('loginStatus', 'true');
     localStorage.setItem('currentRoute', formattedRoute);
@@ -219,27 +191,16 @@ const Auth = {
     
     const userData = this.getUserOrderData(formattedRoute);
     if (userData) {
-      if (userData.today_orders) {
-        localStorage.setItem('today_orders', JSON.stringify(userData.today_orders));
-      }
-      if (userData.today_vehicle) {
-        localStorage.setItem('today_vehicle', userData.today_vehicle);
-      }
-      if (userData.base_data) {
-        localStorage.setItem('base_data', JSON.stringify(userData.base_data));
-      }
-      if (userData.delivery_history) {
-        localStorage.setItem('delivery_history', JSON.stringify(userData.delivery_history));
-      }
-      if (userData.route_cache) {
-        localStorage.setItem(`route_cache_${formattedRoute}`, JSON.stringify(userData.route_cache));
-      }
+      if (userData.today_orders) localStorage.setItem('today_orders', JSON.stringify(userData.today_orders));
+      if (userData.today_vehicle) localStorage.setItem('today_vehicle', userData.today_vehicle);
+      if (userData.base_data) localStorage.setItem('base_data', JSON.stringify(userData.base_data));
+      if (userData.delivery_history) localStorage.setItem('delivery_history', JSON.stringify(userData.delivery_history));
+      if (userData.route_cache) localStorage.setItem(`route_cache_${formattedRoute}`, JSON.stringify(userData.route_cache));
     }
   },
 
   logout() {
     const route = this.getCurrentRoute();
-    
     if (route) {
       const userData = {
         today_orders: this.getTodayOrders(),
@@ -251,18 +212,11 @@ const Auth = {
       };
       this.saveUserOrderData(route, userData);
     }
-    
     this.clearSessionCache();
     localStorage.removeItem('loginStatus');
     localStorage.removeItem('currentRoute');
     localStorage.removeItem('currentUser');
-    
-    const path = window.location.pathname;
-    if (path.includes('/pages/')) {
-      window.location.href = '../index.html';
-    } else {
-      window.location.href = 'index.html';
-    }
+    window.location.href = window.location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
   },
 
   clearSessionCache() {
@@ -271,36 +225,19 @@ const Auth = {
     localStorage.removeItem('history_view_data');
     localStorage.removeItem('base_data');
     const route = this.getCurrentRoute();
-    if (route) {
-      localStorage.removeItem(`route_cache_${route}`);
-    }
+    if (route) localStorage.removeItem(`route_cache_${route}`);
   },
 
   getTodayOrders() {
-    try {
-      const data = localStorage.getItem('today_orders');
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
+    try { const data = localStorage.getItem('today_orders'); return data ? JSON.parse(data) : null; } catch { return null; }
   },
 
   getBaseData() {
-    try {
-      const data = localStorage.getItem('base_data');
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
+    try { const data = localStorage.getItem('base_data'); return data ? JSON.parse(data) : null; } catch { return null; }
   },
 
   getDeliveryHistory() {
-    try {
-      const data = localStorage.getItem('delivery_history');
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
+    try { const data = localStorage.getItem('delivery_history'); return data ? JSON.parse(data) : null; } catch { return null; }
   },
 
   getCachedRouteData(route) {
@@ -331,28 +268,16 @@ const Auth = {
     return /^\d{2,}号线$/.test(code);
   },
 
-  // ============================================================
-  // 创建新线路（注册时调用）
-  // ============================================================
   async createRoute(route, password, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
-    if (!this.isValidRouteCode(formattedRoute)) {
-      return null;
-    }
+    if (!this.isValidRouteCode(formattedRoute)) return null;
 
-    // 检查是否已注册
     const existing = await this.findUserByRoute(formattedRoute);
-    if (existing) {
-      return null;
-    }
+    if (existing) return null;
 
-    // 创建用户
     const newUser = await this.createUser(formattedRoute, password, role, name);
-    if (!newUser) {
-      return null;
-    }
+    if (!newUser) return null;
 
-    // 初始化默认门店数据
     const defaultStores = [
       { code: "01", name: "新门店_01", nav: "" },
       { code: "02", name: "新门店_02", nav: "" },
@@ -378,22 +303,18 @@ const Auth = {
     };
     this.saveUserOrderData(formattedRoute, emptyUserData);
     
-    // 同步线路数据到 Upstash
     try {
       const response = await fetch(`/api/route/${encodeURIComponent(formattedRoute)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stores: defaultStores })
       });
-      if (response.ok) {
-        this.addLog('线路注册', `新线路 ${formattedRoute} API同步成功`);
-      }
+      if (response.ok) this.addLog('线路注册', `新线路 ${formattedRoute} API同步成功`);
     } catch (e) {
       console.log('API不可用，数据已保存在本地');
     }
     
     this.addLog('线路注册', `新线路 ${formattedRoute} 注册成功`);
-    
     return newRouteData;
   },
 
@@ -425,14 +346,8 @@ const Auth = {
   }
 };
 
-// ============================================================
-// 页面加载时检查登录状态
-// ============================================================
 document.addEventListener('DOMContentLoaded', function() {
   const currentPage = window.location.pathname.split('/').pop();
   const loginPages = ['index.html', 'login.html', ''];
-  
-  if (!loginPages.includes(currentPage)) {
-    Auth.checkAuth();
-  }
+  if (!loginPages.includes(currentPage)) Auth.checkAuth();
 });
