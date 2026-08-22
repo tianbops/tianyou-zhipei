@@ -1,6 +1,9 @@
 name = "tianyou-zhipei"
 main = "functions/api/[route].js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-12-18"
 
 [env.production]
-vars = { UPSTASH_REDIS_REST_URL = "https://your-upstash-url.upstash.io", UPSTASH_REDIS_REST_TOKEN = "your-token" }
+vars = { 
+  UPSTASH_REDIS_REST_URL = "https://xxx.upstash.io",
+  UPSTASH_REDIS_REST_TOKEN = "xxx"
+}
