@@ -1,402 +1,375 @@
-const Auth = {
-  // ============================================================
-  // 统一用户数据管理
-  // ============================================================
-  
-  getUsers() {
-    try {
-      const data = localStorage.getItem('admin_users');
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>天友乳业 · 路线优化引擎</title>
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo-area">
+      <img src="assets/logo.png" alt="天友乳业" class="logo" 
+           onerror="this.style.display='none';this.parentElement.querySelector('.logo-fallback').style.display='block'">
+      <div class="logo-fallback" style="display:none; font-size:80px; margin-bottom:10px;">🥛</div>
+      <div class="brand-main">天友乳业</div>
+      <div class="brand-sub">路线优化引擎</div>
+    </div>
+    <div class="login-card">
+      <div class="input-box">
+        <input id="routeCode" type="text" placeholder="请输入线路">
+      </div>
+      <div class="input-box password-box">
+        <input id="password" type="password" placeholder="请输入密码">
+        <button type="button" class="eye-btn" onclick="togglePassword()">👁</button>
+      </div>
+      <button class="login-btn" onclick="login()">进入系统</button>
+      <div id="loginError" style="color:#E74C3C; font-size:14px; text-align:center; margin-top:10px; display:none;"></div>
+      <div id="loginInfo" style="color:#27AE60; font-size:14px; text-align:center; margin-top:8px; display:none;"></div>
+    </div>
+    <div class="bottom-actions">
+      <button onclick="openRegister()">注册</button>
+      <button onclick="openAdminLogin()">管理</button>
+    </div>
+  </div>
+
+  <!-- ===== 注册弹窗 ===== -->
+  <div class="admin-login-overlay" id="registerOverlay">
+    <div class="admin-login-box">
+      <div class="admin-login-header">
+        <span>📝 注册新线路</span>
+        <button class="admin-login-close" onclick="closeRegister()">✕</button>
+      </div>
+      <div class="admin-login-body">
+        <div style="color:#7F8B98; font-size:14px; text-align:center; margin-bottom:16px;">
+          请输入线路编号，自动使用当前企业统一密码
+        </div>
+        <div style="color:#FFB020; font-size:13px; text-align:center; margin-bottom:16px; background:#1C2530; padding:8px; border-radius:8px;">
+          🔑 当前统一密码：<span id="displayUnifiedPassword" style="font-weight:bold; color:#fff;">加载中...</span>
+        </div>
+        <div class="input-box">
+          <input id="registerRoute" type="text" placeholder="请输入线路 (如 17)">
+        </div>
+        <button class="login-btn" onclick="doRegister()">立即注册</button>
+        <div id="registerError" style="color:#E74C3C; font-size:14px; text-align:center; margin-top:10px; display:none;"></div>
+        <div id="registerInfo" style="color:#27AE60; font-size:14px; text-align:center; margin-top:8px; display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 管理员登录弹窗 ===== -->
+  <div class="admin-login-overlay" id="adminLoginOverlay">
+    <div class="admin-login-box">
+      <div class="admin-login-header">
+        <span>🔐 管理员登录</span>
+        <button class="admin-login-close" onclick="closeAdminLogin()">✕</button>
+      </div>
+      <div class="admin-login-body">
+        <div class="input-box">
+          <input id="adminRoute" type="text" placeholder="请输入用户名">
+        </div>
+        <div class="input-box password-box">
+          <input id="adminPassword" type="password" placeholder="请输入密码">
+          <button type="button" class="eye-btn" onclick="toggleAdminPassword()">👁</button>
+        </div>
+        <button class="login-btn" onclick="adminLogin()">管理员登录</button>
+        <div id="adminLoginError" style="color:#E74C3C; font-size:14px; text-align:center; margin-top:10px; display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script>
+    // ============================================================
+    // 获取统一密码
+    // ============================================================
+    function getUnifiedPassword() {
+      return localStorage.getItem('unified_password') || 'tianyou2024';
     }
-  },
 
-  saveUsers(users) {
-    localStorage.setItem('admin_users', JSON.stringify(users));
-    this.syncUsersToUpstash(users);
-  },
-
-  syncUsersToUpstash(users) {
-    try {
-      fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ users: users })
-      }).catch(e => console.log('Upstash 同步失败'));
-    } catch (e) {
-      console.log('Upstash 同步失败');
-    }
-  },
-
-  loadUsersFromUpstash() {
-    try {
-      return fetch('/api/users')
-        .then(res => res.json())
-        .then(data => {
-          if (data.users && data.users.length > 0) {
-            localStorage.setItem('admin_users', JSON.stringify(data.users));
-            return data.users;
-          }
-          return null;
-        })
-        .catch(() => null);
-    } catch {
-      return null;
-    }
-  },
-
-  findUserByRoute(route) {
-    const users = this.getUsers();
-    const formattedRoute = this.formatRouteCode(route);
-    return users.find(u => u.route === formattedRoute) || null;
-  },
-
-  isRouteRegistered(route) {
-    return this.findUserByRoute(route) !== null;
-  },
-
-  // ============================================================
-  // 创建用户 - 直接指定密码
-  // ============================================================
-  createUserDirect(route, password, role = 'driver', name = '') {
-    const users = this.getUsers();
-    const formattedRoute = this.formatRouteCode(route);
-    
-    if (users.some(u => u.route === formattedRoute)) {
-      return null;
-    }
-    
-    const maxId = users.reduce((max, u) => Math.max(max, u.id || 0), 0);
-    const newUser = {
-      id: maxId + 1,
-      name: name || '',
-      route: formattedRoute,
-      password: password,
-      role: role,
-      createdAt: new Date().toISOString()
-    };
-    
-    users.push(newUser);
-    this.saveUsers(users);
-    this.addLog('用户注册', `新用户注册: ${formattedRoute} (${role})`);
-    
-    return newUser;
-  },
-
-  updateUser(route, updates) {
-    const users = this.getUsers();
-    const formattedRoute = this.formatRouteCode(route);
-    const idx = users.findIndex(u => u.route === formattedRoute);
-    if (idx === -1) return null;
-    
-    users[idx] = { ...users[idx], ...updates };
-    this.saveUsers(users);
-    this.addLog('用户更新', `更新用户: ${formattedRoute}`);
-    
-    return users[idx];
-  },
-
-  deleteUser(route) {
-    let users = this.getUsers();
-    const formattedRoute = this.formatRouteCode(route);
-    users = users.filter(u => u.route !== formattedRoute);
-    this.saveUsers(users);
-    this.addLog('用户删除', `删除用户: ${formattedRoute}`);
-  },
-
-  // ============================================================
-  // 用户运单数据隔离
-  // ============================================================
-  
-  getUserDataKey(route) {
-    const formatted = this.formatRouteCode(route);
-    return `user_data_${formatted}`;
-  },
-
-  getUserOrderData(route) {
-    try {
-      const key = this.getUserDataKey(route);
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
-  },
-
-  saveUserOrderData(route, data) {
-    const key = this.getUserDataKey(route);
-    localStorage.setItem(key, JSON.stringify(data));
-  },
-
-  clearUserOrderData(route) {
-    const key = this.getUserDataKey(route);
-    localStorage.removeItem(key);
-  },
-
-  // ============================================================
-  // 登录状态管理
-  // ============================================================
-  
-  checkAuth() {
-    const loginStatus = localStorage.getItem('loginStatus');
-    const currentRoute = localStorage.getItem('currentRoute');
-    
-    if (loginStatus === 'true' && currentRoute) {
-      return true;
-    }
-    
-    const currentPage = window.location.pathname.split('/').pop();
-    const loginPages = ['index.html', 'login.html', ''];
-    
-    if (loginPages.includes(currentPage)) {
-      return false;
-    }
-    
-    if (window.location.pathname.includes('/pages/')) {
-      window.location.href = '../index.html';
-    } else {
-      window.location.href = 'index.html';
-    }
-    return false;
-  },
-
-  getCurrentRoute() {
-    return localStorage.getItem('currentRoute') || '';
-  },
-
-  getCurrentUser() {
-    return localStorage.getItem('currentUser') || '司机';
-  },
-
-  login(route, user = '司机') {
-    this.clearSessionCache();
-    
-    const formattedRoute = this.formatRouteCode(route);
-    localStorage.setItem('loginStatus', 'true');
-    localStorage.setItem('currentRoute', formattedRoute);
-    localStorage.setItem('currentUser', user);
-    
-    const userData = this.getUserOrderData(formattedRoute);
-    if (userData) {
-      if (userData.today_orders) {
-        localStorage.setItem('today_orders', JSON.stringify(userData.today_orders));
+    // ============================================================
+    // 线路格式转换
+    // ============================================================
+    function formatRouteCode(input) {
+      if (!input) return '';
+      let code = input.trim();
+      if (code.includes('号线')) {
+        const numMatch = code.match(/(\d+)号线/);
+        if (numMatch) {
+          const num = parseInt(numMatch[1]);
+          return String(num).padStart(2, '0') + '号线';
+        }
       }
-      if (userData.today_vehicle) {
-        localStorage.setItem('today_vehicle', userData.today_vehicle);
-      }
-      if (userData.base_data) {
-        localStorage.setItem('base_data', JSON.stringify(userData.base_data));
-      }
-      if (userData.delivery_history) {
-        localStorage.setItem('delivery_history', JSON.stringify(userData.delivery_history));
-      }
-      if (userData.route_cache) {
-        localStorage.setItem(`route_cache_${formattedRoute}`, JSON.stringify(userData.route_cache));
-      }
-    }
-  },
-
-  logout() {
-    const route = this.getCurrentRoute();
-    
-    if (route) {
-      const userData = {
-        today_orders: this.getTodayOrders(),
-        today_vehicle: localStorage.getItem('today_vehicle') || '',
-        base_data: this.getBaseData(),
-        delivery_history: this.getDeliveryHistory(),
-        route_cache: this.getCachedRouteData(route),
-        lastLogin: new Date().toISOString()
-      };
-      this.saveUserOrderData(route, userData);
-    }
-    
-    this.clearSessionCache();
-    localStorage.removeItem('loginStatus');
-    localStorage.removeItem('currentRoute');
-    localStorage.removeItem('currentUser');
-    
-    const path = window.location.pathname;
-    if (path.includes('/pages/')) {
-      window.location.href = '../index.html';
-    } else {
-      window.location.href = 'index.html';
-    }
-  },
-
-  clearSessionCache() {
-    localStorage.removeItem('today_orders');
-    localStorage.removeItem('today_vehicle');
-    localStorage.removeItem('history_view_data');
-    localStorage.removeItem('base_data');
-    const route = this.getCurrentRoute();
-    if (route) {
-      localStorage.removeItem(`route_cache_${route}`);
-    }
-  },
-
-  getTodayOrders() {
-    try {
-      const data = localStorage.getItem('today_orders');
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
-  },
-
-  getBaseData() {
-    try {
-      const data = localStorage.getItem('base_data');
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
-  },
-
-  getDeliveryHistory() {
-    try {
-      const data = localStorage.getItem('delivery_history');
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
-    }
-  },
-
-  getCachedRouteData(route) {
-    const formatted = this.formatRouteCode(route);
-    const data = localStorage.getItem(`route_cache_${formatted}`);
-    return data ? JSON.parse(data) : null;
-  },
-
-  formatRouteCode(input) {
-    if (!input) return '';
-    let code = input.trim();
-    if (code.includes('号线')) {
-      const numMatch = code.match(/(\d+)号线/);
+      const numMatch = code.match(/^(\d+)$/);
       if (numMatch) {
         const num = parseInt(numMatch[1]);
         return String(num).padStart(2, '0') + '号线';
       }
-    }
-    const numMatch = code.match(/^(\d+)$/);
-    if (numMatch) {
-      const num = parseInt(numMatch[1]);
-      return String(num).padStart(2, '0') + '号线';
-    }
-    return code;
-  },
-
-  isValidRouteCode(code) {
-    return /^\d{2,}号线$/.test(code);
-  },
-
-  // ============================================================
-  // 创建新线路 - 指定密码
-  // ============================================================
-  async createRouteWithPassword(route, password, role = 'driver', name = '') {
-    const formattedRoute = this.formatRouteCode(route);
-    if (!this.isValidRouteCode(formattedRoute)) {
-      return null;
+      return code;
     }
 
-    const existingUser = this.findUserByRoute(formattedRoute);
-    if (existingUser) {
-      return null;
+    function isValidRouteCode(code) {
+      return /^\d{2,}号线$/.test(code);
     }
 
-    const newUser = this.createUserDirect(formattedRoute, password, role, name);
-    if (!newUser) {
-      return null;
-    }
+    // ============================================================
+    // 普通用户登录
+    // ============================================================
+    async function login() {
+      const rawRoute = document.getElementById('routeCode').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const errorEl = document.getElementById('loginError');
+      errorEl.style.display = 'none';
 
-    const defaultStores = [
-      { code: "01", name: "新门店_01", nav: "" },
-      { code: "02", name: "新门店_02", nav: "" },
-      { code: "03", name: "新门店_03", nav: "" }
-    ];
-    
-    const newRouteData = {
-      route: formattedRoute,
-      stores: defaultStores,
-      createdAt: new Date().toISOString()
-    };
-
-    this.cacheRouteData(formattedRoute, newRouteData);
-    localStorage.setItem('base_data', JSON.stringify(defaultStores));
-    
-    const emptyUserData = {
-      today_orders: null,
-      today_vehicle: '',
-      base_data: defaultStores,
-      delivery_history: [],
-      route_cache: newRouteData,
-      created_at: new Date().toISOString()
-    };
-    this.saveUserOrderData(formattedRoute, emptyUserData);
-    
-    try {
-      const response = await fetch(`/api/route/${encodeURIComponent(formattedRoute)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stores: defaultStores })
-      });
-      if (response.ok) {
-        this.addLog('线路注册', `新线路 ${formattedRoute} API同步成功`);
+      if (!rawRoute) {
+        errorEl.textContent = '⚠️ 请输入线路编号';
+        errorEl.style.display = 'block';
+        return;
       }
-    } catch (e) {
-      console.log('API不可用，数据已保存在本地');
+      if (!password) {
+        errorEl.textContent = '⚠️ 请输入密码';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      const routeCode = formatRouteCode(rawRoute);
+      if (!isValidRouteCode(routeCode)) {
+        errorEl.textContent = '⚠️ 线路格式错误，请输入如 17 或 105';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      // ===== 从 admin_users 中查找用户 =====
+      const users = Auth.getUsers();
+      const user = users.find(u => u.route === routeCode);
+
+      if (!user) {
+        errorEl.textContent = '❌ 线路未注册，请点击「注册」创建';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      // ===== 验证密码：用用户密码 或 统一密码 =====
+      const unifiedPassword = getUnifiedPassword();
+      if (password === user.password || password === unifiedPassword) {
+        // 如果用户密码与统一密码不同，同步更新
+        if (user.password !== unifiedPassword) {
+          const updatedUsers = Auth.getUsers();
+          const idx = updatedUsers.findIndex(u => u.route === routeCode);
+          if (idx !== -1) {
+            updatedUsers[idx].password = unifiedPassword;
+            localStorage.setItem('admin_users', JSON.stringify(updatedUsers));
+            Auth.syncUsersToUpstash(updatedUsers);
+          }
+        }
+        Auth.login(routeCode);
+        Auth.addLog('用户登录', `${routeCode} 登录系统`);
+        window.location.href = 'home.html';
+      } else {
+        errorEl.textContent = '❌ 密码错误，请重试';
+        errorEl.style.display = 'block';
+      }
     }
-    
-    this.addLog('线路注册', `新线路 ${formattedRoute} 注册成功`);
-    
-    return newRouteData;
-  },
 
-  // ============================================================
-  // 创建新线路（兼容旧方法）
-  // ============================================================
-  async createRoute(route, role = 'driver', name = '') {
-    const unifiedPassword = localStorage.getItem('unified_password') || 'tianyou2024';
-    return this.createRouteWithPassword(route, unifiedPassword, role, name);
-  },
-
-  cacheRouteData(route, data) {
-    const formatted = this.formatRouteCode(route);
-    localStorage.setItem(`route_cache_${formatted}`, JSON.stringify(data));
-    const userData = this.getUserOrderData(formatted);
-    if (userData) {
-      userData.route_cache = data;
-      this.saveUserOrderData(formatted, userData);
+    function togglePassword() {
+      const pwd = document.getElementById('password');
+      pwd.type = pwd.type === 'password' ? 'text' : 'password';
     }
-  },
 
-  addLog(action, detail) {
-    try {
-      const logs = JSON.parse(localStorage.getItem('admin_logs') || '[]');
-      logs.unshift({
-        id: Date.now(),
-        time: new Date().toLocaleString(),
-        action: action,
-        detail: detail,
-        user: this.getCurrentRoute() || 'system'
-      });
-      if (logs.length > 100) logs.length = 100;
-      localStorage.setItem('admin_logs', JSON.stringify(logs));
-    } catch (e) {
-      console.warn('日志记录失败:', e);
+    // ============================================================
+    // 注册
+    // ============================================================
+    function openRegister() {
+      document.getElementById('registerOverlay').classList.add('active');
+      document.getElementById('registerRoute').value = '';
+      document.getElementById('registerError').style.display = 'none';
+      document.getElementById('registerInfo').style.display = 'none';
+      // 显示当前统一密码
+      document.getElementById('displayUnifiedPassword').textContent = getUnifiedPassword();
     }
-  }
-};
 
-// ============================================================
-// 页面加载时检查登录状态
-// ============================================================
-document.addEventListener('DOMContentLoaded', function() {
-  const currentPage = window.location.pathname.split('/').pop();
-  const loginPages = ['index.html', 'login.html', ''];
-  
-  if (!loginPages.includes(currentPage)) {
-    Auth.checkAuth();
-  }
-});
+    function closeRegister() {
+      document.getElementById('registerOverlay').classList.remove('active');
+    }
+
+    async function doRegister() {
+      const rawRoute = document.getElementById('registerRoute').value.trim();
+      const errorEl = document.getElementById('registerError');
+      const infoEl = document.getElementById('registerInfo');
+      errorEl.style.display = 'none';
+      infoEl.style.display = 'none';
+
+      if (!rawRoute) {
+        errorEl.textContent = '⚠️ 请输入线路编号';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      const routeCode = formatRouteCode(rawRoute);
+      if (!isValidRouteCode(routeCode)) {
+        errorEl.textContent = '⚠️ 线路格式错误，请输入如 17 或 105';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        const users = Auth.getUsers();
+        const existingUser = users.find(u => u.route === routeCode);
+
+        if (existingUser) {
+          errorEl.textContent = '❌ 该线路已被注册，请直接登录';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        infoEl.textContent = '⏳ 正在创建新线路...';
+        infoEl.style.display = 'block';
+        infoEl.style.color = '#FFB020';
+
+        // ===== 使用当前统一密码创建用户 =====
+        const unifiedPassword = getUnifiedPassword();
+        const newRouteData = await Auth.createRouteWithPassword(routeCode, unifiedPassword, 'driver', '');
+
+        if (newRouteData) {
+          infoEl.textContent = '✅ 线路注册成功！正在跳转...';
+          infoEl.style.color = '#27AE60';
+          infoEl.style.display = 'block';
+
+          Auth.login(routeCode);
+          Auth.cacheRouteData(routeCode, newRouteData);
+          Auth.addLog('线路注册', `${routeCode} 注册成功`);
+
+          setTimeout(() => {
+            window.location.href = 'home.html';
+          }, 1500);
+        } else {
+          errorEl.textContent = '❌ 线路创建失败，请重试';
+          errorEl.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('注册错误:', error);
+        errorEl.textContent = '⚠️ 网络异常，请稍后重试';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    document.getElementById('registerOverlay').addEventListener('click', function(e) {
+      if (e.target === this) closeRegister();
+    });
+
+    // ============================================================
+    // 管理员登录
+    // ============================================================
+    function openAdminLogin() {
+      document.getElementById('adminLoginOverlay').classList.add('active');
+      document.getElementById('adminRoute').value = '';
+      document.getElementById('adminPassword').value = '';
+      document.getElementById('adminLoginError').style.display = 'none';
+    }
+
+    function closeAdminLogin() {
+      document.getElementById('adminLoginOverlay').classList.remove('active');
+    }
+
+    function toggleAdminPassword() {
+      const pwd = document.getElementById('adminPassword');
+      pwd.type = pwd.type === 'password' ? 'text' : 'password';
+    }
+
+    async function adminLogin() {
+      const route = document.getElementById('adminRoute').value.trim();
+      const password = document.getElementById('adminPassword').value.trim();
+      const errorEl = document.getElementById('adminLoginError');
+      errorEl.style.display = 'none';
+
+      if (!route) {
+        errorEl.textContent = '⚠️ 请输入用户名';
+        errorEl.style.display = 'block';
+        return;
+      }
+      if (!password) {
+        errorEl.textContent = '⚠️ 请输入密码';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      const users = Auth.getUsers();
+      const adminUser = users.find(u => u.role === 'admin' && u.name === route);
+
+      if (!adminUser) {
+        errorEl.textContent = '❌ 管理员不存在';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      if (password === adminUser.password) {
+        Auth.login(route, '管理员');
+        Auth.addLog('管理员登录', `${route} 登录管理系统`);
+        closeAdminLogin();
+        window.location.href = 'admin.html';
+      } else {
+        errorEl.textContent = '❌ 密码错误，请重试';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    document.getElementById('adminLoginOverlay').addEventListener('click', function(e) {
+      if (e.target === this) closeAdminLogin();
+    });
+
+    // ============================================================
+    // 回车触发
+    // ============================================================
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        const adminOverlay = document.getElementById('adminLoginOverlay');
+        const registerOverlay = document.getElementById('registerOverlay');
+
+        if (adminOverlay.classList.contains('active')) {
+          adminLogin();
+        } else if (registerOverlay.classList.contains('active')) {
+          doRegister();
+        } else {
+          login();
+        }
+      }
+    });
+
+    // ============================================================
+    // 已登录自动跳转
+    // ============================================================
+    if (localStorage.getItem('loginStatus') === 'true') {
+      const currentRoute = localStorage.getItem('currentRoute');
+      const adminRoutes = ['admin', '管理员', 'ADMIN'];
+      if (adminRoutes.includes(currentRoute)) {
+        window.location.href = 'admin.html';
+      } else {
+        window.location.href = 'home.html';
+      }
+    }
+
+    // ============================================================
+    // 输入框自动格式化
+    // ============================================================
+    document.getElementById('routeCode').addEventListener('blur', function() {
+      const val = this.value.trim();
+      if (val) {
+        const formatted = formatRouteCode(val);
+        if (formatted !== val && isValidRouteCode(formatted)) {
+          this.value = formatted;
+        }
+      }
+    });
+
+    document.getElementById('registerRoute').addEventListener('blur', function() {
+      const val = this.value.trim();
+      if (val) {
+        const formatted = formatRouteCode(val);
+        if (formatted !== val && isValidRouteCode(formatted)) {
+          this.value = formatted;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
