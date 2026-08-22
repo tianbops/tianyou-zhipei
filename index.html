@@ -25,7 +25,6 @@
       </div>
       <button class="login-btn" onclick="login()">进入系统</button>
       <div id="loginError" style="color:#E74C3C; font-size:14px; text-align:center; margin-top:10px; display:none;"></div>
-      <div id="loginInfo" style="color:#27AE60; font-size:14px; text-align:center; margin-top:8px; display:none;"></div>
     </div>
     <div class="bottom-actions">
       <button onclick="openRegister()">注册</button>
@@ -33,7 +32,7 @@
     </div>
   </div>
 
-  <!-- ===== 注册弹窗 ===== -->
+  <!-- ===== 注册弹窗（已移除密码明文显示） ===== -->
   <div class="admin-login-overlay" id="registerOverlay">
     <div class="admin-login-box">
       <div class="admin-login-header">
@@ -42,13 +41,15 @@
       </div>
       <div class="admin-login-body">
         <div style="color:#7F8B98; font-size:14px; text-align:center; margin-bottom:16px;">
-          请输入线路编号，自动使用当前企业统一密码
+          请输入线路编号和企业统一密码完成注册
         </div>
-        <div style="color:#FFB020; font-size:13px; text-align:center; margin-bottom:16px; background:#1C2530; padding:8px; border-radius:8px;">
-          🔑 当前统一密码：<span id="displayUnifiedPassword" style="font-weight:bold; color:#fff;">加载中...</span>
-        </div>
+        <!-- 已删除显示统一密码的 div -->
         <div class="input-box">
           <input id="registerRoute" type="text" placeholder="请输入线路 (如 17)">
+        </div>
+        <div class="input-box password-box">
+          <input id="registerPassword" type="password" placeholder="请输入企业统一密码">
+          <button type="button" class="eye-btn" onclick="toggleRegisterPassword()">👁</button>
         </div>
         <button class="login-btn" onclick="doRegister()">立即注册</button>
         <div id="registerError" style="color:#E74C3C; font-size:14px; text-align:center; margin-top:10px; display:none;"></div>
@@ -81,7 +82,7 @@
   <script src="js/auth.js"></script>
   <script>
     // ============================================================
-    // 获取统一密码
+    // 获取统一密码（内部使用，不显示）
     // ============================================================
     function getUnifiedPassword() {
       return localStorage.getItem('unified_password') || 'tianyou2024';
@@ -139,7 +140,6 @@
         return;
       }
 
-      // ===== 从 Upstash 实时查找用户 =====
       try {
         const user = await Auth.findUserByRoute(routeCode);
 
@@ -149,7 +149,6 @@
           return;
         }
 
-        // ===== 验证密码 =====
         if (password === user.password) {
           Auth.login(routeCode);
           Auth.addLog('用户登录', `${routeCode} 登录系统`);
@@ -176,18 +175,23 @@
     function openRegister() {
       document.getElementById('registerOverlay').classList.add('active');
       document.getElementById('registerRoute').value = '';
+      document.getElementById('registerPassword').value = '';
       document.getElementById('registerError').style.display = 'none';
       document.getElementById('registerInfo').style.display = 'none';
-      // 显示当前统一密码
-      document.getElementById('displayUnifiedPassword').textContent = getUnifiedPassword();
     }
 
     function closeRegister() {
       document.getElementById('registerOverlay').classList.remove('active');
     }
 
+    function toggleRegisterPassword() {
+      const pwd = document.getElementById('registerPassword');
+      pwd.type = pwd.type === 'password' ? 'text' : 'password';
+    }
+
     async function doRegister() {
       const rawRoute = document.getElementById('registerRoute').value.trim();
+      const password = document.getElementById('registerPassword').value.trim();
       const errorEl = document.getElementById('registerError');
       const infoEl = document.getElementById('registerInfo');
       errorEl.style.display = 'none';
@@ -195,6 +199,11 @@
 
       if (!rawRoute) {
         errorEl.textContent = '⚠️ 请输入线路编号';
+        errorEl.style.display = 'block';
+        return;
+      }
+      if (!password) {
+        errorEl.textContent = '⚠️ 请输入企业统一密码';
         errorEl.style.display = 'block';
         return;
       }
@@ -206,8 +215,15 @@
         return;
       }
 
+      // 验证统一密码
+      const unifiedPassword = getUnifiedPassword();
+      if (password !== unifiedPassword) {
+        errorEl.textContent = '❌ 企业统一密码错误，请重试';
+        errorEl.style.display = 'block';
+        return;
+      }
+
       try {
-        // ===== 从 Upstash 实时检查是否已注册 =====
         const isRegistered = await Auth.isRouteRegistered(routeCode);
         if (isRegistered) {
           errorEl.textContent = '❌ 该线路已被注册，请直接登录';
@@ -219,8 +235,6 @@
         infoEl.style.display = 'block';
         infoEl.style.color = '#FFB020';
 
-        // ===== 使用当前统一密码创建用户 =====
-        const unifiedPassword = getUnifiedPassword();
         const newRouteData = await Auth.createRoute(routeCode, unifiedPassword, 'driver', '');
 
         if (newRouteData) {
@@ -250,7 +264,7 @@
     });
 
     // ============================================================
-    // 管理员登录 - 从 Upstash 实时验证
+    // 管理员登录
     // ============================================================
     function openAdminLogin() {
       document.getElementById('adminLoginOverlay').classList.add('active');
@@ -285,7 +299,6 @@
         return;
       }
 
-      // ===== 从 Upstash 实时查找管理员 =====
       try {
         const adminUser = await Auth.findAdminByName(route);
 
