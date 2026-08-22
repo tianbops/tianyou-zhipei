@@ -14,6 +14,45 @@ const Auth = {
 
   saveUsers(users) {
     localStorage.setItem('admin_users', JSON.stringify(users));
+    // 同步到 Upstash
+    this.syncUsersToUpstash(users);
+  },
+
+  // ============================================================
+  // 同步用户数据到 Upstash
+  // ============================================================
+  async syncUsersToUpstash(users) {
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: users })
+      });
+      if (response.ok) {
+        console.log('用户数据已同步到 Upstash');
+      }
+    } catch (e) {
+      console.log('Upstash 同步失败，数据已保存在本地');
+    }
+  },
+
+  // ============================================================
+  // 从 Upstash 加载用户数据
+  // ============================================================
+  async loadUsersFromUpstash() {
+    try {
+      const response = await fetch('/api/users');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.users && data.users.length > 0) {
+          localStorage.setItem('admin_users', JSON.stringify(data.users));
+          return data.users;
+        }
+      }
+    } catch (e) {
+      console.log('从 Upstash 加载用户数据失败');
+    }
+    return null;
   },
 
   findUserByRoute(route) {
@@ -109,21 +148,17 @@ const Auth = {
     const loginStatus = localStorage.getItem('loginStatus');
     const currentRoute = localStorage.getItem('currentRoute');
     
-    // 如果已登录，允许访问
     if (loginStatus === 'true' && currentRoute) {
       return true;
     }
     
-    // 未登录状态
     const currentPage = window.location.pathname.split('/').pop();
     const loginPages = ['index.html', 'login.html', ''];
     
-    // 如果在登录页，不做任何跳转（避免无限循环）
     if (loginPages.includes(currentPage)) {
       return false;
     }
     
-    // 如果在其他页面，跳转到登录页
     if (window.location.pathname.includes('/pages/')) {
       window.location.href = '../index.html';
     } else {
@@ -429,7 +464,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const currentPage = window.location.pathname.split('/').pop();
   const loginPages = ['index.html', 'login.html', ''];
   
-  // 只在非登录页检查登录状态
   if (!loginPages.includes(currentPage)) {
     Auth.checkAuth();
   }
