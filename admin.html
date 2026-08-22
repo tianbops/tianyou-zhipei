@@ -6,6 +6,7 @@
   <title>管理中心</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
+    /* ===== 所有样式保持不变 ===== */
     .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
     .admin-card { background: #1C2530; border-radius: 16px; padding: 20px 16px; text-align: center; cursor: pointer; transition: transform 0.15s; border: none; color: #FFFFFF; font-family: inherit; position: relative; }
     .admin-card:active { transform: scale(0.96); }
@@ -61,44 +62,18 @@
     .role-badge.admin { background: #E74C3C; color: #fff; }
     .role-badge.driver { background: #3498DB; color: #fff; }
     .role-badge.delivery { background: #2ECC71; color: #fff; }
-
-    /* 数字输入框提示 */
-    .input-hint {
-      color: #7F8B98;
-      font-size: 12px;
-      text-align: center;
-      margin-top: -6px;
-      margin-bottom: 10px;
-    }
-
-    /* ===== 状态选择 - 左右方块 ===== */
-    .status-toggle {
-      display: flex;
-      border-radius: 14px;
-      overflow: hidden;
-      background: #05070A;
-      border: 1px solid rgba(255,255,255,0.08);
-      margin-bottom: 14px;
-    }
-    .status-toggle .status-option {
-      flex: 1;
-      padding: 12px 0;
-      text-align: center;
-      font-size: 16px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.25s ease;
-      color: #7F8B98;
-      background: transparent;
-      border: none;
-      font-family: inherit;
-    }
-    .status-toggle .status-option.active {
-      background: #2457A6;
-      color: #fff;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(36,87,166,0.3);
-    }
+    .input-hint { color: #7F8B98; font-size: 12px; text-align: center; margin-top: -6px; margin-bottom: 10px; }
+    .route-select-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: pointer; border-radius: 10px; transition: background 0.2s; }
+    .route-select-item:hover { background: #1C2530; }
+    .route-select-item:active { background: #2457A6; }
+    .route-select-item .route-name { font-size: 16px; font-weight: 500; }
+    .route-select-item .route-role { font-size: 12px; color: #7F8B98; }
+    .route-select-item .route-arrow { color: #7F8B98; font-size: 18px; }
+    .route-select-empty { text-align: center; padding: 30px 20px; color: #7F8B98; }
+    .route-select-empty .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+    .status-toggle { display: flex; border-radius: 14px; overflow: hidden; background: #05070A; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px; }
+    .status-toggle .status-option { flex: 1; padding: 12px 0; text-align: center; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.25s ease; color: #7F8B98; background: transparent; border: none; font-family: inherit; }
+    .status-toggle .status-option.active { background: #2457A6; color: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(36,87,166,0.3); }
     .status-toggle .status-option:active { transform: scale(0.96); }
   </style>
 </head>
@@ -224,7 +199,7 @@
   <!-- ===== 编辑管理员弹窗 ===== -->
   <div class="admin-dialog" id="adminEditDialog">
     <div class="admin-dialog-box">
-      <h3 id="adminEditTitle">修改管理员名称</h3>
+      <h3 id="adminEditTitle">修改管理员信息</h3>
       <div class="input-box">
         <input id="adminEditName" placeholder="修改管理员名称">
       </div>
@@ -258,7 +233,7 @@
     </div>
   </div>
 
-  <!-- ===== 添加车辆弹窗（含线路验证） ===== -->
+  <!-- ===== 添加车辆弹窗 ===== -->
   <div class="admin-dialog" id="vehicleFormDialog">
     <div class="admin-dialog-box">
       <h3 id="vehicleFormTitle">添加车辆</h3>
@@ -269,7 +244,6 @@
         <input id="vehicleFormRoute" type="number" placeholder="请输入线路编号 (如 17)" min="1" step="1">
         <div class="input-hint">💡 输入数字，自动显示为 XX号线</div>
       </div>
-      <!-- 状态选择 - 左右方块 -->
       <div class="status-toggle">
         <button class="status-option" id="vehicleStatusInactive" onclick="setVehicleStatus('inactive')">停用</button>
         <button class="status-option active" id="vehicleStatusActive" onclick="setVehicleStatus('active')">启用</button>
@@ -281,14 +255,13 @@
     </div>
   </div>
 
-  <!-- ===== 编辑车辆弹窗（无线路） ===== -->
+  <!-- ===== 编辑车辆弹窗 ===== -->
   <div class="admin-dialog" id="vehicleEditDialog">
     <div class="admin-dialog-box">
       <h3 id="vehicleEditTitle">编辑车辆</h3>
       <div class="input-box">
         <input id="vehicleEditPlate" placeholder="车牌号 (如 渝DK7692)">
       </div>
-      <!-- 状态选择 - 左右方块 -->
       <div class="status-toggle">
         <button class="status-option" id="vehicleEditStatusInactive" onclick="setVehicleEditStatus('inactive')">停用</button>
         <button class="status-option active" id="vehicleEditStatusActive" onclick="setVehicleEditStatus('active')">启用</button>
@@ -473,7 +446,7 @@
     }
 
     // ============================================================
-    // 线路格式转换 - 数字转线路
+    // 线路格式转换
     // ============================================================
     function formatRouteCode(input) {
       if (!input) return '';
@@ -482,16 +455,13 @@
       return String(num).padStart(2, '0') + '号线';
     }
 
-    // ============================================================
-    // 验证线路是否已注册（在用户管理中）
-    // ============================================================
     function isRouteRegistered(route) {
       const users = DB.get('users', []);
       return users.some(u => u.route === route && u.role !== 'admin');
     }
 
     // ============================================================
-    // ===== 原始数据 - 输入线路弹窗 =====
+    // 原始数据 - 选择线路
     // ============================================================
     function openRouteSelectDialog() {
       document.getElementById('routeSelectInput').value = '';
@@ -500,24 +470,10 @@
 
     function confirmRouteSelect() {
       const rawInput = document.getElementById('routeSelectInput').value.trim();
-      
-      if (!rawInput) {
-        showToast('请输入线路编号', 'error');
-        return;
-      }
-      
+      if (!rawInput) { showToast('请输入线路编号', 'error'); return; }
       const route = formatRouteCode(rawInput);
-      if (!route) {
-        showToast('请输入有效数字 (如 1, 17, 105)', 'error');
-        return;
-      }
-      
-      // 检查线路是否存在
-      if (!isRouteRegistered(route)) {
-        showToast('该线路未开通', 'error');
-        return;
-      }
-      
+      if (!route) { showToast('请输入有效数字 (如 1, 17, 105)', 'error'); return; }
+      if (!isRouteRegistered(route)) { showToast('该线路未开通', 'error'); return; }
       closeDialog('routeSelectDialog');
       window.location.href = `pages/route_edit.html?route=${encodeURIComponent(route)}&from=admin`;
     }
@@ -577,6 +533,9 @@
 
     function filterUsers() { renderUsers(document.getElementById('userSearch').value.trim()); }
 
+    // ============================================================
+    // 添加用户
+    // ============================================================
     function showAddUserForm() {
       currentUserEditId = null;
       document.getElementById('userFormTitle').textContent = '添加用户';
@@ -586,6 +545,9 @@
       openDialog('userFormDialog');
     }
 
+    // ============================================================
+    // 编辑用户
+    // ============================================================
     function editUser(id) {
       const users = DB.get('users', []);
       const user = users.find(u => u.id === id);
@@ -594,7 +556,7 @@
       currentUserEditId = id;
       
       if (user.role === 'admin') {
-        document.getElementById('adminEditTitle').textContent = '修改管理员名称';
+        document.getElementById('adminEditTitle').textContent = '修改管理员信息';
         document.getElementById('adminEditName').value = user.name || '';
         document.getElementById('adminEditName').placeholder = '修改管理员名称';
         document.getElementById('adminEditPassword').value = '';
@@ -613,6 +575,9 @@
       }
     }
 
+    // ============================================================
+    // 保存添加用户
+    // ============================================================
     function saveUser() {
       const rawName = document.getElementById('userFormName').value.trim();
       const rawRoute = document.getElementById('userFormRoute').value.trim();
@@ -645,6 +610,9 @@
       renderUsers();
     }
 
+    // ============================================================
+    // 保存编辑普通用户
+    // ============================================================
     function saveUserEdit() {
       const rawName = document.getElementById('userEditName').value.trim();
       const rawRoute = document.getElementById('userEditRoute').value.trim();
@@ -674,6 +642,9 @@
       }
     }
 
+    // ============================================================
+    // 保存编辑管理员 - 修改后立即生效
+    // ============================================================
     function saveAdminEdit() {
       const name = document.getElementById('adminEditName').value.trim();
       const adminPassword = document.getElementById('adminEditPassword').value.trim();
@@ -687,14 +658,17 @@
         return;
       }
       
+      // 更新管理员名称
       if (name) {
         users[idx].name = name;
       }
       
+      // 更新管理员密码
       if (adminPassword) {
         users[idx].password = adminPassword;
       }
       
+      // 更新企业统一密码（所有普通用户的密码）
       if (unifiedPassword) {
         users.forEach(u => {
           if (u.role !== 'admin') {
@@ -704,13 +678,36 @@
         localStorage.setItem('unified_password', unifiedPassword);
       }
       
+      // 保存到数据库
       DB.set('users', users);
       DB.addLog('管理员编辑', `编辑管理员: ${name || '管理员'}`);
+      
+      // 如果当前登录的是管理员，清除登录状态，强制重新登录
+      const currentRoute = Auth.getCurrentRoute();
+      const adminRoutes = ['admin', '管理员', 'ADMIN'];
+      if (adminRoutes.includes(currentRoute)) {
+        // 清除登录状态，强制重新登录
+        localStorage.removeItem('loginStatus');
+        localStorage.removeItem('currentRoute');
+        localStorage.removeItem('currentUser');
+        showToast('管理员信息已更新，请重新登录', 'warning');
+        closeDialog('adminEditDialog');
+        renderUsers();
+        // 跳转到登录页
+        setTimeout(() => {
+          window.location.href = 'index.html';
+        }, 1500);
+        return;
+      }
+      
       showToast('管理员信息已更新');
       closeDialog('adminEditDialog');
       renderUsers();
     }
 
+    // ============================================================
+    // 删除用户（管理员不可删除）
+    // ============================================================
     function deleteUser(id) {
       const users = DB.get('users', []);
       const user = users.find(u => u.id === id);
@@ -729,6 +726,9 @@
       renderUsers();
     }
 
+    // ============================================================
+    // 密码可见性切换
+    // ============================================================
     function toggleAdminEditPassword() {
       const pwd = document.getElementById('adminEditPassword');
       pwd.type = pwd.type === 'password' ? 'text' : 'password';
@@ -739,14 +739,13 @@
     }
 
     // ============================================================
-    // ===== 车辆管理 - 修改版 =====
+    // 车辆管理
     // ============================================================
     let currentVehicleEditId = null;
     let currentVehicleStatus = 'active';
 
     function openVehicleManagement() { openDialog('vehicleDialog'); renderVehicles(); }
 
-    // 车辆状态 - 左右方块控制
     function setVehicleStatus(status) {
       currentVehicleStatus = status;
       const activeBtn = document.getElementById('vehicleStatusActive');
@@ -794,14 +793,12 @@
 
     function filterVehicles() { renderVehicles(document.getElementById('vehicleSearch').value.trim()); }
 
-    // ===== 添加车辆 =====
     function showAddVehicleForm() {
       currentVehicleEditId = null;
       currentVehicleStatus = 'active';
       document.getElementById('vehicleFormTitle').textContent = '添加车辆';
       document.getElementById('vehicleFormPlate').value = '';
       document.getElementById('vehicleFormRoute').value = '';
-      // 重置状态为启用
       document.getElementById('vehicleStatusActive').classList.add('active');
       document.getElementById('vehicleStatusInactive').classList.remove('active');
       openDialog('vehicleFormDialog');
@@ -818,7 +815,6 @@
       const route = formatRouteCode(rawRoute);
       if (!route) { showToast('请输入有效数字 (如 1, 17, 105)', 'error'); return; }
       
-      // ===== 验证线路是否已注册 =====
       if (!isRouteRegistered(route)) {
         showToast('❌ 该线路未开通', 'error');
         return;
@@ -837,7 +833,6 @@
       renderVehicles();
     }
 
-    // ===== 编辑车辆（无线路） =====
     function editVehicle(id) {
       const vehicles = DB.get('vehicles', []);
       const v = vehicles.find(v => v.id === id);
@@ -848,7 +843,6 @@
       document.getElementById('vehicleEditTitle').textContent = '编辑车辆';
       document.getElementById('vehicleEditPlate').value = v.plate;
       
-      // 重置状态
       const activeBtn = document.getElementById('vehicleEditStatusActive');
       const inactiveBtn = document.getElementById('vehicleEditStatusInactive');
       if (v.status === 'active') {
@@ -872,11 +866,9 @@
       const idx = vehicles.findIndex(v => v.id === currentVehicleEditId);
       if (idx === -1) { showToast('车辆不存在', 'error'); return; }
       
-      // 检查车牌是否与其他车辆重复（排除自己）
       const exists = vehicles.some(v => v.plate === plate && v.id !== currentVehicleEditId);
       if (exists) { showToast('该车牌已存在', 'error'); return; }
       
-      // 只更新车牌和状态，线路保持不变
       vehicles[idx].plate = plate;
       vehicles[idx].status = status;
       
