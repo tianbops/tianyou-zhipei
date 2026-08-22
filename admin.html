@@ -399,15 +399,25 @@
     }
 
     // ============================================================
-    // 初始化默认数据
+    // 初始化默认数据（仅当 Upstash 无数据时）
     // ============================================================
-    function initDefaultData() {
+    async function initDefaultData() {
+      // 先尝试从 Upstash 加载
+      const users = await Auth.fetchUsersFromUpstash();
+      if (users && users.length > 0) {
+        updateStats();
+        return;
+      }
+      
+      // Upstash 无数据，初始化默认
       if (!localStorage.getItem('admin_users')) {
-        DB.set('users', [
+        const defaultUsers = [
           { id: 1, name: '管理员', route: 'all', password: 'admin123', role: 'admin' },
           { id: 2, name: '', route: '17号线', password: 'tianyou2024', role: 'driver' },
           { id: 3, name: '', route: '17号线', password: 'tianyou2024', role: 'delivery' }
-        ]);
+        ];
+        localStorage.setItem('admin_users', JSON.stringify(defaultUsers));
+        syncUsersToUpstash(defaultUsers);
       }
       if (!localStorage.getItem('admin_vehicles')) {
         DB.set('vehicles', [{ id: 1, plate: '渝DK7692', route: '17号线', status: 'active' }]);
@@ -481,9 +491,9 @@
       return String(num).padStart(2, '0') + '号线';
     }
 
-    function isRouteRegistered(route) {
-      const users = DB.get('users', []);
-      return users.some(u => u.route === route && u.role !== 'admin');
+    async function isRouteRegistered(route) {
+      const user = await Auth.findUserByRoute(route);
+      return user !== null;
     }
 
     // ============================================================
@@ -494,12 +504,13 @@
       openDialog('routeSelectDialog');
     }
 
-    function confirmRouteSelect() {
+    async function confirmRouteSelect() {
       const rawInput = document.getElementById('routeSelectInput').value.trim();
       if (!rawInput) { showToast('请输入线路编号', 'error'); return; }
       const route = formatRouteCode(rawInput);
       if (!route) { showToast('请输入有效数字 (如 1, 17, 105)', 'error'); return; }
-      if (!isRouteRegistered(route)) { showToast('该线路未开通', 'error'); return; }
+      const registered = await isRouteRegistered(route);
+      if (!registered) { showToast('该线路未开通', 'error'); return; }
       closeDialog('routeSelectDialog');
       window.location.href = `pages/route_edit.html?route=${encodeURIComponent(route)}&from=admin`;
     }
@@ -520,8 +531,8 @@
 
     function openUserManagement() { openDialog('userDialog'); renderUsers(); }
 
-    function renderUsers(filter = '') {
-      let users = DB.get('users', []);
+    async function renderUsers(filter = '') {
+      let users = await Auth.fetchUsersFromUpstash();
       users.sort((a, b) => {
         if (a.role === 'admin' && b.role !== 'admin') return -1;
         if (a.role !== 'admin' && b.role === 'admin') return 1;
@@ -575,6 +586,7 @@
     // 编辑用户
     // ============================================================
     function editUser(id) {
+      // 从 localStorage 获取用户（因为 auth.js 已同步）
       const users = DB.get('users', []);
       const user = users.find(u => u.id === id);
       if (!user) return;
@@ -604,7 +616,7 @@
     // ============================================================
     // 保存添加用户
     // ============================================================
-    function saveUser() {
+    async function saveUser() {
       const rawName = document.getElementById('userFormName').value.trim();
       const rawRoute = document.getElementById('userFormRoute').value.trim();
       const role = document.getElementById('userFormRole').value;
@@ -614,32 +626,30 @@
       const route = formatRouteCode(rawRoute);
       if (!route) { showToast('请输入有效数字 (如 1, 17, 105)', 'error'); return; }
       
-      let users = DB.get('users', []);
-      const exists = users.some(u => u.route === route && u.id !== currentUserEditId);
-      if (exists) { showToast('该线路已存在用户', 'error'); return; }
+      // 检查是否已注册
+      const registered = await Auth.isRouteRegistered(route);
+      if (registered) { showToast('该线路已存在用户', 'error'); return; }
       
-      const maxId = users.reduce((max, u) => Math.max(max, u.id || 0), 0);
       const name = rawName || '';
+      const unifiedPassword = getUnifiedPassword();
       
-      users.push({ 
-        id: maxId + 1, 
-        name: name, 
-        route: route, 
-        password: getUnifiedPassword(),
-        role: role,
-        createdAt: new Date().toISOString()
-      });
-      DB.set('users', users);
-      DB.addLog('用户添加', `添加用户: ${route} (${role})`);
-      showToast('用户已添加');
-      closeDialog('userFormDialog');
-      renderUsers();
+      // 创建用户（直接写入 Upstash）
+      const newUser = await Auth.createUser(route, unifiedPassword, role, name);
+      
+      if (newUser) {
+        DB.addLog('用户添加', `添加用户: ${route} (${role})`);
+        showToast('用户已添加');
+        closeDialog('userFormDialog');
+        renderUsers();
+      } else {
+        showToast('用户添加失败，请重试', 'error');
+      }
     }
 
     // ============================================================
     // 保存编辑普通用户
     // ============================================================
-    function saveUserEdit() {
+    async function saveUserEdit() {
       const rawName = document.getElementById('userEditName').value.trim();
       const rawRoute = document.getElementById('userEditRoute').value.trim();
       const role = document.getElementById('userEditRole').value;
@@ -649,34 +659,34 @@
       const route = formatRouteCode(rawRoute);
       if (!route) { showToast('请输入有效数字 (如 1, 17, 105)', 'error'); return; }
       
-      let users = DB.get('users', []);
+      const users = await Auth.fetchUsersFromUpstash();
+      const idx = users.findIndex(u => u.id === currentUserEditId);
+      if (idx === -1) { showToast('用户不存在', 'error'); return; }
+      
+      // 检查线路是否被其他用户占用
       const exists = users.some(u => u.route === route && u.id !== currentUserEditId);
       if (exists) { showToast('该线路已存在用户', 'error'); return; }
       
-      const idx = users.findIndex(u => u.id === currentUserEditId);
-      if (idx !== -1) {
-        users[idx].name = rawName || users[idx].name || '';
-        users[idx].route = route;
-        users[idx].role = role;
-        DB.set('users', users);
-        DB.addLog('用户编辑', `编辑用户: ${route} (${role})`);
-        showToast('用户已更新');
-        closeDialog('userEditDialog');
-        renderUsers();
-      } else {
-        showToast('用户不存在', 'error');
-      }
+      users[idx].name = rawName || users[idx].name || '';
+      users[idx].route = route;
+      users[idx].role = role;
+      
+      await Auth.saveUsersToUpstash(users);
+      DB.addLog('用户编辑', `编辑用户: ${route} (${role})`);
+      showToast('用户已更新');
+      closeDialog('userEditDialog');
+      renderUsers();
     }
 
     // ============================================================
     // 保存编辑管理员 - 同步到 Upstash
     // ============================================================
-    function saveAdminEdit() {
+    async function saveAdminEdit() {
       const name = document.getElementById('adminEditName').value.trim();
       const adminPassword = document.getElementById('adminEditPassword').value.trim();
       const unifiedPassword = document.getElementById('adminEditUnifiedPassword').value.trim();
       
-      let users = DB.get('users', []);
+      let users = await Auth.fetchUsersFromUpstash();
       const idx = users.findIndex(u => u.id === currentUserEditId);
       
       if (idx === -1) {
@@ -696,21 +706,16 @@
       
       // ===== 更新企业统一密码 =====
       if (unifiedPassword) {
-        // 更新所有普通用户的密码
         users.forEach(u => {
           if (u.role !== 'admin') {
             u.password = unifiedPassword;
           }
         });
-        // 保存到 localStorage，供注册时使用
         localStorage.setItem('unified_password', unifiedPassword);
-        // 同步到 Upstash
-        localStorage.setItem('admin_users', JSON.stringify(users));
-        syncUsersToUpstash(users);
       }
       
-      // 保存到本地
-      DB.set('users', users);
+      // 保存到 Upstash
+      await Auth.saveUsersToUpstash(users);
       DB.addLog('管理员编辑', `编辑管理员: ${name || '管理员'}`);
       
       // 如果当前登录的是管理员，清除登录状态，强制重新登录
@@ -737,8 +742,8 @@
     // ============================================================
     // 删除用户（管理员不可删除）
     // ============================================================
-    function deleteUser(id) {
-      const users = DB.get('users', []);
+    async function deleteUser(id) {
+      const users = await Auth.fetchUsersFromUpstash();
       const user = users.find(u => u.id === id);
       
       if (user && user.role === 'admin') {
@@ -748,8 +753,8 @@
       
       if (!confirm('确定删除该用户吗？')) return;
       
-      let updatedUsers = users.filter(u => u.id !== id);
-      DB.set('users', updatedUsers);
+      const updatedUsers = users.filter(u => u.id !== id);
+      await Auth.saveUsersToUpstash(updatedUsers);
       DB.addLog('用户删除', `删除用户: ${user?.route || id}`);
       showToast('用户已删除', 'warning');
       renderUsers();
@@ -844,22 +849,22 @@
       const route = formatRouteCode(rawRoute);
       if (!route) { showToast('请输入有效数字 (如 1, 17, 105)', 'error'); return; }
       
-      if (!isRouteRegistered(route)) {
-        showToast('❌ 该线路未开通', 'error');
-        return;
-      }
-      
-      let vehicles = DB.get('vehicles', []);
-      const exists = vehicles.some(v => v.plate === plate);
-      if (exists) { showToast('该车牌已存在', 'error'); return; }
-      
-      const maxId = vehicles.reduce((max, v) => Math.max(max, v.id), 0);
-      vehicles.push({ id: maxId + 1, plate, route, status });
-      DB.set('vehicles', vehicles);
-      DB.addLog('车辆添加', `添加车辆: ${plate} (${route})`);
-      showToast('车辆已添加');
-      closeDialog('vehicleFormDialog');
-      renderVehicles();
+      // 检查线路是否已注册
+      isRouteRegistered(route).then(registered => {
+        if (!registered) { showToast('❌ 该线路未开通', 'error'); return; }
+        
+        let vehicles = DB.get('vehicles', []);
+        const exists = vehicles.some(v => v.plate === plate);
+        if (exists) { showToast('该车牌已存在', 'error'); return; }
+        
+        const maxId = vehicles.reduce((max, v) => Math.max(max, v.id), 0);
+        vehicles.push({ id: maxId + 1, plate, route, status });
+        DB.set('vehicles', vehicles);
+        DB.addLog('车辆添加', `添加车辆: ${plate} (${route})`);
+        showToast('车辆已添加');
+        closeDialog('vehicleFormDialog');
+        renderVehicles();
+      });
     }
 
     function editVehicle(id) {
