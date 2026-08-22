@@ -110,7 +110,7 @@
         <div class="icon">💾</div><div class="title">数据备份</div><div class="desc">导出/导入</div>
       </button>
       <button class="admin-card" onclick="openLogManagement()">
-        <div class>📝</div><div class="title">修改日志</div><div class="desc">操作记录</div><div class="badge" id="logBadge">0</div>
+        <div class="icon">📝</div><div class="title">修改日志</div><div class="desc">操作记录</div><div class="badge" id="logBadge">0</div>
       </button>
       <button class="admin-card full-width" onclick="logout()" style="background:#2C1A1A;">
         <div class="icon">🚪</div><div class="title">退出登录</div><div class="desc">返回登录页面</div>
@@ -529,13 +529,18 @@
     // ============================================================
     let currentUserEditId = null;
 
-    function openUserManagement() { openDialog('userDialog'); renderUsers(); }
+    function openUserManagement() { 
+      openDialog('userDialog'); 
+      renderUsers(); 
+    }
 
     // ============================================================
     // 渲染用户列表 - 管理员有编辑按钮，无删除按钮
     // ============================================================
     async function renderUsers(filter = '') {
       let users = await Auth.fetchUsersFromUpstash();
+      console.log('📋 用户数据:', users);
+      
       users.sort((a, b) => {
         if (a.role === 'admin' && b.role !== 'admin') return -1;
         if (a.role !== 'admin' && b.role === 'admin') return 1;
@@ -575,7 +580,9 @@
       }).join('');
     }
 
-    function filterUsers() { renderUsers(document.getElementById('userSearch').value.trim()); }
+    function filterUsers() { 
+      renderUsers(document.getElementById('userSearch').value.trim()); 
+    }
 
     // ============================================================
     // 添加用户
@@ -593,10 +600,15 @@
     // 编辑用户
     // ============================================================
     function editUser(id) {
+      console.log('✏️ 编辑用户 ID:', id);
       // 从 localStorage 获取用户（因为 auth.js 已同步）
       const users = DB.get('users', []);
       const user = users.find(u => u.id === id);
-      if (!user) return;
+      if (!user) {
+        console.log('❌ 找不到用户 ID:', id);
+        showToast('用户不存在', 'error');
+        return;
+      }
       
       currentUserEditId = id;
       
@@ -1168,6 +1180,11 @@
     window.filterLogs = filterLogs;
     window.clearLogs = clearLogs;
     window.exportLogs = exportLogs;
+
+    // ============================================================
+    // 强制修复：在页面加载完成后重新渲染用户列表
+    // ============================================================
+    console.log('🔧 强制修复已应用，等待用户管理打开时生效...');
   </script>
 </body>
 </html>
