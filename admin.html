@@ -1,49 +1,3 @@
-## ✅ 管理员编辑框布局确认
-
-您说得对，管理员编辑框应该是：
-
-1. **修改管理员名称**（第一行）
-2. **修改管理员密码**（第二行）
-3. **修改企业统一密码**（第三行）
-
----
-
-## 📝 替换 admin.html 中的管理员编辑弹窗
-
-找到 `admin.html` 中 **编辑管理员弹窗** 部分，替换为以下代码：
-
-```html
-<!-- ===== 编辑管理员弹窗 ===== -->
-<div class="admin-dialog" id="adminEditDialog">
-  <div class="admin-dialog-box">
-    <h3 id="adminEditTitle">修改管理员信息</h3>
-    <!-- 第一行：修改管理员名称 -->
-    <div class="input-box">
-      <input id="adminEditName" placeholder="修改管理员名称">
-    </div>
-    <!-- 第二行：修改管理员密码 -->
-    <div class="admin-password-box">
-      <input id="adminEditPassword" type="password" placeholder="修改管理员密码">
-      <button type="button" class="admin-eye-btn" onclick="toggleAdminEditPassword()">👁</button>
-    </div>
-    <!-- 第三行：修改企业统一密码 -->
-    <div class="admin-password-box">
-      <input id="adminEditUnifiedPassword" type="password" placeholder="修改企业统一密码">
-      <button type="button" class="admin-eye-btn" onclick="toggleAdminEditUnifiedPassword()">👁</button>
-    </div>
-    <div class="admin-dialog-btn">
-      <button class="btn-secondary" onclick="closeDialog('adminEditDialog')">取消</button>
-      <button class="btn-primary" onclick="saveAdminEdit()">保存</button>
-    </div>
-  </div>
-</div>
-```
-
----
-
-## 📝 完整的 admin.html 文件
-
-```html
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1213,4 +1167,3 @@
   </script>
 </body>
 </html>
-```
