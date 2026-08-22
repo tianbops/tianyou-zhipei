@@ -1,14 +1,23 @@
+// ============================================================
+// 页面初始化
+// ============================================================
 document.addEventListener('DOMContentLoaded', function() {
   if (!Auth.checkAuth()) return;
+  
   const route = Auth.getCurrentRoute();
   document.getElementById("routeName").textContent = route;
   document.getElementById("menuRoute").textContent = route;
   document.getElementById("todayDate").textContent = new Date().toISOString().split('T')[0];
+  
   const vehicle = localStorage.getItem("today_vehicle") || "渝DK7692";
   document.getElementById("vehicleText").textContent = vehicle;
+  
   loadTodayData(route);
 });
 
+// ============================================================
+// 加载今日数据
+// ============================================================
 function loadTodayData(route) {
   const listEl = document.getElementById("routeList");
   const storeCountEl = document.getElementById("storeCount");
@@ -42,18 +51,28 @@ function getTodayOrders() {
   }
 }
 
+// ============================================================
+// 渲染路线
+// ============================================================
 function renderRoute(stores) {
   const box = document.getElementById("routeList");
   if (!box) return;
   box.innerHTML = "";
+  
   if (!stores || stores.length === 0) {
     box.innerHTML = '<div class="empty-tip">今日暂无配送数据</div>';
     return;
   }
+  
   stores.forEach(function(store, index) {
-    const statusMap = { '待配送': '⏳ 待配送', '配送中': '🚚 配送中', '已送达': '✅ 已送达' };
+    const statusMap = {
+      '待配送': '⏳ 待配送',
+      '配送中': '🚚 配送中',
+      '已送达': '✅ 已送达'
+    };
     const statusText = statusMap[store.status] || '⏳ 待配送';
     const weightText = store.weight ? store.weight + 'kg' : '';
+    
     box.innerHTML += `
       <div class="store-item">
         <div>
@@ -72,12 +91,16 @@ function renderRoute(stores) {
 }
 
 function openNavigation(nav) {
-  if (nav) { window.open(nav, '_blank'); } 
-  else { alert('该门店暂无导航地址'); }
+  if (nav) {
+    window.open(nav, '_blank');
+  } else {
+    alert('该门店暂无导航地址');
+  }
 }
 
 function markDelivered(index) {
   if (!confirm('确认该门店已送达？')) return;
+  
   const todayOrders = getTodayOrders();
   if (todayOrders && todayOrders[index]) {
     todayOrders[index].status = '已送达';
@@ -93,16 +116,35 @@ function updateHistory(orders) {
   const today = new Date().toISOString().split('T')[0];
   const route = Auth.getCurrentRoute();
   let history = JSON.parse(localStorage.getItem('delivery_history') || '[]');
+  
   let totalWeight = 0;
-  orders.forEach(order => { const weight = parseFloat(order.weight) || 0; totalWeight += weight; });
-  const record = { date: today, route, vehicle: localStorage.getItem('today_vehicle') || '渝DK7692', count: orders.length, weight: totalWeight.toFixed(1) + ' kg', orders };
+  orders.forEach(order => {
+    const weight = parseFloat(order.weight) || 0;
+    totalWeight += weight;
+  });
+  
+  const record = {
+    date: today,
+    route: route,
+    vehicle: localStorage.getItem('today_vehicle') || '渝DK7692',
+    count: orders.length,
+    weight: totalWeight.toFixed(1) + ' kg',
+    orders: orders
+  };
+  
   const index = history.findIndex(item => item.date === today);
-  if (index >= 0) { history[index] = record; } 
-  else { history.unshift(record); }
+  if (index >= 0) {
+    history[index] = record;
+  } else {
+    history.unshift(record);
+  }
   localStorage.setItem('delivery_history', JSON.stringify(history));
   Auth.saveCurrentUserData();
 }
 
+// ============================================================
+// 三横菜单
+// ============================================================
 function toggleMenu() {
   const menu = document.getElementById("menuPanel");
   menu.style.display = menu.style.display === "block" ? "none" : "block";
@@ -116,6 +158,9 @@ document.addEventListener("click", function(e) {
   }
 });
 
+// ============================================================
+// 更换车辆
+// ============================================================
 function openVehicle() {
   document.getElementById("vehicleDialog").style.display = "flex";
   document.getElementById("menuPanel").style.display = "none";
@@ -127,16 +172,26 @@ function closeVehicle() {
 
 function saveVehicle() {
   const vehicle = document.getElementById("newVehicle").value.trim();
-  if (!vehicle) { alert("请输入车辆号码"); return; }
+  if (!vehicle) {
+    alert("请输入车辆号码");
+    return;
+  }
   localStorage.setItem("today_vehicle", vehicle);
   document.getElementById("vehicleText").textContent = vehicle;
   closeVehicle();
   Auth.addLog('车辆更换', `更换车辆为: ${vehicle}`);
 }
 
+// ============================================================
+// 分享
+// ============================================================
 function shareOrder() {
   if (navigator.share) {
-    navigator.share({ title: "天友智配One 今日运单", text: `今日配送任务 - ${Auth.getCurrentRoute()}`, url: window.location.href });
+    navigator.share({
+      title: "天友智配One 今日运单",
+      text: `今日配送任务 - ${Auth.getCurrentRoute()}`,
+      url: window.location.href
+    });
   } else if (navigator.clipboard) {
     navigator.clipboard.writeText(window.location.href).then(() => alert('📋 链接已复制'));
   } else {
@@ -144,5 +199,18 @@ function shareOrder() {
   }
 }
 
-function goBack() { window.location.href = "../home.html"; }
-function logout() { if (confirm("确定退出登录吗？")) { Auth.logout(); } }
+// ============================================================
+// 返回首页
+// ============================================================
+function goBack() {
+  window.location.href = "../home.html";
+}
+
+// ============================================================
+// 退出登录
+// ============================================================
+function logout() {
+  if (confirm("确定退出登录吗？")) {
+    Auth.logout();
+  }
+}
