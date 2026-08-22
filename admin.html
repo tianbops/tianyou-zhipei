@@ -6,7 +6,6 @@
   <title>管理中心</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* ===== 所有样式保持不变 ===== */
     .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
     .admin-card { background: #1C2530; border-radius: 16px; padding: 20px 16px; text-align: center; cursor: pointer; transition: transform 0.15s; border: none; color: #FFFFFF; font-family: inherit; position: relative; }
     .admin-card:active { transform: scale(0.96); }
@@ -357,6 +356,10 @@
       set(key, val) { 
         localStorage.setItem(`admin_${key}`, JSON.stringify(val)); 
         updateStats(); 
+        // 同步到 Upstash
+        if (key === 'users') {
+          syncUsersToUpstash(val);
+        }
       },
       addLog(action, detail) {
         const logs = this.get('logs', []);
@@ -371,6 +374,23 @@
         this.set('logs', logs);
       }
     };
+
+    // ============================================================
+    // 同步用户数据到 Upstash
+    // ============================================================
+    function syncUsersToUpstash(users) {
+      fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: users })
+      }).then(response => {
+        if (response.ok) {
+          console.log('用户数据已同步到 Upstash');
+        }
+      }).catch(e => {
+        console.log('Upstash 同步失败，数据已保存在本地');
+      });
+    }
 
     // ============================================================
     // 初始化默认数据
@@ -643,7 +663,7 @@
     }
 
     // ============================================================
-    // 保存编辑管理员 - 修改后立即生效
+    // 保存编辑管理员 - 同步到 Upstash
     // ============================================================
     function saveAdminEdit() {
       const name = document.getElementById('adminEditName').value.trim();
@@ -678,22 +698,23 @@
         localStorage.setItem('unified_password', unifiedPassword);
       }
       
-      // 保存到数据库
+      // 保存到本地
       DB.set('users', users);
       DB.addLog('管理员编辑', `编辑管理员: ${name || '管理员'}`);
+      
+      // 同步到 Upstash
+      syncUsersToUpstash(users);
       
       // 如果当前登录的是管理员，清除登录状态，强制重新登录
       const currentRoute = Auth.getCurrentRoute();
       const adminRoutes = ['admin', '管理员', 'ADMIN'];
       if (adminRoutes.includes(currentRoute)) {
-        // 清除登录状态，强制重新登录
         localStorage.removeItem('loginStatus');
         localStorage.removeItem('currentRoute');
         localStorage.removeItem('currentUser');
         showToast('管理员信息已更新，请重新登录', 'warning');
         closeDialog('adminEditDialog');
         renderUsers();
-        // 跳转到登录页
         setTimeout(() => {
           window.location.href = 'index.html';
         }, 1500);
