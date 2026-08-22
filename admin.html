@@ -356,7 +356,6 @@
       set(key, val) { 
         localStorage.setItem(`admin_${key}`, JSON.stringify(val)); 
         updateStats(); 
-        // 同步到 Upstash
         if (key === 'users') {
           syncUsersToUpstash(val);
         }
@@ -390,6 +389,13 @@
       }).catch(e => {
         console.log('Upstash 同步失败，数据已保存在本地');
       });
+    }
+
+    // ============================================================
+    // 获取统一密码
+    // ============================================================
+    function getUnifiedPassword() {
+      return localStorage.getItem('unified_password') || 'tianyou2024';
     }
 
     // ============================================================
@@ -619,7 +625,7 @@
         id: maxId + 1, 
         name: name, 
         route: route, 
-        password: 'tianyou2024',
+        password: getUnifiedPassword(),
         role: role,
         createdAt: new Date().toISOString()
       });
@@ -688,22 +694,24 @@
         users[idx].password = adminPassword;
       }
       
-      // 更新企业统一密码（所有普通用户的密码）
+      // ===== 更新企业统一密码 =====
       if (unifiedPassword) {
+        // 更新所有普通用户的密码
         users.forEach(u => {
           if (u.role !== 'admin') {
             u.password = unifiedPassword;
           }
         });
+        // 保存到 localStorage，供注册时使用
         localStorage.setItem('unified_password', unifiedPassword);
+        // 同步到 Upstash
+        localStorage.setItem('admin_users', JSON.stringify(users));
+        syncUsersToUpstash(users);
       }
       
       // 保存到本地
       DB.set('users', users);
       DB.addLog('管理员编辑', `编辑管理员: ${name || '管理员'}`);
-      
-      // 同步到 Upstash
-      syncUsersToUpstash(users);
       
       // 如果当前登录的是管理员，清除登录状态，强制重新登录
       const currentRoute = Auth.getCurrentRoute();
