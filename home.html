@@ -5,6 +5,361 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>智配One</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* ===== Uber风格上传弹窗 ===== */
+    .upload-overlay {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 999;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .upload-overlay.active {
+      display: flex;
+    }
+    .upload-sheet {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(28, 37, 48, 0.92);
+      border-radius: 32px 32px 0 0;
+      padding: 28px 24px 34px;
+      animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* 顶部指示条 */
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 4px;
+      margin: 0 auto 18px auto;
+    }
+
+    .sheet-title {
+      text-align: center;
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+    .sheet-subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #7F8B98;
+      margin-bottom: 24px;
+    }
+
+    /* ===== 双图标按钮（Uber风格） ===== */
+    .upload-icons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+    .upload-icon-btn {
+      width: 100px;
+      height: 100px;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      color: #7F8B98;
+    }
+    .upload-icon-btn:hover {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.15);
+      transform: translateY(-2px);
+    }
+    .upload-icon-btn:active {
+      transform: scale(0.94);
+    }
+    .upload-icon-btn .icon {
+      font-size: 40px;
+      line-height: 1;
+      transition: all 0.3s ease;
+    }
+    .upload-icon-btn .icon-label {
+      font-size: 11px;
+      color: #5A6A7A;
+      margin-top: 8px;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+    .upload-icon-btn .ripple {
+      position: absolute;
+      inset: 0;
+      border-radius: 24px;
+      pointer-events: none;
+      border: 1px solid rgba(36, 87, 166, 0.3);
+      opacity: 0;
+      transition: all 0.6s ease;
+    }
+    .upload-icon-btn.loading .ripple {
+      opacity: 1;
+      animation: ripplePulse 1.2s ease-out infinite;
+    }
+    @keyframes ripplePulse {
+      0% { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(1.08); opacity: 0; }
+    }
+    .upload-icon-btn .badge-dot {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #27AE60;
+      border: 2px solid #1C2530;
+      display: none;
+    }
+    .upload-icon-btn.done .badge-dot {
+      display: block;
+    }
+
+    /* 分隔线 */
+    .divider-line {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 8px 0 18px 0;
+    }
+    .divider-line hr {
+      flex: 1;
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .divider-line span {
+      color: #4A5A6A;
+      font-size: 12px;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    /* ===== 解析状态显示 ===== */
+    .parse-status {
+      background: rgba(0,0,0,0.3);
+      border-radius: 16px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      min-height: 60px;
+      display: none;
+      border: 1px solid rgba(255,255,255,0.04);
+      transition: all 0.4s ease;
+    }
+    .parse-status.active {
+      display: block;
+    }
+    .parse-status .status-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .parse-status .status-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .parse-status .status-text {
+      font-size: 14px;
+      color: #B8C2CC;
+      flex: 1;
+    }
+    .parse-status .status-text strong {
+      color: #fff;
+      font-weight: 500;
+    }
+    .parse-status .status-progress {
+      margin-top: 10px;
+      height: 3px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .parse-status .status-progress .bar {
+      height: 100%;
+      background: linear-gradient(90deg, #2457A6, #4A8FD4);
+      border-radius: 4px;
+      width: 0%;
+      transition: width 0.15s ease;
+    }
+
+    /* 解析完成时 */
+    .parse-status.done .status-icon { color: #27AE60; }
+    .parse-status.done .status-text { color: #27AE60; }
+    .parse-status .status-count {
+      font-size: 13px;
+      color: #7F8B98;
+      margin-top: 6px;
+    }
+    .parse-status .status-count span {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* ===== 手动输入区 ===== */
+    .input-area {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    .input-area textarea {
+      width: 100%;
+      max-height: 140px;
+      min-height: 80px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 14px 16px 30px 16px;
+      color: #fff;
+      font-size: 14px;
+      resize: vertical;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.3s ease;
+      line-height: 1.7;
+    }
+    .input-area textarea:focus {
+      border-color: rgba(36, 87, 166, 0.5);
+    }
+    .input-area textarea::placeholder {
+      color: #4A5A6A;
+    }
+    .input-area .char-count {
+      position: absolute;
+      bottom: 10px;
+      right: 14px;
+      color: #4A5A6A;
+      font-size: 11px;
+      pointer-events: none;
+    }
+
+    /* ===== 快捷操作 ===== */
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .quick-actions button {
+      flex: 1;
+      min-width: 60px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.04);
+      color: #7F8B98;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .quick-actions button:hover {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+    }
+    .quick-actions button:active { transform: scale(0.96); }
+    .quick-actions button .emoji { font-size: 16px; }
+
+    /* ===== 底部按钮 ===== */
+    .sheet-footer {
+      display: flex;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .sheet-footer .btn-cancel {
+      flex: 1;
+      height: 50px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: none;
+      color: #7F8B98;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .sheet-footer .btn-cancel:hover {
+      background: rgba(255,255,255,0.08);
+    }
+    .sheet-footer .btn-confirm {
+      flex: 2;
+      height: 50px;
+      border-radius: 16px;
+      background: #2457A6;
+      border: none;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      position: relative;
+      overflow: hidden;
+    }
+    .sheet-footer .btn-confirm:active { transform: scale(0.96); }
+    .sheet-footer .btn-confirm:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ===== 解析结果标签 ===== */
+    .parsed-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+    .parsed-tags .tag {
+      background: rgba(36, 87, 166, 0.2);
+      border: 1px solid rgba(36, 87, 166, 0.15);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: #B8C2CC;
+      animation: tagFadeIn 0.3s ease;
+    }
+    @keyframes tagFadeIn {
+      from { opacity: 0; transform: scale(0.8); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .parsed-tags .tag .idx {
+      color: #4A5A6A;
+      margin-right: 4px;
+    }
+    .parsed-tags .tag.highlight {
+      background: rgba(39, 174, 96, 0.15);
+      border-color: rgba(39, 174, 96, 0.2);
+    }
+  </style>
 </head>
 <body>
   <div class="app-container">
@@ -24,10 +379,7 @@
 
     <section class="task-card">
       <div class="task-title">
-        <div class="task-name">
-          今日任务
-          <span class="status-dot" id="statusDot" style="background:#3498DB;"></span>
-        </div>
+        <div class="task-name">今日任务 <span class="status-dot" id="statusDot"></span></div>
         <div class="vehicle-area" id="homeRoute">加载中...</div>
       </div>
       <div class="task-main">
@@ -35,9 +387,7 @@
           <div>待配送：<strong id="storeCount">无数据</strong></div>
           <div>总重量：<strong id="totalWeight">无数据</strong></div>
         </div>
-        <div class="delivery-man">
-          <img src="assets/delivery-route.png" alt="配送路线" onerror="this.style.display='none';this.parentElement.textContent='🚚'">
-        </div>
+        <div class="delivery-man">🚚</div>
       </div>
     </section>
 
@@ -53,47 +403,65 @@
       </button>
     </div>
 
-    <!-- ===== 上传运单弹窗（已优化） ===== -->
+    <!-- ===== Uber风格上传弹窗 ===== -->
     <div class="upload-overlay" id="uploadOverlay">
       <div class="upload-sheet">
-        <h3>📤 上传运单</h3>
+        <!-- 顶部指示条 -->
+        <div class="sheet-handle"></div>
         
-        <!-- 两个上传按钮：文件（左） + 相机（右） -->
-        <div class="upload-options">
-          <button onclick="triggerUpload('file')" style="background:#263442; color:#7F8B98;">
-            <span style="font-size:30px; filter: grayscale(1);">📄</span>
-            <span>文件</span>
-          </button>
-          <button onclick="triggerUpload('camera')" style="background:#263442; color:#7F8B98;">
-            <span style="font-size:30px; filter: grayscale(1);">📷</span>
-            <span>相机</span>
-          </button>
+        <div class="sheet-title">📤 上传运单</div>
+        <div class="sheet-subtitle">拍照或选择文件，自动识别门店</div>
+
+        <!-- 双图标按钮（无文字） -->
+        <div class="upload-icons">
+          <div class="upload-icon-btn" id="cameraBtn" onclick="triggerUpload('camera')">
+            <span class="icon">📷</span>
+            <span class="icon-label">拍照</span>
+            <span class="ripple"></span>
+            <span class="badge-dot"></span>
+          </div>
+          <div class="upload-icon-btn" id="fileBtn" onclick="triggerUpload('file')">
+            <span class="icon">📄</span>
+            <span class="icon-label">文件</span>
+            <span class="ripple"></span>
+            <span class="badge-dot"></span>
+          </div>
         </div>
 
         <!-- 分隔线 -->
-        <div style="display:flex; align-items:center; margin:16px 0 12px 0;">
-          <hr style="flex:1; border-color:rgba(255,255,255,0.08);">
-          <span style="color:#7F8B98; padding:0 12px; font-size:12px;">或手动录入</span>
-          <hr style="flex:1; border-color:rgba(255,255,255,0.08);">
+        <div class="divider-line">
+          <hr><span>或手动输入</span><hr>
         </div>
 
-        <!-- 手动编辑录入区域 -->
-        <div style="margin-bottom:12px; position:relative;">
-          <textarea id="manualOrderInput" rows="5" placeholder="请按格式录入运单数据，每行一条&#10;例如：&#10;门店名称 | 重量(kg) | 备注&#10;江北胡汪洋经销商 | 12.5 | 已送达" style="width:100%; max-height:200px; min-height:120px; background:#05070A; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 14px 28px 14px; color:#fff; font-size:14px; resize:vertical; font-family:inherit; outline:none; overflow-y:auto; line-height:1.8;"></textarea>
-          <div style="position:absolute; bottom:8px; right:14px; color:#4A5568; font-size:11px; pointer-events:none; background:#05070A; padding:0 4px;" id="charCount">0 字符</div>
+        <!-- ===== 解析状态显示 ===== -->
+        <div class="parse-status" id="parseStatus">
+          <div class="status-row">
+            <span class="status-icon" id="statusIcon">⏳</span>
+            <span class="status-text" id="statusText">正在解析运单信息...</span>
+          </div>
+          <div class="status-progress"><div class="bar" id="progressBar"></div></div>
+          <div class="status-count" id="statusCount"></div>
+          <div class="parsed-tags" id="parsedTags"></div>
         </div>
 
-        <!-- 快捷操作按钮 -->
-        <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-          <button onclick="pasteFromClipboard()" style="flex:1; background:#303A46; border:none; color:#fff; border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer;">📋 粘贴</button>
-          <button onclick="clearManualInput()" style="flex:1; background:#303A46; border:none; color:#7F8B98; border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer;">🗑️ 清空</button>
-          <button onclick="loadExampleData()" style="flex:1; background:#303A46; border:none; color:#FFB020; border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer;">📝 示例数据</button>
+        <!-- 手动输入区 -->
+        <div class="input-area">
+          <textarea id="manualOrderInput" rows="3" placeholder="输入门店名称，每行一个&#10;或粘贴运单列表"></textarea>
+          <span class="char-count" id="charCount">0</span>
         </div>
 
-        <!-- 提交按钮 -->
-        <div style="display:flex; gap:10px;">
-          <button class="cancel-btn" onclick="toggleUpload()" style="flex:1; background:#303A46;">取消</button>
-          <button class="cancel-btn" onclick="submitManualOrder()" style="flex:2; background:#2457A6;">确认录入</button>
+        <!-- 快捷操作 -->
+        <div class="quick-actions">
+          <button onclick="pasteFromClipboard()"><span class="emoji">📋</span> 粘贴</button>
+          <button onclick="clearManualInput()"><span class="emoji">🗑️</span> 清空</button>
+          <button onclick="loadExampleData()"><span class="emoji">📝</span> 示例</button>
+          <button onclick="parseManualInput()"><span class="emoji">🔍</span> 解析</button>
+        </div>
+
+        <!-- 底部按钮 -->
+        <div class="sheet-footer">
+          <button class="btn-cancel" onclick="toggleUpload()">取消</button>
+          <button class="btn-confirm" id="confirmBtn" onclick="submitManualOrder()">确认录入</button>
         </div>
       </div>
     </div>
@@ -102,9 +470,11 @@
   <script src="js/auth.js"></script>
   <script>
     // ============================================================
-    // 全局变量：基准门店列表（用于排序）
+    // 全局变量
     // ============================================================
     let baseStores = [];
+    let parsedOrders = [];
+    let isParsing = false;
 
     // ============================================================
     // 页面初始化
@@ -121,13 +491,15 @@
       const charCount = document.getElementById('charCount');
       if (textarea && charCount) {
         textarea.addEventListener('input', function() {
-          charCount.textContent = this.value.length + ' 字符';
+          charCount.textContent = this.value.length;
+          // 输入时自动隐藏解析状态
+          document.getElementById('parseStatus').classList.remove('active');
         });
       }
     });
 
     // ============================================================
-    // 加载线路数据并缓存基准门店
+    // 加载基准门店
     // ============================================================
     async function loadRouteData(route) {
       try {
@@ -137,11 +509,9 @@
           if (response.ok) data = await response.json();
         }
         if (data && data.stores) {
-          baseStores = data.stores; // 缓存基准门店列表
+          baseStores = data.stores;
         }
-        
         const todayOrders = getTodayOrders();
-        
         if (todayOrders && todayOrders.length > 0) {
           const count = todayOrders.length;
           let totalWeight = 0;
@@ -164,61 +534,38 @@
       }
     }
 
-    // ============================================================
-    // 今日运单数据管理
-    // ============================================================
     function getTodayOrders() {
       try {
         const data = localStorage.getItem('today_orders');
         return data ? JSON.parse(data) : null;
-      } catch {
-        return null;
-      }
+      } catch { return null; }
     }
 
     function saveTodayOrders(orders) {
       localStorage.setItem('today_orders', JSON.stringify(orders));
       saveToHistory(orders);
       Auth.saveCurrentUserData();
-      const route = Auth.getCurrentRoute();
-      loadRouteData(route);
+      loadRouteData(Auth.getCurrentRoute());
     }
 
     function saveToHistory(orders) {
       const today = new Date().toISOString().split('T')[0];
       const route = Auth.getCurrentRoute();
       let history = JSON.parse(localStorage.getItem('delivery_history') || '[]');
-      
       let totalWeight = 0;
-      orders.forEach(order => {
-        const weight = parseFloat(order.weight) || 0;
-        totalWeight += weight;
-      });
-      
+      orders.forEach(order => { totalWeight += order.weight || 0; });
       const record = {
-        date: today,
-        route: route,
-        vehicle: localStorage.getItem('today_vehicle') || '渝DK7692',
-        count: orders.length,
-        weight: totalWeight.toFixed(1) + ' kg',
-        orders: orders
+        date: today, route, vehicle: localStorage.getItem('today_vehicle') || '渝DK7692',
+        count: orders.length, weight: totalWeight.toFixed(1) + ' kg', orders
       };
-      
       const index = history.findIndex(item => item.date === today);
-      if (index >= 0) {
-        history[index] = record;
-      } else {
-        history.unshift(record);
-      }
-      
+      if (index >= 0) history[index] = record;
+      else history.unshift(record);
       if (history.length > 100) history.length = 100;
       localStorage.setItem('delivery_history', JSON.stringify(history));
       Auth.saveCurrentUserData();
     }
 
-    // ============================================================
-    // 状态点更新
-    // ============================================================
     function updateStatusDot() {
       const dot = document.getElementById('statusDot');
       const todayOrders = getTodayOrders();
@@ -236,7 +583,6 @@
       const menu = document.getElementById("homeMenu");
       menu.style.display = menu.style.display === "block" ? "none" : "block";
     }
-
     document.addEventListener("click", function(e) {
       const menu = document.getElementById("homeMenu");
       const btn = document.querySelector(".menu-btn");
@@ -245,104 +591,108 @@
       }
     });
 
-    // ============================================================
-    // 页面跳转
-    // ============================================================
     function goToRouteEdit() { window.location.href = "pages/route_edit.html"; }
     function goToOrderDetail() { window.location.href = "pages/order_detail.html"; }
     function goToHistory() { window.location.href = "pages/history.html"; }
 
-    // ============================================================
-    // 退出登录
-    // ============================================================
     function logout() {
-      if (confirm("确定退出登录吗？")) {
-        Auth.logout();
-      }
+      if (confirm("确定退出登录吗？")) Auth.logout();
     }
 
     // ============================================================
-    // 上传弹窗控制
+    // 上传弹窗
     // ============================================================
     function toggleUpload() {
       const overlay = document.getElementById("uploadOverlay");
-      overlay.style.display = overlay.style.display === "block" ? "none" : "block";
-      if (overlay.style.display === "block") {
-        const textarea = document.getElementById('manualOrderInput');
-        const charCount = document.getElementById('charCount');
-        if (textarea && charCount) {
-          charCount.textContent = textarea.value.length + ' 字符';
-        }
+      overlay.classList.toggle('active');
+      if (!overlay.classList.contains('active')) {
+        // 关闭时重置解析状态
+        document.getElementById('parseStatus').classList.remove('active');
+        document.getElementById('parseStatus').classList.remove('done');
       }
     }
 
     // ============================================================
-    // 解析运单文本：提取门店名称并按基准顺序排序
+    // 解析引擎
     // ============================================================
     function parseAndSortOrders(rawText) {
-      // 1. 去除无用信息（如 ZW20260822... 等）
+      // 清理无用字符
       const cleaned = rawText.replace(/ZW\w+/g, '').replace(/\s+/g, ' ').trim();
-      // 2. 按分隔符分割（-> 或 换行 或 逗号）
       const separators = /[->\n,，、；;]+/;
       let items = cleaned.split(separators).map(s => s.trim()).filter(s => s.length > 0);
       
-      // 3. 如果分割后仍然包含无用字符，进一步过滤（只保留门店名称特征）
-      // 门店名称通常包含“店”、“公司”、“经销商”、“加盟”等关键词，但这里简单保留所有非空项
-      // 实际可基于基准门店列表进行匹配
-      
-      // 4. 根据基准门店顺序排序
+      // 按基准顺序排序
       if (baseStores.length > 0) {
-        // 构建门店名称映射（支持部分匹配）
         const storeNames = baseStores.map(s => s.name);
-        // 对 items 排序：按照在 storeNames 中出现的顺序
         items.sort((a, b) => {
           const idxA = storeNames.findIndex(name => a.includes(name) || name.includes(a));
           const idxB = storeNames.findIndex(name => b.includes(name) || name.includes(b));
-          // 如果找不到，放到最后
           return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
         });
       }
-      
       return items;
     }
 
     // ============================================================
-    // 通用文件/图片上传处理（带OCR模拟或文本解析）
+    // 显示解析进度动画
     // ============================================================
-    function processUploadedFile(file, type) {
-      const reader = new FileReader();
-      if (type === 'text') {
-        // 文本文件直接读取
-        reader.onload = function(e) {
-          const text = e.target.result;
-          const sorted = parseAndSortOrders(text);
-          // 将排序后的门店列表填入输入框（每行一个）
-          const textarea = document.getElementById('manualOrderInput');
-          textarea.value = sorted.join('\n');
-          document.getElementById('charCount').textContent = textarea.value.length + ' 字符';
-          showToast('✅ 文件解析完成，已按路线顺序排列');
-          toggleUpload(); // 可自动关闭弹窗或保持打开
-        };
-        reader.readAsText(file);
-      } else if (type === 'image') {
-        // 图片：模拟OCR（实际可集成Tesseract.js，这里做模拟演示）
-        // 为了演示，我们提供一个模拟识别结果（包含用户给出的门店列表）
-        // 真实环境可替换为Tesseract或调用后端OCR API
-        const demoText = `江北亿达鲜观府国际店(客百年) -> 江北亿达鲜半山华府店（客百年） -> 天友加盟农垦大厦店 -> 江北重庆全嘉食品供应链科技有限公司（救助管理站） -> 江北JM03115-谊品生鲜重庆御龙天峰店 -> 渝北JM03050谊品生鲜温馨家园南门店 -> 天友加盟韩志贤加盟重庆彭成商贸有限公司 -> II类天友生活花卉东路店 -> 江北JM03022谊品生鲜重庆北国风光店 -> 江北重庆彩食鲜供应链发展有限公司（重庆中法供水有限公司花园新村） -> 江北胡汪洋经销商（重庆胡建镜好食品有限公司） -> 江北A02175谊品生鲜锦绣北滨路店 -> 江北钱大妈半山华府店`;
-        // 模拟识别延迟
+    function showParsingProgress(callback) {
+      const statusEl = document.getElementById('parseStatus');
+      const iconEl = document.getElementById('statusIcon');
+      const textEl = document.getElementById('statusText');
+      const barEl = document.getElementById('progressBar');
+      const countEl = document.getElementById('statusCount');
+      const tagsEl = document.getElementById('parsedTags');
+      
+      statusEl.classList.add('active');
+      statusEl.classList.remove('done');
+      iconEl.textContent = '⏳';
+      textEl.textContent = '正在解析运单信息...';
+      barEl.style.width = '0%';
+      countEl.textContent = '';
+      tagsEl.innerHTML = '';
+      
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 12 + 3;
+        if (progress > 90) progress = 90;
+        barEl.style.width = progress + '%';
+      }, 120);
+      
+      // 执行解析
+      setTimeout(() => {
+        clearInterval(interval);
+        barEl.style.width = '100%';
         setTimeout(() => {
-          const sorted = parseAndSortOrders(demoText);
-          const textarea = document.getElementById('manualOrderInput');
-          textarea.value = sorted.join('\n');
-          document.getElementById('charCount').textContent = textarea.value.length + ' 字符';
-          showToast('✅ 图片识别完成（模拟），已按路线顺序排列');
-          toggleUpload();
-        }, 800);
-      }
+          const result = callback();
+          if (result && result.length > 0) {
+            statusEl.classList.add('done');
+            iconEl.textContent = '✅';
+            textEl.textContent = `解析完成，识别到 ${result.length} 家门店`;
+            countEl.textContent = '已按路线顺序排列';
+            tagsEl.innerHTML = result.slice(0, 12).map((name, i) => 
+              `<span class="tag"><span class="idx">${i+1}</span>${name}</span>`
+            ).join('');
+            if (result.length > 12) {
+              tagsEl.innerHTML += `<span class="tag">+${result.length - 12} 家...</span>`;
+            }
+            parsedOrders = result;
+            // 填充到输入框
+            document.getElementById('manualOrderInput').value = result.join('\n');
+            document.getElementById('charCount').textContent = result.join('\n').length;
+            // 启用确认按钮
+            document.getElementById('confirmBtn').disabled = false;
+          } else {
+            iconEl.textContent = '⚠️';
+            textEl.textContent = '未能识别到有效门店，请手动输入';
+            barEl.style.width = '0%';
+          }
+        }, 300);
+      }, 1200 + Math.random() * 800);
     }
 
     // ============================================================
-    // 三种上传方式（只保留文件+相机）
+    // 上传处理（文件/相机）
     // ============================================================
     function triggerUpload(type) {
       const input = document.createElement("input");
@@ -350,57 +700,62 @@
       if (type === 'camera') {
         input.accept = "image/*";
         input.capture = "environment";
-      } else if (type === 'file') {
+      } else {
         input.accept = ".jpg,.png,.jpeg,.pdf,.xls,.xlsx,.csv,.txt";
       }
       input.click();
       input.onchange = function() {
         if (input.files && input.files[0]) {
           const file = input.files[0];
-          const fileName = file.name;
-          const fileSize = (file.size / 1024).toFixed(1);
-          Auth.addLog('文件上传', `上传文件: ${fileName}`);
+          Auth.addLog('文件上传', `上传: ${file.name}`);
           
-          // 根据文件类型处理
-          const fileType = file.type;
-          if (fileType.startsWith('image/')) {
-            // 图片：调用模拟OCR
-            processUploadedFile(file, 'image');
-          } else {
-            // 文本或表格：尝试读取文本
-            processUploadedFile(file, 'text');
-          }
+          // 显示解析动画
+          showParsingProgress(() => {
+            // 模拟OCR/解析结果（使用示例数据）
+            const demoText = `江北亿达鲜观府国际店(客百年) -> 江北亿达鲜半山华府店（客百年） -> 天友加盟农垦大厦店 -> 江北重庆全嘉食品供应链科技有限公司（救助管理站） -> 江北JM03115-谊品生鲜重庆御龙天峰店 -> 渝北JM03050谊品生鲜温馨家园南门店 -> 天友加盟韩志贤加盟重庆彭成商贸有限公司 -> II类天友生活花卉东路店 -> 江北JM03022谊品生鲜重庆北国风光店 -> 江北重庆彩食鲜供应链发展有限公司（重庆中法供水有限公司花园新村） -> 江北胡汪洋经销商（重庆胡建镜好食品有限公司） -> 江北A02175谊品生鲜锦绣北滨路店 -> 江北钱大妈半山华府店`;
+            return parseAndSortOrders(demoText);
+          });
         }
         toggleUpload();
       };
     }
 
     // ============================================================
-    // 手动录入功能
+    // 手动输入解析
+    // ============================================================
+    function parseManualInput() {
+      const rawText = document.getElementById('manualOrderInput').value.trim();
+      if (!rawText) {
+        showToast('⚠️ 请先输入运单信息', 'error');
+        return;
+      }
+      showParsingProgress(() => {
+        return parseAndSortOrders(rawText);
+      });
+    }
+
+    // ============================================================
+    // 快捷操作
     // ============================================================
     async function pasteFromClipboard() {
       try {
         const text = await navigator.clipboard.readText();
-        const textarea = document.getElementById('manualOrderInput');
-        if (textarea) {
-          // 对粘贴内容也进行解析排序
-          const sorted = parseAndSortOrders(text);
-          textarea.value = sorted.join('\n');
-          const charCount = document.getElementById('charCount');
-          if (charCount) charCount.textContent = textarea.value.length + ' 字符';
-          showToast('✅ 已粘贴并排序');
-        }
+        document.getElementById('manualOrderInput').value = text;
+        document.getElementById('charCount').textContent = text.length;
+        showToast('✅ 已粘贴');
+        // 自动触发解析
+        parseManualInput();
       } catch (err) {
-        alert('⚠️ 无法读取剪贴板，请手动 Ctrl+V 粘贴');
+        alert('⚠️ 无法读取剪贴板，请手动 Ctrl+V');
       }
     }
 
     function clearManualInput() {
-      if (confirm('确定清空输入内容吗？')) {
-        const textarea = document.getElementById('manualOrderInput');
-        textarea.value = '';
-        const charCount = document.getElementById('charCount');
-        if (charCount) charCount.textContent = '0 字符';
+      if (confirm('清空内容？')) {
+        document.getElementById('manualOrderInput').value = '';
+        document.getElementById('charCount').textContent = '0';
+        document.getElementById('parseStatus').classList.remove('active');
+        document.getElementById('parseStatus').classList.remove('done');
         showToast('已清空', 'warning');
       }
     }
@@ -408,26 +763,21 @@
     function loadExampleData() {
       const example = `江北胡汪洋经销商 | 12.5 | 已送达
 渝北中景隆贸易有限公司 | 8.3 | 配送中
-江北重庆兴农融资担保集团 | 15.6 | 待配送
-渝北Q312重庆沁园松石北路店 | 6.2 | 已送达
-特渠部重庆明德商业保理有限公司 | 9.8 | 待配送`;
-      const textarea = document.getElementById('manualOrderInput');
-      textarea.value = example;
-      const charCount = document.getElementById('charCount');
-      if (charCount) charCount.textContent = example.length + ' 字符';
-      showToast('📝 示例数据已加载');
+江北重庆兴农融资担保集团 | 15.6 | 待配送`;
+      document.getElementById('manualOrderInput').value = example;
+      document.getElementById('charCount').textContent = example.length;
+      showToast('📝 示例已加载');
+      parseManualInput();
     }
 
     function showToast(msg, type = 'success') {
-      const toast = document.getElementById('toast');
+      let toast = document.getElementById('toast');
       if (!toast) {
         const div = document.createElement('div');
         div.id = 'toast';
         div.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#18212B;color:#fff;padding:12px 24px;border-radius:12px;z-index:9999;font-size:14px;max-width:90%;text-align:center;border-left:4px solid #27AE60;';
         document.body.appendChild(div);
-        div.textContent = msg;
-        setTimeout(() => div.remove(), 3000);
-        return;
+        toast = div;
       }
       toast.textContent = msg;
       toast.style.display = 'block';
@@ -436,7 +786,7 @@
     }
 
     // ============================================================
-    // 提交手动录入（原有逻辑，但文本输入区可能已包含排序后的数据）
+    // 提交录入
     // ============================================================
     function submitManualOrder() {
       const textarea = document.getElementById('manualOrderInput');
@@ -447,65 +797,51 @@
         return;
       }
 
-      // 按行分割，每行一条门店
-      const lines = rawText.split('\n').filter(line => line.trim());
-      const orders = [];
-      
-      lines.forEach((line, index) => {
-        // 尝试按 | 或 tab 分割，若没有则整行作为门店名
-        let parts = line.split(/[|\t]/).map(s => s.trim()).filter(s => s);
-        if (parts.length >= 2) {
-          const name = parts[0];
-          const weight = parseFloat(parts[1]) || 0;
-          const note = parts[2] || '';
-          orders.push({ id: Date.now() + index, name, weight, note, status: '待配送' });
-        } else if (parts.length === 1) {
-          // 只有门店名，重量设为0
-          orders.push({ id: Date.now() + index, name: parts[0], weight: 0, note: '', status: '待配送' });
-        }
-      });
+      // 如果还没有解析，先解析
+      if (parsedOrders.length === 0) {
+        parsedOrders = parseAndSortOrders(rawText);
+      }
+
+      const orders = parsedOrders.map((name, index) => ({
+        id: Date.now() + index,
+        name: name,
+        weight: 0,
+        note: '',
+        status: '待配送'
+      }));
 
       if (orders.length === 0) {
-        alert('⚠️ 未能解析有效数据，请检查格式\n格式示例：门店名称 | 重量(kg) | 备注');
+        alert('⚠️ 未能解析有效数据');
         return;
       }
 
       saveTodayOrders(orders);
       
       const count = orders.length;
-      let totalWeight = 0;
-      orders.forEach(order => { totalWeight += order.weight || 0; });
       document.getElementById("storeCount").textContent = count + ' 家门店';
-      document.getElementById("totalWeight").textContent = totalWeight.toFixed(1) + ' kg';
+      document.getElementById("totalWeight").textContent = '0.0 kg';
       
       updateStatusDot();
-      Auth.addLog('运单录入', `录入 ${count} 条运单数据，总重量 ${totalWeight.toFixed(1)} kg`);
+      Auth.addLog('运单录入', `录入 ${count} 条运单`);
       
       toggleUpload();
-      alert(`✅ 运单录入成功！\n共录入 ${count} 家门店\n总重量：${totalWeight.toFixed(1)} kg`);
+      alert(`✅ 运单录入成功！\n共录入 ${count} 家门店`);
       
       textarea.value = '';
-      const charCount = document.getElementById('charCount');
-      if (charCount) charCount.textContent = '0 字符';
+      document.getElementById('charCount').textContent = '0';
+      parsedOrders = [];
+      document.getElementById('parseStatus').classList.remove('active');
+      document.getElementById('parseStatus').classList.remove('done');
     }
 
-    // 点击外部关闭上传弹窗
+    // 点击外部关闭
     document.getElementById('uploadOverlay').addEventListener('click', function(e) {
-      if (e.target === this) {
-        toggleUpload();
-      }
+      if (e.target === this) toggleUpload();
     });
 
-    // ============================================================
     // 兼容原有函数
-    // ============================================================
-    function openTodayRoute() {
-      window.location.href = "pages/order_detail.html";
-    }
-
-    function openHistory() {
-      window.location.href = "pages/history.html";
-    }
+    function openTodayRoute() { window.location.href = "pages/order_detail.html"; }
+    function openHistory() { window.location.href = "pages/history.html"; }
   </script>
 </body>
 </html>
