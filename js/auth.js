@@ -8,7 +8,7 @@ const Auth = {
       if (response.ok) {
         const data = await response.json();
         if (data.users && data.users.length > 0) {
-          // 同步到 localStorage 作为备用
+          // 同步到 localStorage 作为缓存
           localStorage.setItem('admin_users', JSON.stringify(data.users));
           return data.users;
         }
@@ -57,25 +57,10 @@ const Auth = {
   },
 
   // ============================================================
-  // 获取统一密码（从 localStorage 读取，管理员修改时同时更新）
+  // 获取统一密码（从 localStorage 读取）
   // ============================================================
   getUnifiedPassword() {
     return localStorage.getItem('unified_password') || 'tianyou2024';
-  },
-
-  // ============================================================
-  // 设置统一密码（同时保存到 localStorage 和 Upstash）
-  // ============================================================
-  async setUnifiedPassword(newPassword) {
-    localStorage.setItem('unified_password', newPassword);
-    // 同时更新所有普通用户的密码
-    const users = await this.fetchUsersFromUpstash();
-    users.forEach(u => {
-      if (u.role !== 'admin') {
-        u.password = newPassword;
-      }
-    });
-    await this.saveUsersToUpstash(users);
   },
 
   // ============================================================
