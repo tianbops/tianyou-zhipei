@@ -23,9 +23,8 @@
         <input id="password" type="password" placeholder="请输入密码">
         <button type="button" class="eye-btn" onclick="togglePassword()">👁</button>
       </div>
-      <button class="login-btn" onclick="userLogin()">进入系统</button>
+      <button class="login-btn" onclick="login()">进入系统</button>
       <div id="loginError" style="color:#E74C3C; font-size:14px; text-align:center; margin-top:10px; display:none;"></div>
-      <div id="loginInfo" style="color:#27AE60; font-size:14px; text-align:center; margin-top:8px; display:none;"></div>
     </div>
     <div class="bottom-actions">
       <button onclick="openRegister()">注册</button>
@@ -45,7 +44,7 @@
           请输入线路编号和企业统一密码完成注册
         </div>
         <div class="input-box">
-          <input id="registerRoute" type="text" placeholder="请输入线路 (如 01号线)">
+          <input id="registerRoute" type="text" placeholder="请输入线路 (如 17)">
         </div>
         <div class="input-box password-box">
           <input id="registerPassword" type="password" placeholder="请输入企业统一密码">
@@ -82,7 +81,7 @@
   <script src="js/auth.js"></script>
   <script>
     // ============================================================
-    // 工具函数：格式化线路编号
+    // 线路格式转换
     // ============================================================
     function formatRouteCode(input) {
       if (!input) return '';
@@ -107,31 +106,29 @@
     }
 
     // ============================================================
-    // 普通用户登录
+    // 登录
     // ============================================================
-    async function userLogin() {
+    async function login() {
       const rawRoute = document.getElementById('routeCode').value.trim();
       const password = document.getElementById('password').value.trim();
       const errorEl = document.getElementById('loginError');
-      const infoEl = document.getElementById('loginInfo');
       errorEl.style.display = 'none';
-      infoEl.style.display = 'none';
 
-      if (!rawRoute) { 
-        errorEl.textContent = '⚠️ 请输入线路编号'; 
-        errorEl.style.display = 'block'; 
-        return; 
+      if (!rawRoute) {
+        errorEl.textContent = '⚠️ 请输入线路编号';
+        errorEl.style.display = 'block';
+        return;
       }
-      if (!password) { 
-        errorEl.textContent = '⚠️ 请输入密码'; 
-        errorEl.style.display = 'block'; 
-        return; 
+      if (!password) {
+        errorEl.textContent = '⚠️ 请输入密码';
+        errorEl.style.display = 'block';
+        return;
       }
 
       const routeCode = formatRouteCode(rawRoute);
-      
+
       if (!isValidRouteCode(routeCode)) {
-        errorEl.textContent = '⚠️ 线路格式错误，请输入如 01号线、17号线';
+        errorEl.textContent = '⚠️ 线路格式错误，请输入如 17 或 105';
         errorEl.style.display = 'block';
         return;
       }
@@ -139,18 +136,12 @@
       const UNIFIED_PASSWORD = 'tianyou2024';
 
       try {
-        // 检查用户是否已注册
-        const user = Auth.findUserByRoute(routeCode);
-        
-        if (user) {
-          // 用户已注册 → 验证密码
+        const routeData = await Auth.validateRoute(routeCode);
+
+        if (routeData) {
           if (password === UNIFIED_PASSWORD) {
-            // 加载线路数据
-            const routeData = await Auth.validateRoute(routeCode);
             Auth.login(routeCode);
-            if (routeData) {
-              Auth.cacheRouteData(routeCode, routeData);
-            }
+            Auth.cacheRouteData(routeCode, routeData);
             Auth.addLog('用户登录', `${routeCode} 登录系统`);
             window.location.href = 'home.html';
           } else {
@@ -158,8 +149,7 @@
             errorEl.style.display = 'block';
           }
         } else {
-          // 用户未注册 → 提示注册
-          errorEl.textContent = '❌ 线路未注册，请点击「注册」按钮创建';
+          errorEl.textContent = '❌ 线路未注册，请点击「注册」创建';
           errorEl.style.display = 'block';
         }
       } catch (error) {
@@ -175,7 +165,7 @@
     }
 
     // ============================================================
-    // 注册弹窗 - 检查线路是否已被注册
+    // 注册
     // ============================================================
     function openRegister() {
       document.getElementById('registerOverlay').classList.add('active');
@@ -202,21 +192,21 @@
       errorEl.style.display = 'none';
       infoEl.style.display = 'none';
 
-      if (!rawRoute) { 
-        errorEl.textContent = '⚠️ 请输入线路编号'; 
-        errorEl.style.display = 'block'; 
-        return; 
+      if (!rawRoute) {
+        errorEl.textContent = '⚠️ 请输入线路编号';
+        errorEl.style.display = 'block';
+        return;
       }
-      if (!password) { 
-        errorEl.textContent = '⚠️ 请输入企业统一密码'; 
-        errorEl.style.display = 'block'; 
-        return; 
+      if (!password) {
+        errorEl.textContent = '⚠️ 请输入企业统一密码';
+        errorEl.style.display = 'block';
+        return;
       }
 
       const routeCode = formatRouteCode(rawRoute);
-      
+
       if (!isValidRouteCode(routeCode)) {
-        errorEl.textContent = '⚠️ 线路格式错误，请输入如 01号线、17号线';
+        errorEl.textContent = '⚠️ 线路格式错误，请输入如 17 或 105';
         errorEl.style.display = 'block';
         return;
       }
@@ -230,18 +220,9 @@
       }
 
       try {
-        // ===== 检查线路是否已被注册 =====
-        const existingUser = Auth.findUserByRoute(routeCode);
-        if (existingUser) {
-          errorEl.textContent = '❌ 该线路已被注册，请直接登录';
-          errorEl.style.display = 'block';
-          return;
-        }
-
-        // ===== 检查线路是否已存在基准数据（兼容旧数据） =====
         const existingRoute = await Auth.validateRoute(routeCode);
         if (existingRoute) {
-          errorEl.textContent = '❌ 该线路已存在数据，请直接登录';
+          errorEl.textContent = '❌ 该线路已被注册，请直接登录';
           errorEl.style.display = 'block';
           return;
         }
@@ -251,16 +232,16 @@
         infoEl.style.color = '#FFB020';
 
         const newRouteData = await Auth.createRoute(routeCode, 'driver', '');
-        
+
         if (newRouteData) {
           infoEl.textContent = '✅ 线路注册成功！正在跳转...';
           infoEl.style.color = '#27AE60';
           infoEl.style.display = 'block';
-          
+
           Auth.login(routeCode);
           Auth.cacheRouteData(routeCode, newRouteData);
           Auth.addLog('线路注册', `${routeCode} 注册成功`);
-          
+
           setTimeout(() => {
             window.location.href = 'home.html';
           }, 1500);
@@ -304,15 +285,15 @@
       const errorEl = document.getElementById('adminLoginError');
       errorEl.style.display = 'none';
 
-      if (!route) { 
-        errorEl.textContent = '⚠️ 请输入用户名'; 
-        errorEl.style.display = 'block'; 
-        return; 
+      if (!route) {
+        errorEl.textContent = '⚠️ 请输入用户名';
+        errorEl.style.display = 'block';
+        return;
       }
-      if (!password) { 
-        errorEl.textContent = '⚠️ 请输入密码'; 
-        errorEl.style.display = 'block'; 
-        return; 
+      if (!password) {
+        errorEl.textContent = '⚠️ 请输入密码';
+        errorEl.style.display = 'block';
+        return;
       }
 
       const ADMIN_PASSWORD = 'admin123';
@@ -334,19 +315,19 @@
     });
 
     // ============================================================
-    // 回车键触发
+    // 回车触发登录
     // ============================================================
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         const adminOverlay = document.getElementById('adminLoginOverlay');
         const registerOverlay = document.getElementById('registerOverlay');
-        
+
         if (adminOverlay.classList.contains('active')) {
           adminLogin();
         } else if (registerOverlay.classList.contains('active')) {
           doRegister();
         } else {
-          userLogin();
+          login();
         }
       }
     });
