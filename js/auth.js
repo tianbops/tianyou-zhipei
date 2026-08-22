@@ -1,6 +1,6 @@
 const Auth = {
   // ============================================================
-  // 统一用户数据管理 - 所有用户信息存储在 admin_users
+  // 统一用户数据管理
   // ============================================================
   
   getUsers() {
@@ -17,41 +17,16 @@ const Auth = {
     this.syncUsersToUpstash(users);
   },
 
-  // ============================================================
-  // 同步用户数据到 Upstash
-  // ============================================================
-  async syncUsersToUpstash(users) {
+  syncUsersToUpstash(users) {
     try {
-      const response = await fetch('/api/users', {
+      fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ users: users })
-      });
-      if (response.ok) {
-        console.log('用户数据已同步到 Upstash');
-      }
+      }).catch(e => console.log('Upstash 同步失败'));
     } catch (e) {
-      console.log('Upstash 同步失败，数据已保存在本地');
+      console.log('Upstash 同步失败');
     }
-  },
-
-  // ============================================================
-  // 从 Upstash 加载用户数据
-  // ============================================================
-  async loadUsersFromUpstash() {
-    try {
-      const response = await fetch('/api/users');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.users && data.users.length > 0) {
-          localStorage.setItem('admin_users', JSON.stringify(data.users));
-          return data.users;
-        }
-      }
-    } catch (e) {
-      console.log('从 Upstash 加载用户数据失败');
-    }
-    return null;
   },
 
   findUserByRoute(route) {
@@ -65,9 +40,16 @@ const Auth = {
   },
 
   // ============================================================
-  // 创建用户 - 读取统一密码
+  // 获取最新的统一密码
   // ============================================================
-  createUser(route, role = 'driver', name = '') {
+  getUnifiedPassword() {
+    return localStorage.getItem('unified_password') || 'tianyou2024';
+  },
+
+  // ============================================================
+  // 创建用户 - 直接指定密码
+  // ============================================================
+  createUserDirect(route, password, role = 'driver', name = '') {
     const users = this.getUsers();
     const formattedRoute = this.formatRouteCode(route);
     
@@ -76,15 +58,11 @@ const Auth = {
     }
     
     const maxId = users.reduce((max, u) => Math.max(max, u.id || 0), 0);
-    
-    // 从 localStorage 读取统一密码，如果没有则使用默认值
-    const unifiedPassword = localStorage.getItem('unified_password') || 'tianyou2024';
-    
     const newUser = {
       id: maxId + 1,
       name: name || '',
       route: formattedRoute,
-      password: unifiedPassword,
+      password: password,
       role: role,
       createdAt: new Date().toISOString()
     };
@@ -181,9 +159,6 @@ const Auth = {
     return localStorage.getItem('currentUser') || '司机';
   },
 
-  // ============================================================
-  // 登录 - 加载用户数据
-  // ============================================================
   login(route, user = '司机') {
     this.clearSessionCache();
     
@@ -212,9 +187,6 @@ const Auth = {
     }
   },
 
-  // ============================================================
-  // 退出登录
-  // ============================================================
   logout() {
     const route = this.getCurrentRoute();
     
@@ -254,9 +226,6 @@ const Auth = {
     }
   },
 
-  // ============================================================
-  // 数据获取辅助方法
-  // ============================================================
   getTodayOrders() {
     try {
       const data = localStorage.getItem('today_orders');
@@ -290,9 +259,6 @@ const Auth = {
     return data ? JSON.parse(data) : null;
   },
 
-  // ============================================================
-  // 格式化线路编号
-  // ============================================================
   formatRouteCode(input) {
     if (!input) return '';
     let code = input.trim();
@@ -316,67 +282,9 @@ const Auth = {
   },
 
   // ============================================================
-  // 验证线路是否存在
+  // 创建新线路 - 使用最新的统一密码
   // ============================================================
-  async validateRoute(route) {
-    const formattedRoute = this.formatRouteCode(route);
-    if (!this.isValidRouteCode(formattedRoute)) {
-      return null;
-    }
-
-    const user = this.findUserByRoute(formattedRoute);
-    if (user) {
-      const userData = this.getUserOrderData(formattedRoute);
-      if (userData && userData.route_cache) {
-        return userData.route_cache;
-      }
-      const defaultStores = [
-        { code: "01", name: "新门店_01", nav: "" },
-        { code: "02", name: "新门店_02", nav: "" },
-        { code: "03", name: "新门店_03", nav: "" }
-      ];
-      return { route: formattedRoute, stores: defaultStores };
-    }
-
-    const cached = this.getCachedRouteData(formattedRoute);
-    if (cached) {
-      return cached;
-    }
-
-    try {
-      const baseData = localStorage.getItem('base_data');
-      if (baseData) {
-        const stores = JSON.parse(baseData);
-        if (stores && stores.length > 0) {
-          const routeData = { route: formattedRoute, stores: stores };
-          this.cacheRouteData(formattedRoute, routeData);
-          return routeData;
-        }
-      }
-    } catch (e) {
-      console.warn('读取本地数据失败:', e);
-    }
-
-    try {
-      const response = await fetch(`/api/route/${encodeURIComponent(formattedRoute)}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.stores) {
-          this.cacheRouteData(formattedRoute, data);
-          return data;
-        }
-      }
-    } catch (e) {
-      console.log('API不可用，使用本地数据');
-    }
-
-    return null;
-  },
-
-  // ============================================================
-  // 创建新线路
-  // ============================================================
-  async createRoute(route, role = 'driver', name = '') {
+  async createRouteWithPassword(route, password, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
     if (!this.isValidRouteCode(formattedRoute)) {
       return null;
@@ -387,7 +295,8 @@ const Auth = {
       return null;
     }
 
-    const newUser = this.createUser(formattedRoute, role, name);
+    // ===== 强制使用传入的密码 =====
+    const newUser = this.createUserDirect(formattedRoute, password, role, name);
     if (!newUser) {
       return null;
     }
@@ -433,6 +342,14 @@ const Auth = {
     this.addLog('线路注册', `新线路 ${formattedRoute} 注册成功`);
     
     return newRouteData;
+  },
+
+  // ============================================================
+  // 创建新线路（兼容旧方法）
+  // ============================================================
+  async createRoute(route, role = 'driver', name = '') {
+    const unifiedPassword = this.getUnifiedPassword();
+    return this.createRouteWithPassword(route, unifiedPassword, role, name);
   },
 
   cacheRouteData(route, data) {
