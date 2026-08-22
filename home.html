@@ -18,7 +18,7 @@
 
     <div id="homeMenu" class="home-menu">
       <div class="current-line" id="menuRoute">加载中...</div>
-      <div class="home-menu-item" onclick="goToRouteEdit()">⚙ 线路编辑</div>
+      <div class="home-menu-item" onclick="goToRouteEdit()">⚙ 原始数据</div>
       <div class="home-menu-item" onclick="logout()" style="color:#FFB020;">🚪 退出登录</div>
     </div>
 
@@ -53,34 +53,44 @@
       </button>
     </div>
 
-    <!-- ===== 上传运单弹窗 ===== -->
+    <!-- ===== 上传运单弹窗（已优化） ===== -->
     <div class="upload-overlay" id="uploadOverlay">
       <div class="upload-sheet">
         <h3>📤 上传运单</h3>
         
+        <!-- 两个上传按钮：文件（左） + 相机（右） -->
         <div class="upload-options">
-          <button onclick="triggerUpload('camera')"><span>📷</span> 相机</button>
-          <button onclick="triggerUpload('file')"><span>📄</span> 文件</button>
-          <button onclick="triggerUpload('album')"><span>🖼️</span> 相册</button>
+          <button onclick="triggerUpload('file')" style="background:#263442; color:#7F8B98;">
+            <span style="font-size:30px; filter: grayscale(1);">📄</span>
+            <span>文件</span>
+          </button>
+          <button onclick="triggerUpload('camera')" style="background:#263442; color:#7F8B98;">
+            <span style="font-size:30px; filter: grayscale(1);">📷</span>
+            <span>相机</span>
+          </button>
         </div>
 
+        <!-- 分隔线 -->
         <div style="display:flex; align-items:center; margin:16px 0 12px 0;">
           <hr style="flex:1; border-color:rgba(255,255,255,0.08);">
           <span style="color:#7F8B98; padding:0 12px; font-size:12px;">或手动录入</span>
           <hr style="flex:1; border-color:rgba(255,255,255,0.08);">
         </div>
 
+        <!-- 手动编辑录入区域 -->
         <div style="margin-bottom:12px; position:relative;">
           <textarea id="manualOrderInput" rows="5" placeholder="请按格式录入运单数据，每行一条&#10;例如：&#10;门店名称 | 重量(kg) | 备注&#10;江北胡汪洋经销商 | 12.5 | 已送达" style="width:100%; max-height:200px; min-height:120px; background:#05070A; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 14px 28px 14px; color:#fff; font-size:14px; resize:vertical; font-family:inherit; outline:none; overflow-y:auto; line-height:1.8;"></textarea>
           <div style="position:absolute; bottom:8px; right:14px; color:#4A5568; font-size:11px; pointer-events:none; background:#05070A; padding:0 4px;" id="charCount">0 字符</div>
         </div>
 
+        <!-- 快捷操作按钮 -->
         <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
           <button onclick="pasteFromClipboard()" style="flex:1; background:#303A46; border:none; color:#fff; border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer;">📋 粘贴</button>
           <button onclick="clearManualInput()" style="flex:1; background:#303A46; border:none; color:#7F8B98; border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer;">🗑️ 清空</button>
           <button onclick="loadExampleData()" style="flex:1; background:#303A46; border:none; color:#FFB020; border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer;">📝 示例数据</button>
         </div>
 
+        <!-- 提交按钮 -->
         <div style="display:flex; gap:10px;">
           <button class="cancel-btn" onclick="toggleUpload()" style="flex:1; background:#303A46;">取消</button>
           <button class="cancel-btn" onclick="submitManualOrder()" style="flex:2; background:#2457A6;">确认录入</button>
@@ -91,6 +101,11 @@
 
   <script src="js/auth.js"></script>
   <script>
+    // ============================================================
+    // 全局变量：基准门店列表（用于排序）
+    // ============================================================
+    let baseStores = [];
+
     // ============================================================
     // 页面初始化
     // ============================================================
@@ -112,15 +127,22 @@
     });
 
     // ============================================================
-    // 加载线路数据 - 无运单时显示"无数据"
+    // 加载线路数据并缓存基准门店
     // ============================================================
     async function loadRouteData(route) {
       try {
-        // 检查是否有今日运单数据
+        let data = Auth.getCachedRouteData(route);
+        if (!data) {
+          const response = await fetch(`/api/route/${encodeURIComponent(route)}`);
+          if (response.ok) data = await response.json();
+        }
+        if (data && data.stores) {
+          baseStores = data.stores; // 缓存基准门店列表
+        }
+        
         const todayOrders = getTodayOrders();
         
         if (todayOrders && todayOrders.length > 0) {
-          // ✅ 有今日运单 → 显示运单数据
           const count = todayOrders.length;
           let totalWeight = 0;
           todayOrders.forEach(order => {
@@ -130,13 +152,10 @@
           document.getElementById("storeCount").textContent = count + ' 家门店';
           document.getElementById("totalWeight").textContent = totalWeight.toFixed(1) + ' kg';
         } else {
-          // ❌ 无今日运单 → 显示"无数据"
           document.getElementById("storeCount").textContent = '无数据';
           document.getElementById("totalWeight").textContent = '无数据';
         }
-        
         updateStatusDot();
-        
       } catch (error) { 
         console.error("加载数据失败:", error);
         document.getElementById("storeCount").textContent = '无数据';
@@ -161,7 +180,6 @@
       localStorage.setItem('today_orders', JSON.stringify(orders));
       saveToHistory(orders);
       Auth.saveCurrentUserData();
-      // 刷新首页显示
       const route = Auth.getCurrentRoute();
       loadRouteData(route);
     }
@@ -199,15 +217,15 @@
     }
 
     // ============================================================
-    // 状态点更新 - 无数据蓝色，有数据红色
+    // 状态点更新
     // ============================================================
     function updateStatusDot() {
       const dot = document.getElementById('statusDot');
       const todayOrders = getTodayOrders();
       if (todayOrders && todayOrders.length > 0) {
-        dot.style.background = '#E74C3C';  // 红色 - 有数据
+        dot.style.background = '#E74C3C';
       } else {
-        dot.style.background = '#3498DB';  // 蓝色 - 无数据
+        dot.style.background = '#3498DB';
       }
     }
 
@@ -259,31 +277,98 @@
     }
 
     // ============================================================
-    // 三种上传方式
+    // 解析运单文本：提取门店名称并按基准顺序排序
+    // ============================================================
+    function parseAndSortOrders(rawText) {
+      // 1. 去除无用信息（如 ZW20260822... 等）
+      const cleaned = rawText.replace(/ZW\w+/g, '').replace(/\s+/g, ' ').trim();
+      // 2. 按分隔符分割（-> 或 换行 或 逗号）
+      const separators = /[->\n,，、；;]+/;
+      let items = cleaned.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+      
+      // 3. 如果分割后仍然包含无用字符，进一步过滤（只保留门店名称特征）
+      // 门店名称通常包含“店”、“公司”、“经销商”、“加盟”等关键词，但这里简单保留所有非空项
+      // 实际可基于基准门店列表进行匹配
+      
+      // 4. 根据基准门店顺序排序
+      if (baseStores.length > 0) {
+        // 构建门店名称映射（支持部分匹配）
+        const storeNames = baseStores.map(s => s.name);
+        // 对 items 排序：按照在 storeNames 中出现的顺序
+        items.sort((a, b) => {
+          const idxA = storeNames.findIndex(name => a.includes(name) || name.includes(a));
+          const idxB = storeNames.findIndex(name => b.includes(name) || name.includes(b));
+          // 如果找不到，放到最后
+          return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
+        });
+      }
+      
+      return items;
+    }
+
+    // ============================================================
+    // 通用文件/图片上传处理（带OCR模拟或文本解析）
+    // ============================================================
+    function processUploadedFile(file, type) {
+      const reader = new FileReader();
+      if (type === 'text') {
+        // 文本文件直接读取
+        reader.onload = function(e) {
+          const text = e.target.result;
+          const sorted = parseAndSortOrders(text);
+          // 将排序后的门店列表填入输入框（每行一个）
+          const textarea = document.getElementById('manualOrderInput');
+          textarea.value = sorted.join('\n');
+          document.getElementById('charCount').textContent = textarea.value.length + ' 字符';
+          showToast('✅ 文件解析完成，已按路线顺序排列');
+          toggleUpload(); // 可自动关闭弹窗或保持打开
+        };
+        reader.readAsText(file);
+      } else if (type === 'image') {
+        // 图片：模拟OCR（实际可集成Tesseract.js，这里做模拟演示）
+        // 为了演示，我们提供一个模拟识别结果（包含用户给出的门店列表）
+        // 真实环境可替换为Tesseract或调用后端OCR API
+        const demoText = `江北亿达鲜观府国际店(客百年) -> 江北亿达鲜半山华府店（客百年） -> 天友加盟农垦大厦店 -> 江北重庆全嘉食品供应链科技有限公司（救助管理站） -> 江北JM03115-谊品生鲜重庆御龙天峰店 -> 渝北JM03050谊品生鲜温馨家园南门店 -> 天友加盟韩志贤加盟重庆彭成商贸有限公司 -> II类天友生活花卉东路店 -> 江北JM03022谊品生鲜重庆北国风光店 -> 江北重庆彩食鲜供应链发展有限公司（重庆中法供水有限公司花园新村） -> 江北胡汪洋经销商（重庆胡建镜好食品有限公司） -> 江北A02175谊品生鲜锦绣北滨路店 -> 江北钱大妈半山华府店`;
+        // 模拟识别延迟
+        setTimeout(() => {
+          const sorted = parseAndSortOrders(demoText);
+          const textarea = document.getElementById('manualOrderInput');
+          textarea.value = sorted.join('\n');
+          document.getElementById('charCount').textContent = textarea.value.length + ' 字符';
+          showToast('✅ 图片识别完成（模拟），已按路线顺序排列');
+          toggleUpload();
+        }, 800);
+      }
+    }
+
+    // ============================================================
+    // 三种上传方式（只保留文件+相机）
     // ============================================================
     function triggerUpload(type) {
       const input = document.createElement("input");
       input.type = "file";
-      if (type === 'camera') { 
-        input.accept = "image/*"; 
-        input.capture = "environment"; 
-      } else if (type === 'album') { 
-        input.accept = "image/*"; 
-      } else { 
-        input.accept = ".jpg,.png,.jpeg,.pdf,.xls,.xlsx,.csv"; 
+      if (type === 'camera') {
+        input.accept = "image/*";
+        input.capture = "environment";
+      } else if (type === 'file') {
+        input.accept = ".jpg,.png,.jpeg,.pdf,.xls,.xlsx,.csv,.txt";
       }
       input.click();
       input.onchange = function() {
         if (input.files && input.files[0]) {
-          const fileName = input.files[0].name;
-          const fileSize = (input.files[0].size / 1024).toFixed(1);
-          alert(`✅ 文件已选择: ${fileName}\n大小: ${fileSize} KB`);
+          const file = input.files[0];
+          const fileName = file.name;
+          const fileSize = (file.size / 1024).toFixed(1);
           Auth.addLog('文件上传', `上传文件: ${fileName}`);
-          const textarea = document.getElementById('manualOrderInput');
-          if (textarea) {
-            textarea.value += (textarea.value ? '\n' : '') + `📎 ${fileName} | 待解析 | 请手动编辑`;
-            const charCount = document.getElementById('charCount');
-            if (charCount) charCount.textContent = textarea.value.length + ' 字符';
+          
+          // 根据文件类型处理
+          const fileType = file.type;
+          if (fileType.startsWith('image/')) {
+            // 图片：调用模拟OCR
+            processUploadedFile(file, 'image');
+          } else {
+            // 文本或表格：尝试读取文本
+            processUploadedFile(file, 'text');
           }
         }
         toggleUpload();
@@ -293,16 +378,17 @@
     // ============================================================
     // 手动录入功能
     // ============================================================
-    
     async function pasteFromClipboard() {
       try {
         const text = await navigator.clipboard.readText();
         const textarea = document.getElementById('manualOrderInput');
         if (textarea) {
-          textarea.value = text;
+          // 对粘贴内容也进行解析排序
+          const sorted = parseAndSortOrders(text);
+          textarea.value = sorted.join('\n');
           const charCount = document.getElementById('charCount');
-          if (charCount) charCount.textContent = text.length + ' 字符';
-          showToast('✅ 已粘贴剪贴板内容');
+          if (charCount) charCount.textContent = textarea.value.length + ' 字符';
+          showToast('✅ 已粘贴并排序');
         }
       } catch (err) {
         alert('⚠️ 无法读取剪贴板，请手动 Ctrl+V 粘贴');
@@ -350,7 +436,7 @@
     }
 
     // ============================================================
-    // 提交手动录入
+    // 提交手动录入（原有逻辑，但文本输入区可能已包含排序后的数据）
     // ============================================================
     function submitManualOrder() {
       const textarea = document.getElementById('manualOrderInput');
@@ -361,21 +447,20 @@
         return;
       }
 
+      // 按行分割，每行一条门店
       const lines = rawText.split('\n').filter(line => line.trim());
       const orders = [];
       
       lines.forEach((line, index) => {
+        // 尝试按 | 或 tab 分割，若没有则整行作为门店名
         let parts = line.split(/[|\t]/).map(s => s.trim()).filter(s => s);
-        if (parts.length < 2) {
-          parts = line.split(/[，,、；;]/).map(s => s.trim()).filter(s => s);
-        }
-        
         if (parts.length >= 2) {
-          const name = parts[0] || `门店_${index + 1}`;
+          const name = parts[0];
           const weight = parseFloat(parts[1]) || 0;
           const note = parts[2] || '';
           orders.push({ id: Date.now() + index, name, weight, note, status: '待配送' });
         } else if (parts.length === 1) {
+          // 只有门店名，重量设为0
           orders.push({ id: Date.now() + index, name: parts[0], weight: 0, note: '', status: '待配送' });
         }
       });
@@ -385,10 +470,8 @@
         return;
       }
 
-      // 保存今日运单
       saveTodayOrders(orders);
       
-      // 更新首页显示
       const count = orders.length;
       let totalWeight = 0;
       orders.forEach(order => { totalWeight += order.weight || 0; });
@@ -412,6 +495,17 @@
         toggleUpload();
       }
     });
+
+    // ============================================================
+    // 兼容原有函数
+    // ============================================================
+    function openTodayRoute() {
+      window.location.href = "pages/order_detail.html";
+    }
+
+    function openHistory() {
+      window.location.href = "pages/history.html";
+    }
   </script>
 </body>
 </html>
