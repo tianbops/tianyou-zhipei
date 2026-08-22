@@ -6,83 +6,67 @@
   <title>今日运单详情</title>
   <link rel="stylesheet" href="../css/order.css">
   <style>
-    /* 确保配送路线列表可滚动 */
-    .store-list-scroll {
-      height: 320px;
-      max-height: 320px;
-      overflow-y: auto;
-      padding-right: 5px;
-    }
-    .store-list-scroll::-webkit-scrollbar {
-      width: 4px;
-    }
-    .store-list-scroll::-webkit-scrollbar-thumb {
-      background: #3A4654;
-      border-radius: 10px;
-    }
-    /* Firefox 滚动条 */
-    .store-list-scroll {
-      scrollbar-width: thin;
-      scrollbar-color: #3A4654 transparent;
-    }
-
+    /* 自定义配送路线条目样式 */
     .store-item {
-      height: 60px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      padding: 10px 0;
       border-bottom: 1px solid rgba(255,255,255,0.06);
-      font-size: 14px;
-      flex-shrink: 0;
-      padding: 0 4px;
+      gap: 10px;
     }
     .store-item:last-child { border-bottom: none; }
-    .store-item .store-info {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex: 1;
-      min-width: 0;
-    }
-    .store-item .store-info .index {
+    .store-item .store-index {
       color: #7F8B98;
-      font-size: 12px;
-      min-width: 24px;
-    }
-    .store-item .store-info .name {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .store-item .store-info .weight {
-      color: #7F8B98;
-      font-size: 12px;
-      margin-left: 4px;
-    }
-    .store-item .store-actions {
-      display: flex;
-      gap: 6px;
-      align-items: center;
+      font-weight: 500;
+      min-width: 28px;
+      font-size: 14px;
       flex-shrink: 0;
     }
-    .store-item .store-actions .status-text {
-      font-size: 12px;
-      color: #7F8B98;
+    .store-item .store-name {
+      flex: 1;
+      font-size: 15px;
+      color: #fff;
+      line-height: 1.5;
+      word-break: break-word;
+      /* 最多两行，超出省略号（但允许换行，所以不限制高度） */
+      max-height: 3em;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
-    .store-item .store-actions button {
+    .store-item .nav-btn {
       background: #2457A6;
       border: none;
       color: #fff;
       border-radius: 10px;
-      padding: 6px 12px;
-      font-size: 12px;
+      padding: 6px 14px;
+      font-size: 13px;
       cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s;
     }
-    .store-item .store-actions .deliver-btn {
-      background: #27AE60;
+    .store-item .nav-btn:active {
+      transform: scale(0.94);
     }
-    .store-item .store-actions .deliver-btn:active { transform: scale(0.95); }
-    .store-item .store-actions .nav-btn:active { transform: scale(0.95); }
+    .store-item .nav-btn:hover {
+      background: #2A6BC4;
+    }
+
+    /* 列表容器滚动 */
+    .store-list {
+      max-height: 380px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .store-list::-webkit-scrollbar {
+      width: 4px;
+    }
+    .store-list::-webkit-scrollbar-thumb {
+      background: #3A4654;
+      border-radius: 10px;
+    }
 
     .empty-tip {
       text-align: center;
@@ -95,6 +79,8 @@
       display: block;
       margin-bottom: 12px;
     }
+
+    /* 其他原有样式保持不变 */
   </style>
 </head>
 <body>
@@ -132,10 +118,10 @@
       </div>
     </section>
 
+    <!-- ===== 配送路线（第二版块） ===== -->
     <section class="task-card">
       <div class="route-title">配送路线</div>
-      <!-- 可滚动列表 -->
-      <div class="store-list-scroll" id="routeList">
+      <div class="store-list" id="routeList">
         <div class="empty-tip">
           <span class="icon">📭</span>
           今日暂无配送数据
@@ -191,7 +177,6 @@
           const weight = parseFloat(order.weight) || 0;
           totalWeight += weight;
         });
-        
         storeCountEl.textContent = count;
         totalWeightEl.textContent = totalWeight.toFixed(1) + ' kg';
         renderRoute(todayOrders);
@@ -207,9 +192,6 @@
       }
     }
 
-    // ============================================================
-    // 获取今日运单
-    // ============================================================
     function getTodayOrders() {
       try {
         const data = localStorage.getItem('today_orders');
@@ -220,7 +202,7 @@
     }
 
     // ============================================================
-    // 渲染路线 - 可滚动
+    // 渲染配送路线（仅显示序号 + 门店名称 + 导航按钮）
     // ============================================================
     function renderRoute(stores) {
       const box = document.getElementById("routeList");
@@ -238,81 +220,32 @@
       }
       
       stores.forEach(function(store, index) {
-        const statusMap = {
-          '待配送': '⏳ 待配送',
-          '配送中': '🚚 配送中',
-          '已送达': '✅ 已送达'
-        };
-        const statusText = statusMap[store.status] || '⏳ 待配送';
-        const weightText = store.weight ? store.weight + 'kg' : '';
+        // 序号从 1 开始
+        const seq = index + 1;
+        // 门店名称（取 name 字段）
+        const name = store.name || '未命名门店';
+        // 导航地址
+        const nav = store.nav || '';
         
-        box.innerHTML += `
-          <div class="store-item">
-            <div class="store-info">
-              <span class="index">${index + 1}</span>
-              <span class="name">${store.name}</span>
-              ${weightText ? `<span class="weight">${weightText}</span>` : ''}
-            </div>
-            <div class="store-actions">
-              <span class="status-text">${statusText}</span>
-              <button class="nav-btn" onclick="openNavigation('${store.nav || ''}')">导航</button>
-              <button class="deliver-btn" onclick="markDelivered(${index})">送达</button>
-            </div>
-          </div>
+        const div = document.createElement('div');
+        div.className = 'store-item';
+        div.innerHTML = `
+          <span class="store-index">${seq}</span>
+          <span class="store-name">${name}</span>
+          <button class="nav-btn" data-nav="${nav}">导航</button>
         `;
+        // 绑定导航事件
+        const btn = div.querySelector('.nav-btn');
+        btn.addEventListener('click', function(e) {
+          const navUrl = this.getAttribute('data-nav');
+          if (navUrl) {
+            window.open(navUrl, '_blank');
+          } else {
+            alert('该门店暂无导航地址');
+          }
+        });
+        box.appendChild(div);
       });
-    }
-
-    function openNavigation(nav) {
-      if (nav) {
-        window.open(nav, '_blank');
-      } else {
-        alert('该门店暂无导航地址');
-      }
-    }
-
-    function markDelivered(index) {
-      if (!confirm('确认该门店已送达？')) return;
-      
-      const todayOrders = getTodayOrders();
-      if (todayOrders && todayOrders[index]) {
-        todayOrders[index].status = '已送达';
-        localStorage.setItem('today_orders', JSON.stringify(todayOrders));
-        updateHistory(todayOrders);
-        renderRoute(todayOrders);
-        Auth.addLog('门店送达', `送达门店: ${todayOrders[index].name}`);
-        alert('✅ 已标记为送达');
-      }
-    }
-
-    function updateHistory(orders) {
-      const today = new Date().toISOString().split('T')[0];
-      const route = Auth.getCurrentRoute();
-      let history = JSON.parse(localStorage.getItem('delivery_history') || '[]');
-      
-      let totalWeight = 0;
-      orders.forEach(order => {
-        const weight = parseFloat(order.weight) || 0;
-        totalWeight += weight;
-      });
-      
-      const record = {
-        date: today,
-        route: route,
-        vehicle: localStorage.getItem('today_vehicle') || '渝DK7692',
-        count: orders.length,
-        weight: totalWeight.toFixed(1) + ' kg',
-        orders: orders
-      };
-      
-      const index = history.findIndex(item => item.date === today);
-      if (index >= 0) {
-        history[index] = record;
-      } else {
-        history.unshift(record);
-      }
-      localStorage.setItem('delivery_history', JSON.stringify(history));
-      Auth.saveCurrentUserData();
     }
 
     // ============================================================
