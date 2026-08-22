@@ -28,7 +28,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 保存用户数据到 Upstash
+  // 保存用户数据到 Upstash（必须调用）
   // ============================================================
   async saveUsersToUpstash(users) {
     try {
@@ -41,10 +41,13 @@ const Auth = {
         console.log('✅ 用户数据已同步到 Upstash');
         localStorage.setItem('admin_users', JSON.stringify(users));
         return true;
+      } else {
+        console.warn('⚠️ Upstash 返回错误:', response.status);
       }
     } catch (e) {
-      console.log('⚠️ Upstash 同步失败');
+      console.warn('⚠️ Upstash 同步失败:', e);
     }
+    // 同步失败时仍然保存到 localStorage
     localStorage.setItem('admin_users', JSON.stringify(users));
     return false;
   },
@@ -54,7 +57,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 查找用户
+  // 查找用户（从 Upstash 实时）
   // ============================================================
   async findUserByRoute(route) {
     const users = await this.fetchUsersFromUpstash();
@@ -73,7 +76,7 @@ const Auth = {
   },
 
   // ============================================================
-  // 创建用户
+  // 创建用户（自动同步）
   // ============================================================
   async createUser(route, password, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
@@ -93,13 +96,13 @@ const Auth = {
     };
     
     users.push(newUser);
-    await this.saveUsersToUpstash(users);
+    await this.saveUsersToUpstash(users); // ← 关键：同步到 Upstash
     this.addLog('用户注册', `新用户注册: ${formattedRoute} (${role})`);
     return newUser;
   },
 
   // ============================================================
-  // 更新用户
+  // 更新用户（自动同步）
   // ============================================================
   async updateUser(route, updates) {
     const formattedRoute = this.formatRouteCode(route);
@@ -108,24 +111,24 @@ const Auth = {
     if (idx === -1) return null;
     
     users[idx] = { ...users[idx], ...updates };
-    await this.saveUsersToUpstash(users);
+    await this.saveUsersToUpstash(users); // ← 关键：同步到 Upstash
     this.addLog('用户更新', `更新用户: ${formattedRoute}`);
     return users[idx];
   },
 
   // ============================================================
-  // 删除用户
+  // 删除用户（自动同步）
   // ============================================================
   async deleteUser(route) {
     const formattedRoute = this.formatRouteCode(route);
     let users = await this.fetchUsersFromUpstash();
     users = users.filter(u => u.route !== formattedRoute);
-    await this.saveUsersToUpstash(users);
+    await this.saveUsersToUpstash(users); // ← 关键：同步到 Upstash
     this.addLog('用户删除', `删除用户: ${formattedRoute}`);
   },
 
   // ============================================================
-  // 运单数据
+  // 运单数据（localStorage）
   // ============================================================
   getUserDataKey(route) {
     const formatted = this.formatRouteCode(route);
@@ -268,6 +271,9 @@ const Auth = {
     return /^\d{2,}号线$/.test(code);
   },
 
+  // ============================================================
+  // 创建线路（注册时调用）
+  // ============================================================
   async createRoute(route, password, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
     if (!this.isValidRouteCode(formattedRoute)) return null;
