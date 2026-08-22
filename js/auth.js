@@ -1,9 +1,29 @@
 const Auth = {
   // ============================================================
-  // 统一用户数据管理
+  // 从 Upstash 获取用户数据（实时）
   // ============================================================
-  
-  getUsers() {
+  async fetchUsersFromUpstash() {
+    try {
+      const response = await fetch('/api/users');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.users && data.users.length > 0) {
+          // 同步到 localStorage 作为备用
+          localStorage.setItem('admin_users', JSON.stringify(data.users));
+          return data.users;
+        }
+      }
+    } catch (e) {
+      console.log('从 Upstash 获取用户数据失败');
+    }
+    // 如果 Upstash 没有数据，返回 localStorage 中的缓存
+    return this.getLocalUsers();
+  },
+
+  // ============================================================
+  // 获取本地缓存用户数据（备用）
+  // ============================================================
+  getLocalUsers() {
     try {
       const data = localStorage.getItem('admin_users');
       return data ? JSON.parse(data) : [];
@@ -12,52 +32,93 @@ const Auth = {
     }
   },
 
-  saveUsers(users) {
-    localStorage.setItem('admin_users', JSON.stringify(users));
-    this.syncUsersToUpstash(users);
-  },
-
-  syncUsersToUpstash(users) {
+  // ============================================================
+  // 保存用户数据到 Upstash（实时同步）
+  // ============================================================
+  async saveUsersToUpstash(users) {
     try {
-      fetch('/api/users', {
+      const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ users: users })
-      }).catch(e => console.log('Upstash 同步失败'));
+      });
+      if (response.ok) {
+        console.log('用户数据已同步到 Upstash');
+        // 同步到 localStorage 作为缓存
+        localStorage.setItem('admin_users', JSON.stringify(users));
+        return true;
+      }
     } catch (e) {
       console.log('Upstash 同步失败');
     }
-  },
-
-  findUserByRoute(route) {
-    const users = this.getUsers();
-    const formattedRoute = this.formatRouteCode(route);
-    return users.find(u => u.route === formattedRoute) || null;
-  },
-
-  isRouteRegistered(route) {
-    return this.findUserByRoute(route) !== null;
+    // 同步失败时保存到 localStorage
+    localStorage.setItem('admin_users', JSON.stringify(users));
+    return false;
   },
 
   // ============================================================
-  // 获取最新的统一密码
+  // 获取统一密码（从 localStorage 读取，管理员修改时同时更新）
   // ============================================================
   getUnifiedPassword() {
     return localStorage.getItem('unified_password') || 'tianyou2024';
   },
 
   // ============================================================
-  // 创建用户 - 直接指定密码
+  // 设置统一密码（同时保存到 localStorage 和 Upstash）
   // ============================================================
-  createUserDirect(route, password, role = 'driver', name = '') {
-    const users = this.getUsers();
+  async setUnifiedPassword(newPassword) {
+    localStorage.setItem('unified_password', newPassword);
+    // 同时更新所有普通用户的密码
+    const users = await this.fetchUsersFromUpstash();
+    users.forEach(u => {
+      if (u.role !== 'admin') {
+        u.password = newPassword;
+      }
+    });
+    await this.saveUsersToUpstash(users);
+  },
+
+  // ============================================================
+  // 根据线路查找用户（实时从 Upstash 获取）
+  // ============================================================
+  async findUserByRoute(route) {
+    const users = await this.fetchUsersFromUpstash();
+    const formattedRoute = this.formatRouteCode(route);
+    return users.find(u => u.route === formattedRoute) || null;
+  },
+
+  // ============================================================
+  // 根据用户名查找管理员（实时从 Upstash 获取）
+  // ============================================================
+  async findAdminByName(name) {
+    const users = await this.fetchUsersFromUpstash();
+    return users.find(u => u.role === 'admin' && u.name === name) || null;
+  },
+
+  // ============================================================
+  // 检查线路是否已被注册
+  // ============================================================
+  async isRouteRegistered(route) {
+    const user = await this.findUserByRoute(route);
+    return user !== null;
+  },
+
+  // ============================================================
+  // 创建新用户（注册时调用）
+  // ============================================================
+  async createUser(route, password, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
     
-    if (users.some(u => u.route === formattedRoute)) {
+    // 检查是否已存在
+    const existing = await this.findUserByRoute(formattedRoute);
+    if (existing) {
       return null;
     }
-    
+
+    // 获取当前用户列表
+    const users = await this.fetchUsersFromUpstash();
     const maxId = users.reduce((max, u) => Math.max(max, u.id || 0), 0);
+    
     const newUser = {
       id: maxId + 1,
       name: name || '',
@@ -68,37 +129,42 @@ const Auth = {
     };
     
     users.push(newUser);
-    this.saveUsers(users);
+    await this.saveUsersToUpstash(users);
     this.addLog('用户注册', `新用户注册: ${formattedRoute} (${role})`);
     
     return newUser;
   },
 
-  updateUser(route, updates) {
-    const users = this.getUsers();
+  // ============================================================
+  // 更新用户信息
+  // ============================================================
+  async updateUser(route, updates) {
     const formattedRoute = this.formatRouteCode(route);
+    const users = await this.fetchUsersFromUpstash();
     const idx = users.findIndex(u => u.route === formattedRoute);
     if (idx === -1) return null;
     
     users[idx] = { ...users[idx], ...updates };
-    this.saveUsers(users);
+    await this.saveUsersToUpstash(users);
     this.addLog('用户更新', `更新用户: ${formattedRoute}`);
     
     return users[idx];
   },
 
-  deleteUser(route) {
-    let users = this.getUsers();
+  // ============================================================
+  // 删除用户
+  // ============================================================
+  async deleteUser(route) {
     const formattedRoute = this.formatRouteCode(route);
+    let users = await this.fetchUsersFromUpstash();
     users = users.filter(u => u.route !== formattedRoute);
-    this.saveUsers(users);
+    await this.saveUsersToUpstash(users);
     this.addLog('用户删除', `删除用户: ${formattedRoute}`);
   },
 
   // ============================================================
-  // 用户运单数据隔离
+  // 用户运单数据隔离（localStorage 存储）
   // ============================================================
-  
   getUserDataKey(route) {
     const formatted = this.formatRouteCode(route);
     return `user_data_${formatted}`;
@@ -127,7 +193,6 @@ const Auth = {
   // ============================================================
   // 登录状态管理
   // ============================================================
-  
   checkAuth() {
     const loginStatus = localStorage.getItem('loginStatus');
     const currentRoute = localStorage.getItem('currentRoute');
@@ -282,25 +347,27 @@ const Auth = {
   },
 
   // ============================================================
-  // 创建新线路 - 使用最新的统一密码
+  // 创建新线路（注册时调用）
   // ============================================================
-  async createRouteWithPassword(route, password, role = 'driver', name = '') {
+  async createRoute(route, password, role = 'driver', name = '') {
     const formattedRoute = this.formatRouteCode(route);
     if (!this.isValidRouteCode(formattedRoute)) {
       return null;
     }
 
-    const existingUser = this.findUserByRoute(formattedRoute);
-    if (existingUser) {
+    // 检查是否已注册
+    const existing = await this.findUserByRoute(formattedRoute);
+    if (existing) {
       return null;
     }
 
-    // ===== 强制使用传入的密码 =====
-    const newUser = this.createUserDirect(formattedRoute, password, role, name);
+    // 创建用户
+    const newUser = await this.createUser(formattedRoute, password, role, name);
     if (!newUser) {
       return null;
     }
 
+    // 初始化默认门店数据
     const defaultStores = [
       { code: "01", name: "新门店_01", nav: "" },
       { code: "02", name: "新门店_02", nav: "" },
@@ -326,6 +393,7 @@ const Auth = {
     };
     this.saveUserOrderData(formattedRoute, emptyUserData);
     
+    // 同步线路数据到 Upstash
     try {
       const response = await fetch(`/api/route/${encodeURIComponent(formattedRoute)}`, {
         method: 'PUT',
@@ -342,14 +410,6 @@ const Auth = {
     this.addLog('线路注册', `新线路 ${formattedRoute} 注册成功`);
     
     return newRouteData;
-  },
-
-  // ============================================================
-  // 创建新线路（兼容旧方法）
-  // ============================================================
-  async createRoute(route, role = 'driver', name = '') {
-    const unifiedPassword = this.getUnifiedPassword();
-    return this.createRouteWithPassword(route, unifiedPassword, role, name);
   },
 
   cacheRouteData(route, data) {
