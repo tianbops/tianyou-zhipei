@@ -6,7 +6,6 @@
   <title>历史查询</title>
   <link rel="stylesheet" href="../css/order.css">
   <style>
-    /* ===== 日期选择器 - 三个滚动窗口 ===== */
     .date-picker-title {
       text-align: center;
       color: #B8C2CC;
@@ -33,13 +32,11 @@
       -moz-appearance: none;
       padding: 4px 0;
       cursor: pointer;
-      /* 确保滚动选择器可见 */
       overflow-y: auto;
     }
     .date-picker select:focus {
       outline: 2px solid rgba(36, 87, 166, 0.45);
     }
-    /* 下拉选项样式 */
     .date-picker select option {
       background: #18212B;
       color: #fff;
@@ -47,7 +44,6 @@
       font-size: 14px;
       text-align: center;
     }
-    /* 滚动条样式 */
     .date-picker select::-webkit-scrollbar {
       width: 4px;
     }
@@ -55,13 +51,10 @@
       background: #3A4654;
       border-radius: 10px;
     }
-    /* Firefox 滚动条 */
     .date-picker select {
       scrollbar-width: thin;
       scrollbar-color: #3A4654 transparent;
     }
-
-    /* 查询按钮 */
     .query-btn {
       width: 100%;
       height: 48px;
@@ -75,8 +68,6 @@
       margin-top: 14px;
     }
     .query-btn:active { transform: scale(0.97); }
-
-    /* ===== 配送记录列表 - 可滚动 ===== */
     .history-scroll {
       max-height: 380px;
       overflow-y: auto;
@@ -90,7 +81,6 @@
       background: #3A4654;
       border-radius: 10px;
     }
-
     .history-scroll .empty-tip {
       text-align: center;
       padding: 40px 20px;
@@ -102,8 +92,6 @@
       display: block;
       margin-bottom: 12px;
     }
-
-    /* 历史条目样式 */
     .history-item {
       background: #05070A;
       border-radius: 14px;
@@ -145,20 +133,10 @@
       cursor: pointer;
     }
     .history-item .history-btn:active { transform: scale(0.97); }
-
-    /* 日期选择器小屏适配 */
     @media (max-height: 700px) {
-      .date-picker select {
-        height: 40px;
-        font-size: 14px;
-      }
-      .date-picker select option {
-        font-size: 12px;
-        padding: 4px 6px;
-      }
-      .history-scroll {
-        max-height: 240px;
-      }
+      .date-picker select { height: 40px; font-size: 14px; }
+      .date-picker select option { font-size: 12px; padding: 4px 6px; }
+      .history-scroll { max-height: 240px; }
     }
   </style>
 </head>
@@ -170,21 +148,16 @@
       <div style="width:40px;"></div>
     </header>
 
-    <!-- ===== 日期选择区域 ===== -->
     <section class="task-card">
       <div class="date-picker-title">选择日期</div>
-      
-      <!-- 三个滚动选择器：年、月、日 -->
       <div class="date-picker">
         <select id="yearSelect" onchange="updateDateDisplay()"></select>
         <select id="monthSelect" onchange="updateDateDisplay()"></select>
         <select id="daySelect" onchange="updateDateDisplay()"></select>
       </div>
-
       <button class="query-btn" onclick="queryHistory()">查询配送记录</button>
     </section>
 
-    <!-- ===== 配送记录列表 - 可滚动 ===== -->
     <section class="task-card">
       <div class="route-title">📋 配送记录</div>
       <div class="history-scroll" id="historyList">
@@ -198,16 +171,13 @@
 
   <script src="../js/auth.js"></script>
   <script>
-    // ============================================================
-    // 全局变量
-    // ============================================================
     let selectedYear = '';
     let selectedMonth = '';
     let selectedDay = '';
     let historyData = [];
 
     // ============================================================
-    // 页面初始化 - 默认显示当天日期
+    // 页面初始化
     // ============================================================
     document.addEventListener('DOMContentLoaded', function() {
       if (!Auth.checkAuth()) return;
@@ -222,22 +192,19 @@
       selectedDay = day;
       
       populateSelectors(year, parseInt(month), parseInt(day));
-      
-      // 默认查询当天
       loadHistory(`${year}-${month}-${day}`);
     });
 
     // ============================================================
-    // 填充选择器 - 每个选择器都有足够的选项供滚动
+    // 填充选择器
     // ============================================================
     function populateSelectors(year, month, day) {
       const yearSelect = document.getElementById('yearSelect');
       const monthSelect = document.getElementById('monthSelect');
       const daySelect = document.getElementById('daySelect');
       
-      // ===== 年份：当前年份前后5年，共11个选项（足够滚动） =====
       yearSelect.innerHTML = '';
-      for (let i = year - 5; i <= year + 5; i++) {
+      for (let i = year - 5; i <= year + 1; i++) {
         const option = document.createElement('option');
         option.value = i;
         option.textContent = i + '年';
@@ -245,7 +212,6 @@
         yearSelect.appendChild(option);
       }
       
-      // ===== 月份：1-12月 =====
       monthSelect.innerHTML = '';
       for (let i = 1; i <= 12; i++) {
         const option = document.createElement('option');
@@ -255,7 +221,6 @@
         monthSelect.appendChild(option);
       }
       
-      // ===== 日期：1-当月天数 =====
       const daysInMonth = getDaysInMonth(year, month);
       daySelect.innerHTML = '';
       for (let i = 1; i <= daysInMonth; i++) {
@@ -267,16 +232,10 @@
       }
     }
 
-    // ============================================================
-    // 获取当月天数
-    // ============================================================
     function getDaysInMonth(year, month) {
       return new Date(year, month, 0).getDate();
     }
 
-    // ============================================================
-    // 更新日期显示（仅用于内部变量）
-    // ============================================================
     function updateDateDisplay() {
       const year = document.getElementById('yearSelect').value;
       const month = document.getElementById('monthSelect').value;
@@ -286,12 +245,10 @@
       selectedMonth = month;
       selectedDay = day;
       
-      // 月份变化时更新天数
       const daysInMonth = getDaysInMonth(parseInt(year), parseInt(month));
       const daySelect = document.getElementById('daySelect');
       const currentDay = parseInt(day);
       
-      // 如果当前选择的天数大于当月天数，自动调整
       if (currentDay > daysInMonth) {
         daySelect.innerHTML = '';
         for (let i = 1; i <= daysInMonth; i++) {
@@ -306,7 +263,7 @@
     }
 
     // ============================================================
-    // 查询历史
+    // 查询历史（从 /api/history 获取）
     // ============================================================
     function queryHistory() {
       const year = document.getElementById('yearSelect').value;
@@ -316,43 +273,37 @@
       loadHistory(date);
     }
 
-    // ============================================================
-    // 加载历史数据
-    // ============================================================
     async function loadHistory(date) {
       const container = document.getElementById('historyList');
       container.innerHTML = '<div class="empty-tip"><span class="icon">⏳</span>加载中...</div>';
       
+      const route = Auth.getCurrentRoute();
+      
       try {
+        const response = await fetch(`/api/history?date=${date}&route=${encodeURIComponent(route)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            historyData = data;
+            renderHistory(data);
+            return;
+          }
+        }
+        // 尝试从本地读取（兼容旧数据）
         const allHistory = JSON.parse(localStorage.getItem('delivery_history') || '[]');
         const filtered = allHistory.filter(item => item.date === date);
-        
         if (filtered.length > 0) {
           historyData = filtered;
           renderHistory(filtered);
-        } else {
-          try {
-            const response = await fetch(`/api/history/${date}`);
-            if (response.ok) {
-              const data = await response.json();
-              if (data && data.length > 0) {
-                historyData = data;
-                renderHistory(data);
-                return;
-              }
-            }
-          } catch (e) {
-            console.log('API不可用，使用本地数据');
-          }
-          
-          container.innerHTML = `
-            <div class="empty-tip">
-              <span class="icon">📭</span>
-              暂无配送记录<br>
-              <span style="font-size:13px;color:#4A5568;">${date} 没有配送数据</span>
-            </div>
-          `;
+          return;
         }
+        container.innerHTML = `
+          <div class="empty-tip">
+            <span class="icon">📭</span>
+            暂无配送记录<br>
+            <span style="font-size:13px;color:#4A5568;">${date} 没有配送数据</span>
+          </div>
+        `;
       } catch (error) {
         console.error("加载历史失败:", error);
         container.innerHTML = `
@@ -364,9 +315,6 @@
       }
     }
 
-    // ============================================================
-    // 渲染历史记录
-    // ============================================================
     function renderHistory(records) {
       const container = document.getElementById('historyList');
       container.innerHTML = "";
@@ -415,9 +363,6 @@
       });
     }
 
-    // ============================================================
-    // 查看历史详情
-    // ============================================================
     function viewHistoryDetail(index) {
       const item = historyData[index];
       if (!item) {
@@ -437,7 +382,7 @@
     }
 
     // ============================================================
-    // 年份变化时更新月份天数
+    // 事件绑定
     // ============================================================
     document.getElementById('yearSelect').addEventListener('change', function() {
       updateDateDisplay();
@@ -446,9 +391,6 @@
       updateDateDisplay();
     });
 
-    // ============================================================
-    // 键盘回车触发查询
-    // ============================================================
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         queryHistory();
