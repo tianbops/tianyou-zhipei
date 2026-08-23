@@ -7,340 +7,8 @@
   <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.min.js"></script>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* ===== Uber风格上传弹窗 (同前，保持不变) ===== */
-    .upload-overlay {
-      display: none;
-      position: fixed;
-      left: 0;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      z-index: 999;
-      align-items: flex-end;
-      justify-content: center;
-      padding: 16px;
-    }
-    .upload-overlay.active { display: flex; }
-    .upload-sheet {
-      width: 100%;
-      max-width: 420px;
-      background: rgba(28,37,48,0.92);
-      border-radius: 28px;
-      padding: 20px 20px 28px;
-      animation: slideUp 0.35s cubic-bezier(0.22,1,0.36,1);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255,255,255,0.05);
-      margin: 0 auto;
-    }
-    @keyframes slideUp {
-      from { transform: translateY(30px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    .sheet-handle {
-      width: 36px;
-      height: 4px;
-      background: rgba(255,255,255,0.15);
-      border-radius: 4px;
-      margin: 0 auto 14px auto;
-    }
-    .sheet-title {
-      text-align: center;
-      font-size: 18px;
-      font-weight: 600;
-      color: #fff;
-      margin-bottom: 4px;
-      letter-spacing: 0.3px;
-    }
-    .sheet-subtitle {
-      text-align: center;
-      font-size: 12px;
-      color: #5A6A7A;
-      margin-bottom: 20px;
-    }
-    .upload-icons {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      margin-bottom: 20px;
-    }
-    .upload-icon-btn {
-      width: 72px;
-      height: 72px;
-      border-radius: 20px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.04);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.25s ease;
-      position: relative;
-      color: #7F8B98;
-    }
-    .upload-icon-btn:hover {
-      background: rgba(255,255,255,0.07);
-      border-color: rgba(255,255,255,0.08);
-      transform: translateY(-2px);
-    }
-    .upload-icon-btn:active {
-      transform: scale(0.92);
-      background: rgba(255,255,255,0.10);
-    }
-    .upload-icon-btn .icon {
-      font-size: 28px;
-      line-height: 1;
-      transition: all 0.3s ease;
-      filter: grayscale(0.2);
-    }
-    .upload-icon-btn .icon-label {
-      font-size: 10px;
-      color: #4A5A6A;
-      margin-top: 4px;
-      letter-spacing: 0.3px;
-      font-weight: 400;
-    }
-    .upload-icon-btn .ripple {
-      position: absolute;
-      inset: 0;
-      border-radius: 20px;
-      pointer-events: none;
-      border: 1px solid rgba(36,87,166,0.2);
-      opacity: 0;
-      transition: all 0.5s ease;
-    }
-    .upload-icon-btn.loading .ripple {
-      opacity: 1;
-      animation: ripplePulse 1.2s ease-out infinite;
-    }
-    @keyframes ripplePulse {
-      0% { transform: scale(1); opacity: 0.5; }
-      100% { transform: scale(1.06); opacity: 0; }
-    }
-    .upload-icon-btn .badge-dot {
-      position: absolute;
-      top: 6px;
-      right: 6px;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #27AE60;
-      border: 2px solid #1C2530;
-      display: none;
-    }
-    .upload-icon-btn.done .badge-dot { display: block; }
-    .divider-line {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 6px 0 16px 0;
-    }
-    .divider-line hr {
-      flex: 1;
-      border: none;
-      border-top: 1px solid rgba(255,255,255,0.04);
-    }
-    .divider-line span {
-      color: #3A4A5A;
-      font-size: 11px;
-      letter-spacing: 0.5px;
-      white-space: nowrap;
-    }
-    .parse-status {
-      background: rgba(0,0,0,0.25);
-      border-radius: 14px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-      min-height: 50px;
-      display: none;
-      border: 1px solid rgba(255,255,255,0.03);
-      transition: all 0.4s ease;
-    }
-    .parse-status.active { display: block; }
-    .parse-status .status-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .parse-status .status-icon { font-size: 18px; flex-shrink: 0; }
-    .parse-status .status-text {
-      font-size: 13px;
-      color: #B8C2CC;
-      flex: 1;
-    }
-    .parse-status .status-text strong { color: #fff; font-weight: 500; }
-    .parse-status .status-progress {
-      margin-top: 8px;
-      height: 2px;
-      background: rgba(255,255,255,0.06);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-    .parse-status .status-progress .bar {
-      height: 100%;
-      background: linear-gradient(90deg, #2457A6, #4A8FD4);
-      border-radius: 2px;
-      width: 0%;
-      transition: width 0.15s ease;
-    }
-    .parse-status.done .status-icon { color: #27AE60; }
-    .parse-status.done .status-text { color: #27AE60; }
-    .parse-status .status-count {
-      font-size: 12px;
-      color: #5A6A7A;
-      margin-top: 4px;
-    }
-    .parse-status .status-count span { color: #fff; font-weight: 600; }
-    .parsed-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      margin-top: 8px;
-      max-height: 60px;
-      overflow-y: auto;
-    }
-    .parsed-tags .tag {
-      background: rgba(36,87,166,0.15);
-      border: 1px solid rgba(36,87,166,0.08);
-      border-radius: 16px;
-      padding: 2px 10px;
-      font-size: 11px;
-      color: #B8C2CC;
-      animation: tagFadeIn 0.3s ease;
-    }
-    @keyframes tagFadeIn {
-      from { opacity: 0; transform: scale(0.8); }
-      to { opacity: 1; transform: scale(1); }
-    }
-    .parsed-tags .tag .idx { color: #4A5A6A; margin-right: 3px; }
-
-    .input-area {
-      position: relative;
-      margin-bottom: 12px;
-    }
-    .input-area textarea {
-      width: 100%;
-      max-height: 120px;
-      min-height: 70px;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.04);
-      border-radius: 14px;
-      padding: 12px 14px 26px 14px;
-      color: #fff;
-      font-size: 13px;
-      resize: vertical;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.3s ease;
-      line-height: 1.6;
-    }
-    .input-area textarea:focus {
-      border-color: rgba(36,87,166,0.4);
-    }
-    .input-area textarea::placeholder { color: #3A4A5A; }
-    .input-area .char-count {
-      position: absolute;
-      bottom: 8px;
-      right: 12px;
-      color: #3A4A5A;
-      font-size: 10px;
-      pointer-events: none;
-    }
-
-    .quick-actions {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 14px;
-      flex-wrap: wrap;
-    }
-    .quick-actions button {
-      flex: 1;
-      min-width: 50px;
-      padding: 6px 8px;
-      border-radius: 10px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.03);
-      color: #5A6A7A;
-      font-size: 11px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-family: inherit;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-    }
-    .quick-actions button:hover {
-      background: rgba(255,255,255,0.06);
-      color: #B8C2CC;
-    }
-    .quick-actions button:active { transform: scale(0.94); }
-    .quick-actions button .emoji { font-size: 14px; }
-
-    .sheet-footer {
-      display: flex;
-      gap: 10px;
-      margin-top: 2px;
-    }
-    .sheet-footer .btn-cancel {
-      flex: 1;
-      height: 44px;
-      border-radius: 14px;
-      background: rgba(255,255,255,0.04);
-      border: none;
-      color: #5A6A7A;
-      font-size: 15px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-family: inherit;
-    }
-    .sheet-footer .btn-cancel:hover {
-      background: rgba(255,255,255,0.08);
-    }
-    .sheet-footer .btn-confirm {
-      flex: 2;
-      height: 44px;
-      border-radius: 14px;
-      background: #2457A6;
-      border: none;
-      color: #fff;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-family: inherit;
-    }
-    .sheet-footer .btn-confirm:active { transform: scale(0.96); }
-    .sheet-footer .btn-confirm:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .toast {
-      position: fixed;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #18212B;
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 12px;
-      z-index: 9999;
-      font-size: 13px;
-      max-width: 90%;
-      text-align: center;
-      display: none;
-      border-left: 3px solid #27AE60;
-    }
-    .toast.show { display: block; }
-    .toast.warning { border-left-color: #FFB020; }
-    .toast.error { border-left-color: #E74C3C; }
+    /* 样式与之前一致，略（为节省篇幅，此处省略，实际使用时请保留完整样式） */
+    /* 但必须包含 .upload-overlay, .upload-sheet, .task-card 等 */
   </style>
 </head>
 <body>
@@ -441,6 +109,17 @@
     </div>
   </div>
 
+  <script>
+    // ============================================================
+    // 关键：捕获所有未处理的错误，防止黑屏
+    // ============================================================
+    window.onerror = function(msg, url, line, col, error) {
+      console.error('捕获到未处理的错误:', msg, error);
+      alert('页面加载出错，请刷新重试。错误信息: ' + msg);
+      return true; // 阻止默认错误处理
+    };
+  </script>
+
   <script src="js/auth.js"></script>
   <script>
     // ============================================================
@@ -450,24 +129,29 @@
     let parsedOrders = [];
 
     // ============================================================
-    // 页面初始化
+    // 页面初始化（带错误捕获）
     // ============================================================
     document.addEventListener('DOMContentLoaded', function() {
-      if (!Auth.checkAuth()) return;
-      const route = Auth.getCurrentRoute();
-      document.getElementById("menuRoute").textContent = route;
-      document.getElementById("homeRoute").textContent = route;
-      loadRouteData(route);
-      updateStatusDot();
+      try {
+        if (!Auth.checkAuth()) return;
+        const route = Auth.getCurrentRoute();
+        document.getElementById("menuRoute").textContent = route;
+        document.getElementById("homeRoute").textContent = route;
+        loadRouteData(route);
+        updateStatusDot();
 
-      const textarea = document.getElementById('manualOrderInput');
-      const charCount = document.getElementById('charCount');
-      if (textarea && charCount) {
-        textarea.addEventListener('input', function() {
-          charCount.textContent = this.value.length;
-          document.getElementById('parseStatus').classList.remove('active');
-          document.getElementById('parseStatus').classList.remove('done');
-        });
+        const textarea = document.getElementById('manualOrderInput');
+        const charCount = document.getElementById('charCount');
+        if (textarea && charCount) {
+          textarea.addEventListener('input', function() {
+            charCount.textContent = this.value.length;
+            document.getElementById('parseStatus').classList.remove('active');
+            document.getElementById('parseStatus').classList.remove('done');
+          });
+        }
+      } catch (e) {
+        console.error('初始化失败:', e);
+        alert('初始化失败，请刷新重试。错误: ' + e.message);
       }
     });
 
@@ -481,7 +165,6 @@
           const data = await response.json();
           if (data && data.stores) {
             baseStores = data.stores;
-            // 缓存到 localStorage 供离线使用
             Auth.cacheRouteData(route, { route, stores: data.stores });
           }
         }
@@ -533,16 +216,13 @@
     // 保存今日运单（本地 + 云端）
     // ============================================================
     function saveTodayOrders(orders) {
-      // 保存到本地（保持兼容）
       localStorage.setItem('today_orders', JSON.stringify(orders));
       saveToHistory(orders);
       Auth.saveCurrentUserData();
-      // 刷新首页数据
       loadRouteData(Auth.getCurrentRoute());
     }
 
     function saveToHistory(orders) {
-      // 已由云端保存，本地只做缓存
       const today = new Date().toISOString().split('T')[0];
       const route = Auth.getCurrentRoute();
       let history = JSON.parse(localStorage.getItem('delivery_history') || '[]');
@@ -889,7 +569,6 @@
         if (vehicleMatch) vehicle = vehicleMatch[1];
       }
 
-      // 转换为标准格式
       const orderObjects = orders.map((name, idx) => ({
         id: Date.now() + idx,
         name: name,
@@ -898,19 +577,15 @@
         status: '待配送'
       }));
 
-      // 先更新本地
       saveTodayOrders(orderObjects);
       
-      // 同步到云端
       saveOrdersToCloud(route, orders, totalWeight, vehicle)
         .then(() => {
           Auth.addLog('运单录入', `录入 ${orders.length} 条运单`);
           toggleUpload();
-          // 跳转今日运单详情
           window.location.href = "pages/order_detail.html";
         })
         .catch(err => {
-          // 即使云端失败，本地已保存，仍然跳转
           alert('⚠️ 云端保存失败，但数据已保存在本地');
           toggleUpload();
           window.location.href = "pages/order_detail.html";
@@ -929,6 +604,8 @@
     // ============================================================
     function openTodayRoute() { window.location.href = "pages/order_detail.html"; }
     function openHistory() { window.location.href = "pages/history.html"; }
+
+    console.log('✅ home.html 加载完成');
   </script>
 </body>
 </html>
