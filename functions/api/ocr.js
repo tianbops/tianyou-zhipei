@@ -22,7 +22,8 @@ export async function onRequest(context) {
       console.error('AI 调用失败:', aiError);
       return new Response(JSON.stringify({
         success: false,
-        error: `AI调用失败: ${aiError.message}`
+        error: `AI调用失败: ${aiError.message}`,
+        stack: aiError.stack
       }), { status: 500 });
     }
 
@@ -74,7 +75,8 @@ export async function onRequest(context) {
     console.error('OCR 未捕获错误:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -89,6 +91,15 @@ async function runAI(env, imageBase64) {
   // 去除 base64 前缀（如果有），确保是纯 base64
   const pureBase64 = imageBase64.split(',')[1] || imageBase64;
 
+  // 验证数据
+  if (!pureBase64 || pureBase64.length < 100) {
+    throw new Error('图片数据无效或过小');
+  }
+
+  // 日志记录
+  console.log('图片数据长度:', pureBase64.length);
+  console.log('图片数据前30字符:', pureBase64.substring(0, 30));
+
   const prompt = `你是一个运单信息提取助手。请从图片中提取以下信息，并只返回 JSON 格式：
 - 门店名称列表（数组，每个门店名称用完整名称，按实际顺序）
 - 总重量（字符串，如 "368.5kg"）
@@ -102,22 +113,21 @@ async function runAI(env, imageBase64) {
 图片数据已提供。`;
 
   try {
-    // === 推荐模型（按优先级） ===
-    // 1. LLaVA 1.5 7B（最常用，中文识别较好）
+    // === 模型选择（可切换） ===
+    // 1. LLaVA 1.5 7B（推荐）
     const model = '@cf/llava-hf/llava-1.5-7b-hf';
-    // 2. Llama 3.2 11B Vision（备选，英文强）
+    // 2. Llama 3.2 11B Vision（备选）
     // const model = '@cf/meta/llama-3.2-11b-vision-instruct';
-    // 3. Phi-3.5 Vision（备选，轻量）
+    // 3. Phi-3.5 Vision（备选）
     // const model = '@cf/microsoft/phi-3.5-vision-instruct';
 
     const response = await env.AI.run(model, {
       prompt: prompt,
-      image: pureBase64  // 确保是纯 base64
+      image: pureBase64
     });
 
-    // 兼容不同返回格式
     const text = typeof response === 'string' ? response : response.response || '';
-    console.log('AI 原始返回:', text.substring(0, 300));
+    console.log('AI 返回长度:', text.length);
     return text;
   } catch (e) {
     console.error('AI 调用错误:', e);
