@@ -3,8 +3,7 @@
 
 export async function onRequest(context) {
   const { request, env } = context;
-  
-  // 仅允许 POST
+
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
   }
@@ -24,7 +23,6 @@ export async function onRequest(context) {
     // 2. 解析 AI 返回的 JSON
     let parsed = parseAIResponse(aiResult);
     if (!parsed) {
-      // 如果解析失败，尝试用正则提取
       parsed = extractWithRegex(aiResult);
     }
 
@@ -38,7 +36,7 @@ export async function onRequest(context) {
     const sortedStores = sortByBaseOrder(matchedStores, baseStores);
 
     // 6. 计算匹配率
-    const matchRate = matchedStores.length / (parsed.stores?.length || 1);
+    const matchRate = sortedStores.length / (parsed.stores?.length || 1);
 
     // 7. 构造响应
     const responseData = {
@@ -83,7 +81,6 @@ async function runAI(env, imageBase64) {
       prompt: prompt,
       image: imageBase64
     });
-    // response 是字符串或对象？通常 LLaVA 返回文本，但可能是对象。根据文档，response.response 是文本。
     const text = typeof response === 'string' ? response : response.response || '';
     return text;
   } catch (e) {
@@ -97,7 +94,6 @@ async function runAI(env, imageBase64) {
 // ============================================================
 function parseAIResponse(text) {
   try {
-    // 尝试提取 JSON 代码块
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
     const jsonStr = jsonMatch ? jsonMatch[1] : text;
     const data = JSON.parse(jsonStr);
@@ -119,7 +115,6 @@ function parseAIResponse(text) {
 // ============================================================
 function extractWithRegex(text) {
   const stores = [];
-  // 简单提取：匹配常见门店关键词
   const keywords = ['店', '公司', '经销商', '加盟', '厂', '中心', '超市', '便利', '生鲜', '食品', '贸易', '供应链'];
   const lines = text.split(/[\n,，、；;]+/);
   for (const line of lines) {
@@ -128,10 +123,8 @@ function extractWithRegex(text) {
       stores.push(trimmed);
     }
   }
-  // 提取总重量
   const weightMatch = text.match(/总重量[:：]?\s*([\d.]+)\s*(kg|千克|吨)/i);
   const totalWeight = weightMatch ? weightMatch[0] : '';
-  // 提取车牌
   const vehicleMatch = text.match(/车牌号[:：]?\s*([A-Z0-9]{6,8})/i);
   const vehicle = vehicleMatch ? vehicleMatch[1] : '';
   return { stores, totalWeight, vehicle };
@@ -143,15 +136,13 @@ function extractWithRegex(text) {
 async function getBaseStores(env, route) {
   const cacheKey = `base_stores:${route}`;
   const cache = caches.default;
-  
-  // 尝试从缓存获取
+
   const cached = await cache.match(new Request(`https://cache/${cacheKey}`));
   if (cached) {
     const data = await cached.json();
     return data.stores;
   }
 
-  // 从 Upstash 获取
   const UPSTASH_URL = env.UPSTASH_REDIS_REST_URL;
   const UPSTASH_TOKEN = env.UPSTASH_REDIS_REST_TOKEN;
   const redisKey = `route:${route}`;
@@ -159,7 +150,6 @@ async function getBaseStores(env, route) {
     headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
   });
   if (!resp.ok) {
-    // 如果没有数据，返回空列表（前端会处理）
     return [];
   }
   const data = await resp.json();
@@ -173,7 +163,6 @@ async function getBaseStores(env, route) {
     }
   }
 
-  // 存入缓存（1小时）
   const cacheResp = new Response(JSON.stringify({ stores }), {
     headers: { 'Cache-Control': 'max-age=3600' }
   });
@@ -186,7 +175,7 @@ async function getBaseStores(env, route) {
 // 模糊匹配（Levenshtein + 子串）
 // ============================================================
 function matchStores(recognized, baseStores) {
-  if (!baseStores.length) return recognized; // 无基准则原样返回
+  if (!baseStores.length) return recognized;
 
   const matched = [];
   const matchedIndices = new Set();
@@ -198,14 +187,12 @@ function matchStores(recognized, baseStores) {
     for (let i = 0; i < baseStores.length; i++) {
       if (matchedIndices.has(i)) continue;
       const base = baseStores[i];
-      // 子串匹配
       if (name.includes(base) || base.includes(name)) {
         bestMatch = base;
         bestScore = 1;
         matchedIndices.add(i);
         break;
       }
-      // Levenshtein 距离
       const dist = levenshtein(name, base);
       const maxLen = Math.max(name.length, base.length);
       const similarity = 1 - dist / maxLen;
@@ -219,7 +206,6 @@ function matchStores(recognized, baseStores) {
     if (bestMatch) {
       matched.push(bestMatch);
     } else {
-      // 未匹配则保留原名
       matched.push(name);
     }
   }
@@ -239,4 +225,23 @@ function levenshtein(a, b) {
       matrix[i][j] = Math.min(
         matrix[i-1][j] + 1,
         matrix[i][j-1] + 1,
-        matrix[i-1][j-
+        matrix[i-1][j-1] + cost
+      );
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+// ============================================================
+// 按基准顺序排序
+// ============================================================
+function sortByBaseOrder(stores, baseStores) {
+  if (!baseStores.length) return stores;
+  const orderMap = {};
+  baseStores.forEach((name, idx) => { orderMap[name] = idx; });
+  return stores.sort((a, b) => {
+    const idxA = orderMap[a] !== undefined ? orderMap[a] : 9999;
+    const idxB = orderMap[b] !== undefined ? orderMap[b] : 9999;
+    return idxA - idxB;
+  });
+}
