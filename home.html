@@ -687,14 +687,16 @@
     // 调用 OCR API
     // ============================================================
     async function callOCR(base64Image) {
+      // 去除 base64 前缀
+      const pureBase64 = base64Image.split(',')[1] || base64Image;
       const route = Auth.getCurrentRoute();
-      showParsingProgress(() => {}); // 显示进度
+      showParsingProgress(() => {});
 
       try {
         const response = await fetch('/api/ocr', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64Image, route: route })
+          body: JSON.stringify({ image: pureBase64, route: route })
         });
         const result = await response.json();
         if (result.success && result.data) {
@@ -704,7 +706,7 @@
             showToast('⚠️ ' + warning, 'warning');
           }
         } else {
-          showToast('❌ 识别失败，请手动输入', 'error');
+          showToast('❌ ' + (result.error || '识别失败，请手动输入'), 'error');
         }
       } catch (e) {
         showToast('❌ 网络错误，请重试', 'error');
