@@ -350,3 +350,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const loginPages = ['index.html', 'login.html', ''];
   if (!loginPages.includes(currentPage)) Auth.checkAuth();
 });
+
+// ============================================================
+// 确保 Auth 全局可用（修复黑屏关键）
+// ============================================================
+window.Auth = Auth;
+
+console.log('✅ auth.js 已加载，Auth 对象已暴露');
