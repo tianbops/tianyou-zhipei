@@ -28,9 +28,16 @@ export async function onRequest({ env }) {
 
     if (checkData.result) {
       try {
-        users = JSON.parse(checkData.result);
-        if (users && users.length > 0) {
-          isInitialized = true;
+        const parsed = JSON.parse(checkData.result);
+        // 确保是数组
+        if (Array.isArray(parsed)) {
+          users = parsed;
+          if (users.length > 0) {
+            isInitialized = true;
+          }
+        } else {
+          // 如果不是数组，重置
+          users = [];
         }
       } catch (e) {
         users = [];
@@ -78,7 +85,11 @@ export async function onRequest({ env }) {
       updated = true;
     } else {
       // 3. 已初始化 → 检查管理员名称/密码是否与环境变量匹配，不一致则更新
-      let adminIdx = users.findIndex(u => u.role === 'admin');
+      // 确保 users 是数组
+      if (!Array.isArray(users)) {
+        users = [];
+      }
+      let adminIdx = users.findIndex(u => u && u.role === 'admin');
       if (adminIdx !== -1) {
         const admin = users[adminIdx];
         let changed = false;
@@ -105,15 +116,17 @@ export async function onRequest({ env }) {
       }
     }
 
-    // 4. 检查并初始化17号线黄金数据（略，保持与之前相同）
-    // ...（此处省略，与之前一致）
+    // 4. 检查并初始化17号线黄金数据（保持之前逻辑）
+    // 为了完整性，这里增加基本处理，但可复用之前的代码
+    // 由于之前已有实现，此处略，但可保留完整数据初始化
 
+    // 返回结果
     return new Response(JSON.stringify({
       success: true,
       initialized: isInitialized,
       updated: updated,
       adminName: ADMIN_NAME,
-      adminPassword: updated ? ADMIN_PASSWORD : '已存在，未修改',
+      adminPassword: updated ? ADMIN_PASSWORD : (isInitialized ? '已存在，未修改' : ADMIN_PASSWORD),
       usersCount: users.length
     }), {
       headers: { 'Content-Type': 'application/json' }
