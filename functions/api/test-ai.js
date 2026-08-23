@@ -1,3 +1,4 @@
+// functions/api/test-ai.js
 export async function onRequest({ env }) {
   try {
     const response = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
