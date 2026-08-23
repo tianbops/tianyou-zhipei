@@ -6,7 +6,7 @@
   <title>管理中心</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* 所有样式不变，为节省篇幅略，但实际使用时请保留全部样式 */
+    /* 完整样式（为确保手机显示，保留所有样式） */
     .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
     .admin-card { background: #1C2530; border-radius: 16px; padding: 20px 16px; text-align: center; cursor: pointer; transition: transform 0.15s; border: none; color: #FFFFFF; font-family: inherit; position: relative; }
     .admin-card:active { transform: scale(0.96); }
@@ -69,18 +69,13 @@
     .status-toggle .status-option { flex: 1; padding: 12px 0; text-align: center; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.25s ease; color: #7F8B98; background: transparent; border: none; font-family: inherit; }
     .status-toggle .status-option.active { background: #2457A6; color: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(36,87,166,0.3); }
     .status-toggle .status-option:active { transform: scale(0.96); }
-    /* 错误信息浮层 */
     #error-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #E74C3C; color: #fff; padding: 12px 20px; border-radius: 8px; z-index: 9999; max-width: 90%; text-align: center; display: none; }
     #error-box.show { display: block; }
-    /* 加载状态提示 */
     #load-status { text-align: center; padding: 10px; color: #7F8B98; font-size: 14px; }
   </style>
 </head>
 <body>
-  <!-- 错误显示层 -->
   <div id="error-box"></div>
-
-  <!-- 加载状态 -->
   <div id="load-status">⏳ 管理中心加载中...</div>
 
   <div class="page-container">
@@ -90,7 +85,6 @@
       <div style="width:40px;"></div>
     </header>
 
-    <!-- 统计卡片 -->
     <section class="card" style="margin-bottom:16px;">
       <div style="display:flex; justify-content:space-around; text-align:center;">
         <div><div style="font-size:24px; font-weight:bold; color:#2457A6;" id="statUsers">0</div><div style="color:#7F8B98; font-size:12px;">用户</div></div>
@@ -100,76 +94,98 @@
       </div>
     </section>
 
-    <!-- 功能卡片 -->
     <div class="admin-grid">
-      <button class="admin-card" onclick="openUserManagement()">
-        <div class="icon">👤</div><div class="title">用户管理</div><div class="desc">添加/编辑/删除</div><div class="badge" id="userBadge">0</div>
-      </button>
-      <button class="admin-card" onclick="openVehicleManagement()">
-        <div class="icon">🚚</div><div class="title">车辆管理</div><div class="desc">启用/停用/配置</div><div class="badge" id="vehicleBadge">0</div>
-      </button>
-      <button class="admin-card" onclick="openRouteSelectDialog()">
-        <div class="icon">🏪</div><div class="title">原始数据</div><div class="desc">客户数据维护</div>
-      </button>
-      <button class="admin-card" onclick="openOCRManagement()">
-        <div class="icon">🔍</div><div class="title">OCR优化</div><div class="desc">错误反馈学习</div><div class="badge" id="ocrBadge">0</div>
-      </button>
-      <button class="admin-card" onclick="openBackupManagement()">
-        <div class="icon">💾</div><div class="title">数据备份</div><div class="desc">导出/导入</div>
-      </button>
-      <button class="admin-card" onclick="openLogManagement()">
-        <div class="icon">📝</div><div class="title">修改日志</div><div class="desc">操作记录</div><div class="badge" id="logBadge">0</div>
-      </button>
-      <button class="admin-card full-width" onclick="logout()" style="background:#2C1A1A;">
-        <div class="icon">🚪</div><div class="title">退出登录</div><div class="desc">返回登录页面</div>
-      </button>
+      <button class="admin-card" onclick="openUserManagement()"><div class="icon">👤</div><div class="title">用户管理</div><div class="desc">添加/编辑/删除</div><div class="badge" id="userBadge">0</div></button>
+      <button class="admin-card" onclick="openVehicleManagement()"><div class="icon">🚚</div><div class="title">车辆管理</div><div class="desc">启用/停用/配置</div><div class="badge" id="vehicleBadge">0</div></button>
+      <button class="admin-card" onclick="openRouteSelectDialog()"><div class="icon">🏪</div><div class="title">原始数据</div><div class="desc">客户数据维护</div></button>
+      <button class="admin-card" onclick="openOCRManagement()"><div class="icon">🔍</div><div class="title">OCR优化</div><div class="desc">错误反馈学习</div><div class="badge" id="ocrBadge">0</div></button>
+      <button class="admin-card" onclick="openBackupManagement()"><div class="icon">💾</div><div class="title">数据备份</div><div class="desc">导出/导入</div></button>
+      <button class="admin-card" onclick="openLogManagement()"><div class="icon">📝</div><div class="title">修改日志</div><div class="desc">操作记录</div><div class="badge" id="logBadge">0</div></button>
+      <button class="admin-card full-width" onclick="logout()" style="background:#2C1A1A;"><div class="icon">🚪</div><div class="title">退出登录</div><div class="desc">返回登录页面</div></button>
     </div>
   </div>
 
-  <!-- 所有弹窗（完整结构，与之前相同，此处略） -->
-  <!-- 由于篇幅，省略弹窗HTML，但实际使用时必须保留所有弹窗元素 -->
-  <!-- 为保持完整，以下为弹窗占位，实际部署时应包含全部弹窗 -->
+  <!-- ===== 所有弹窗 ===== -->
+  <!-- 选择线路 -->
+  <div class="admin-dialog" id="routeSelectDialog">
+    <div class="admin-dialog-box"><h3>📋 输入要维护的线路</h3><div style="color:#7F8B98;font-size:14px;text-align:center;margin-bottom:16px;">请输入线路编号，自动显示为 XX号线</div><div class="input-box"><input id="routeSelectInput" type="number" placeholder="请输入线路编号 (如 17)" min="1" step="1"><div class="input-hint">💡 输入数字，自动显示为 XX号线</div></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('routeSelectDialog')">取消</button><button class="btn-primary" onclick="confirmRouteSelect()">确认</button></div></div>
+  </div>
 
-  <!-- 请在此处包含所有弹窗的HTML结构，与之前提供的完整版本一致 -->
-  <!-- 为节省篇幅，此处使用注释说明，但用户必须复制完整弹窗代码 -->
-  <!-- 用户请将之前提供的完整 admin.html 中的弹窗部分复制到这里 -->
+  <!-- 用户管理 -->
+  <div class="admin-dialog" id="userDialog">
+    <div class="admin-dialog-box"><h3>👤 用户管理</h3><div class="admin-search"><input id="userSearch" placeholder="搜索用户..." oninput="filterUsers()"><button onclick="showAddUserForm()">+ 添加</button></div><div id="userList"></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('userDialog')">关闭</button></div></div>
+  </div>
+
+  <!-- 添加用户 -->
+  <div class="admin-dialog" id="userFormDialog">
+    <div class="admin-dialog-box"><h3 id="userFormTitle">添加用户</h3><div class="input-box"><input id="userFormName" placeholder="用户名称 (可选)"></div><div class="input-box"><input id="userFormRoute" type="number" placeholder="请输入线路编号 (如 17)" min="1" step="1"></div><select id="userFormRole"><option value="driver">司机</option><option value="delivery">配送</option></select><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('userFormDialog')">取消</button><button class="btn-primary" onclick="saveUser()">保存</button></div></div>
+  </div>
+
+  <!-- 编辑普通用户 -->
+  <div class="admin-dialog" id="userEditDialog">
+    <div class="admin-dialog-box"><h3 id="userEditTitle">编辑用户</h3><div class="input-box"><input id="userEditName" placeholder="用户名称"></div><div class="input-box"><input id="userEditRoute" type="number" placeholder="请输入线路编号 (如 17)" min="1" step="1"></div><select id="userEditRole"><option value="driver">司机</option><option value="delivery">配送</option></select><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('userEditDialog')">取消</button><button class="btn-primary" onclick="saveUserEdit()">保存</button></div></div>
+  </div>
+
+  <!-- 编辑管理员 -->
+  <div class="admin-dialog" id="adminEditDialog">
+    <div class="admin-dialog-box"><h3 id="adminEditTitle">修改管理员信息</h3><div class="input-box"><input id="adminEditName" placeholder="修改管理员名称"></div><div class="admin-password-box"><input id="adminEditPassword" type="password" placeholder="修改管理员密码"><button type="button" class="admin-eye-btn" onclick="toggleAdminEditPassword()">👁</button></div><div class="admin-password-box"><input id="adminEditUnifiedPassword" type="password" placeholder="修改企业统一密码"><button type="button" class="admin-eye-btn" onclick="toggleAdminEditUnifiedPassword()">👁</button></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('adminEditDialog')">取消</button><button class="btn-primary" onclick="saveAdminEdit()">保存</button></div></div>
+  </div>
+
+  <!-- 车辆管理 -->
+  <div class="admin-dialog" id="vehicleDialog">
+    <div class="admin-dialog-box"><h3>🚚 车辆管理</h3><div class="admin-search"><input id="vehicleSearch" placeholder="搜索车辆..." oninput="filterVehicles()"><button onclick="showAddVehicleForm()">+ 添加</button></div><div id="vehicleList"></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('vehicleDialog')">关闭</button></div></div>
+  </div>
+
+  <!-- 添加车辆 -->
+  <div class="admin-dialog" id="vehicleFormDialog">
+    <div class="admin-dialog-box"><h3 id="vehicleFormTitle">添加车辆</h3><div class="input-box"><input id="vehicleFormPlate" placeholder="车牌号 (如 渝DK7692)"></div><div class="input-box"><input id="vehicleFormRoute" type="number" placeholder="请输入线路编号 (如 17)" min="1" step="1"></div><div class="status-toggle"><button class="status-option" id="vehicleStatusInactive" onclick="setVehicleStatus('inactive')">停用</button><button class="status-option active" id="vehicleStatusActive" onclick="setVehicleStatus('active')">启用</button></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('vehicleFormDialog')">取消</button><button class="btn-primary" onclick="saveVehicle()">保存</button></div></div>
+  </div>
+
+  <!-- 编辑车辆 -->
+  <div class="admin-dialog" id="vehicleEditDialog">
+    <div class="admin-dialog-box"><h3 id="vehicleEditTitle">编辑车辆</h3><div class="input-box"><input id="vehicleEditPlate" placeholder="车牌号 (如 渝DK7692)"></div><div class="status-toggle"><button class="status-option" id="vehicleEditStatusInactive" onclick="setVehicleEditStatus('inactive')">停用</button><button class="status-option active" id="vehicleEditStatusActive" onclick="setVehicleEditStatus('active')">启用</button></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('vehicleEditDialog')">取消</button><button class="btn-primary" onclick="saveVehicleEdit()">保存</button></div></div>
+  </div>
+
+  <!-- OCR -->
+  <div class="admin-dialog" id="ocrDialog">
+    <div class="admin-dialog-box"><h3>🔍 OCR优化</h3><div class="admin-tabs"><button class="active" onclick="switchOCRtab('pending')">待处理 <span id="ocrPendingCount">0</span></button><button onclick="switchOCRtab('resolved')">已解决 <span id="ocrResolvedCount">0</span></button></div><div id="ocrList"></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('ocrDialog')">关闭</button><button class="btn-primary" onclick="exportOCRData()">导出反馈</button></div></div>
+  </div>
+  <div class="admin-dialog" id="ocrDetailDialog">
+    <div class="admin-dialog-box"><h3>📋 反馈详情</h3><div id="ocrDetailContent"></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('ocrDetailDialog')">关闭</button><button class="btn-primary" onclick="resolveOCR()">标记已解决</button></div></div>
+  </div>
+
+  <!-- 备份 -->
+  <div class="admin-dialog" id="backupDialog">
+    <div class="admin-dialog-box"><h3>💾 数据备份</h3><div id="backupList"></div><div class="admin-dialog-btn" style="flex-wrap:wrap;"><button class="btn-primary" onclick="createBackup()" style="flex:1;">创建备份</button><button class="btn-secondary" onclick="exportAllData()" style="flex:1;">导出数据</button><button class="btn-secondary" onclick="document.getElementById('importFile').click()" style="flex:1;">导入数据</button><input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)"><button class="btn-secondary" onclick="closeDialog('backupDialog')" style="flex:1;">关闭</button></div></div>
+  </div>
+
+  <!-- 日志 -->
+  <div class="admin-dialog" id="logDialog">
+    <div class="admin-dialog-box"><h3>📝 修改日志</h3><div class="admin-search"><input id="logSearch" placeholder="搜索日志..." oninput="filterLogs()"><button onclick="clearLogs()">清空</button></div><div id="logList"></div><div class="admin-dialog-btn"><button class="btn-secondary" onclick="closeDialog('logDialog')">关闭</button><button class="btn-primary" onclick="exportLogs()">导出日志</button></div></div>
+  </div>
 
   <div class="toast" id="toast"></div>
 
   <script src="js/auth.js"></script>
   <script>
-    // 版本号，强制刷新缓存
-    const VERSION = 'v2.0.8';
-    console.log('✅ admin.html 版本:', VERSION);
-
-    // 更新加载状态
-    document.getElementById('load-status').textContent = '✅ 脚本加载中...';
-
     // ============================================================
     // 全局错误捕获
     // ============================================================
     window.onerror = function(msg, url, line, col, error) {
       console.error('全局错误:', msg, error);
       const box = document.getElementById('error-box');
-      box.textContent = '管理中心错误：' + msg + ' (请刷新或联系管理员)';
-      box.classList.add('show');
+      if (box) { box.textContent = '管理中心错误：' + msg + ' (请刷新)'; box.classList.add('show'); }
       document.getElementById('load-status').textContent = '❌ 加载失败: ' + msg;
       return true;
     };
 
-    // ============================================================
-    // 所有逻辑包裹
-    // ============================================================
     (function() {
       try {
         console.log('🚀 admin.html 主脚本开始执行');
-
-        if (typeof Auth === 'undefined') {
-          throw new Error('Auth 未定义，请检查 auth.js 是否加载');
-        }
+        if (typeof Auth === 'undefined') throw new Error('Auth 未定义，请检查 auth.js');
         console.log('✅ Auth 已加载');
 
-        // --- 核心 DB 对象 ---
+        // --- DB 对象 ---
         const DB = {
           get(key, defaultVal) {
             try { const data = localStorage.getItem(`admin_${key}`); return data ? JSON.parse(data) : defaultVal; } catch { return defaultVal; }
@@ -177,9 +193,7 @@
           set(key, val) {
             localStorage.setItem(`admin_${key}`, JSON.stringify(val));
             updateStats();
-            if (key === 'users') {
-              syncUsersToUpstash(val);
-            }
+            if (key === 'users') syncUsersToUpstash(val);
           },
           addLog(action, detail) {
             const logs = this.get('logs', []);
@@ -206,19 +220,13 @@
           return user !== null;
         }
 
-        function openDialog(id) { 
-          const el = document.getElementById(id);
-          if (el) el.classList.add('active'); 
-        }
-        function closeDialog(id) { 
-          const el = document.getElementById(id);
-          if (el) el.classList.remove('active'); 
-        }
-        function showToast(msg, type = 'success') {
+        function openDialog(id) { const el = document.getElementById(id); if (el) el.classList.add('active'); }
+        function closeDialog(id) { const el = document.getElementById(id); if (el) el.classList.remove('active'); }
+        function showToast(msg, type) {
           const toast = document.getElementById('toast');
           if (!toast) return;
           toast.textContent = msg;
-          toast.className = 'toast show ' + type;
+          toast.className = 'toast show ' + (type || 'success');
           setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
@@ -227,23 +235,9 @@
           const vehicles = DB.get('vehicles', []);
           const logs = DB.get('logs', []);
           const stores = JSON.parse(localStorage.getItem('base_data') || '[]');
-          const statUsers = document.getElementById('statUsers');
-          const statVehicles = document.getElementById('statVehicles');
-          const statStores = document.getElementById('statStores');
-          const statLogs = document.getElementById('statLogs');
-          const userBadge = document.getElementById('userBadge');
-          const vehicleBadge = document.getElementById('vehicleBadge');
-          const ocrBadge = document.getElementById('ocrBadge');
-          const logBadge = document.getElementById('logBadge');
-          if (statUsers) statUsers.textContent = users.length;
-          if (statVehicles) statVehicles.textContent = vehicles.filter(v => v.status === 'active').length;
-          if (statStores) statStores.textContent = stores.length;
-          if (statLogs) statLogs.textContent = logs.length;
-          if (userBadge) userBadge.textContent = users.length;
-          if (vehicleBadge) vehicleBadge.textContent = vehicles.filter(v => v.status === 'active').length;
-          const ocr = DB.get('ocr', []);
-          if (ocrBadge) ocrBadge.textContent = ocr.filter(o => o.status === 'pending').length;
-          if (logBadge) logBadge.textContent = logs.length;
+          const ids = ['statUsers','statVehicles','statStores','statLogs','userBadge','vehicleBadge','ocrBadge','logBadge'];
+          const vals = [users.length, vehicles.filter(v=>v.status==='active').length, stores.length, logs.length, users.length, vehicles.filter(v=>v.status==='active').length, DB.get('ocr',[]).filter(o=>o.status==='pending').length, logs.length];
+          ids.forEach((id,i) => { const el = document.getElementById(id); if (el) el.textContent = vals[i]; });
         }
 
         async function initAdmin() {
@@ -265,63 +259,47 @@
         let currentUserEditId = null;
         async function renderUsers(filter = '') {
           let users = await Auth.getUsers();
-          users.sort((a, b) => { if (a.role === 'admin' && b.role !== 'admin') return -1; if (a.role !== 'admin' && b.role === 'admin') return 1; return a.id - b.id; });
+          users.sort((a,b) => { if (a.role==='admin' && b.role!=='admin') return -1; if (a.role!=='admin' && b.role==='admin') return 1; return a.id - b.id; });
           if (filter) users = users.filter(u => u.name.includes(filter) || u.route.includes(filter) || u.role.includes(filter));
           const container = document.getElementById('userList');
           if (!container) return;
           if (!users.length) { container.innerHTML = '<div class="admin-empty">暂无用户</div>'; return; }
-          const roleMap = { admin: '管理员', driver: '司机', delivery: '配送' };
-          const roleClass = { admin: 'admin', driver: 'driver', delivery: 'delivery' };
+          const roleMap = { admin:'管理员', driver:'司机', delivery:'配送' };
+          const roleClass = { admin:'admin', driver:'driver', delivery:'delivery' };
           container.innerHTML = users.map(u => {
             const isAdmin = u.role === 'admin';
             const deleteBtn = isAdmin ? '' : `<button class="del-btn" onclick="deleteUser(${u.id})">删除</button>`;
-            return `<div class="admin-list-item"><div class="info"><div class="name">${u.name || '(未命名)'}</div><div class="sub">${u.route} · <span class="role-badge ${roleClass[u.role] || 'driver'}">${roleMap[u.role] || '司机'}</span></div></div><div class="actions"><button class="edit-btn" onclick="editUser(${u.id})">编辑</button>${deleteBtn}</div></div>`;
+            return `<div class="admin-list-item"><div class="info"><div class="name">${u.name||'(未命名)'}</div><div class="sub">${u.route} · <span class="role-badge ${roleClass[u.role]||'driver'}">${roleMap[u.role]||'司机'}</span></div></div><div class="actions"><button class="edit-btn" onclick="editUser(${u.id})">编辑</button>${deleteBtn}</div></div>`;
           }).join('');
         }
-
         function filterUsers() { renderUsers(document.getElementById('userSearch')?.value?.trim() || ''); }
-
         function showAddUserForm() {
           currentUserEditId = null;
-          const title = document.getElementById('userFormTitle');
-          if (title) title.textContent = '添加用户';
-          const name = document.getElementById('userFormName');
-          const route = document.getElementById('userFormRoute');
-          const role = document.getElementById('userFormRole');
-          if (name) name.value = '';
-          if (route) route.value = '';
-          if (role) role.value = 'driver';
+          const title = document.getElementById('userFormTitle'); if (title) title.textContent = '添加用户';
+          const name = document.getElementById('userFormName'); if (name) name.value = '';
+          const route = document.getElementById('userFormRoute'); if (route) route.value = '';
+          const role = document.getElementById('userFormRole'); if (role) role.value = 'driver';
           openDialog('userFormDialog');
         }
-
         function editUser(id) {
           const users = DB.get('users', []);
           const user = users.find(u => u.id === id);
           if (!user) return;
           currentUserEditId = id;
           if (user.role === 'admin') {
-            const title = document.getElementById('adminEditTitle');
-            if (title) title.textContent = '修改管理员信息';
-            const name = document.getElementById('adminEditName');
-            const pwd = document.getElementById('adminEditPassword');
-            const unified = document.getElementById('adminEditUnifiedPassword');
-            if (name) name.value = user.name || '';
-            if (pwd) pwd.value = '';
-            if (unified) unified.value = '';
+            const title = document.getElementById('adminEditTitle'); if (title) title.textContent = '修改管理员信息';
+            const name = document.getElementById('adminEditName'); if (name) name.value = user.name || '';
+            const pwd = document.getElementById('adminEditPassword'); if (pwd) pwd.value = '';
+            const unified = document.getElementById('adminEditUnifiedPassword'); if (unified) unified.value = '';
             openDialog('adminEditDialog');
           } else {
-            const title = document.getElementById('userEditTitle');
-            if (title) title.textContent = '编辑用户';
-            const name = document.getElementById('userEditName');
-            const route = document.getElementById('userEditRoute');
-            const role = document.getElementById('userEditRole');
-            if (name) name.value = user.name || '';
-            if (route) route.value = user.route.replace('号线', '');
-            if (role) role.value = user.role || 'driver';
+            const title = document.getElementById('userEditTitle'); if (title) title.textContent = '编辑用户';
+            const name = document.getElementById('userEditName'); if (name) name.value = user.name || '';
+            const route = document.getElementById('userEditRoute'); if (route) route.value = user.route.replace('号线','');
+            const role = document.getElementById('userEditRole'); if (role) role.value = user.role || 'driver';
             openDialog('userEditDialog');
           }
         }
-
         async function saveUser() {
           const nameEl = document.getElementById('userFormName');
           const routeEl = document.getElementById('userFormRoute');
@@ -341,7 +319,6 @@
           if (newUser) { DB.addLog('用户添加', `添加用户: ${route} (${role})`); showToast('用户已添加'); closeDialog('userFormDialog'); renderUsers(); }
           else showToast('用户添加失败', 'error');
         }
-
         async function saveUserEdit() {
           const nameEl = document.getElementById('userEditName');
           const routeEl = document.getElementById('userEditRoute');
@@ -367,7 +344,6 @@
           closeDialog('userEditDialog');
           renderUsers();
         }
-
         async function saveAdminEdit() {
           const nameEl = document.getElementById('adminEditName');
           const pwdEl = document.getElementById('adminEditPassword');
@@ -403,7 +379,6 @@
           closeDialog('adminEditDialog');
           renderUsers();
         }
-
         async function deleteUser(id) {
           const users = await Auth.getUsers();
           const user = users.find(u => u.id === id);
@@ -415,42 +390,27 @@
           showToast('用户已删除', 'warning');
           renderUsers();
         }
-
-        function toggleAdminEditPassword() {
-          const pwd = document.getElementById('adminEditPassword');
-          if (pwd) pwd.type = pwd.type === 'password' ? 'text' : 'password';
-        }
-        function toggleAdminEditUnifiedPassword() {
-          const pwd = document.getElementById('adminEditUnifiedPassword');
-          if (pwd) pwd.type = pwd.type === 'password' ? 'text' : 'password';
-        }
+        function toggleAdminEditPassword() { const pwd = document.getElementById('adminEditPassword'); if (pwd) pwd.type = pwd.type==='password'?'text':'password'; }
+        function toggleAdminEditUnifiedPassword() { const pwd = document.getElementById('adminEditUnifiedPassword'); if (pwd) pwd.type = pwd.type==='password'?'text':'password'; }
 
         // --- 车辆管理 ---
-        let currentVehicleEditId = null;
-        let currentVehicleStatus = 'active';
-
+        let currentVehicleEditId = null, currentVehicleStatus = 'active';
         function openVehicleManagement() { openDialog('vehicleDialog'); renderVehicles(); }
-        function renderVehicles(filter = '') {
+        function renderVehicles(filter='') {
           let vehicles = DB.get('vehicles', []);
           if (filter) vehicles = vehicles.filter(v => v.plate.includes(filter) || v.route.includes(filter));
           const container = document.getElementById('vehicleList');
           if (!container) return;
           if (!vehicles.length) { container.innerHTML = '<div class="admin-empty">暂无车辆</div>'; return; }
-          container.innerHTML = vehicles.map(v => `
-            <div class="admin-list-item">
-              <div class="info"><div class="name">${v.plate}</div><div class="sub">${v.route} · <span class="status-badge ${v.status === 'active' ? 'active' : 'inactive'}">${v.status === 'active' ? '启用' : '停用'}</span></div></div>
-              <div class="actions"><button class="edit-btn" onclick="editVehicle(${v.id})">编辑</button><button class="del-btn" onclick="deleteVehicle(${v.id})">删除</button></div>
-            </div>
-          `).join('');
+          container.innerHTML = vehicles.map(v => `<div class="admin-list-item"><div class="info"><div class="name">${v.plate}</div><div class="sub">${v.route} · <span class="status-badge ${v.status==='active'?'active':'inactive'}">${v.status==='active'?'启用':'停用'}</span></div></div><div class="actions"><button class="edit-btn" onclick="editVehicle(${v.id})">编辑</button><button class="del-btn" onclick="deleteVehicle(${v.id})">删除</button></div></div>`).join('');
         }
         function filterVehicles() { renderVehicles(document.getElementById('vehicleSearch')?.value?.trim() || ''); }
-
         function setVehicleStatus(status) {
           currentVehicleStatus = status;
           const activeBtn = document.getElementById('vehicleStatusActive');
           const inactiveBtn = document.getElementById('vehicleStatusInactive');
           if (!activeBtn || !inactiveBtn) return;
-          if (status === 'active') { activeBtn.classList.add('active'); inactiveBtn.classList.remove('active'); }
+          if (status==='active') { activeBtn.classList.add('active'); inactiveBtn.classList.remove('active'); }
           else { inactiveBtn.classList.add('active'); activeBtn.classList.remove('active'); }
         }
         function setVehicleEditStatus(status) {
@@ -458,23 +418,16 @@
           const activeBtn = document.getElementById('vehicleEditStatusActive');
           const inactiveBtn = document.getElementById('vehicleEditStatusInactive');
           if (!activeBtn || !inactiveBtn) return;
-          if (status === 'active') { activeBtn.classList.add('active'); inactiveBtn.classList.remove('active'); }
+          if (status==='active') { activeBtn.classList.add('active'); inactiveBtn.classList.remove('active'); }
           else { inactiveBtn.classList.add('active'); activeBtn.classList.remove('active'); }
         }
-
         function showAddVehicleForm() {
-          currentVehicleEditId = null;
-          currentVehicleStatus = 'active';
-          const title = document.getElementById('vehicleFormTitle');
-          if (title) title.textContent = '添加车辆';
-          const plate = document.getElementById('vehicleFormPlate');
-          const route = document.getElementById('vehicleFormRoute');
-          if (plate) plate.value = '';
-          if (route) route.value = '';
-          const activeBtn = document.getElementById('vehicleStatusActive');
-          const inactiveBtn = document.getElementById('vehicleStatusInactive');
-          if (activeBtn) activeBtn.classList.add('active');
-          if (inactiveBtn) inactiveBtn.classList.remove('active');
+          currentVehicleEditId = null; currentVehicleStatus = 'active';
+          const title = document.getElementById('vehicleFormTitle'); if (title) title.textContent = '添加车辆';
+          const plate = document.getElementById('vehicleFormPlate'); if (plate) plate.value = '';
+          const route = document.getElementById('vehicleFormRoute'); if (route) route.value = '';
+          const activeBtn = document.getElementById('vehicleStatusActive'); if (activeBtn) activeBtn.classList.add('active');
+          const inactiveBtn = document.getElementById('vehicleStatusInactive'); if (inactiveBtn) inactiveBtn.classList.remove('active');
           openDialog('vehicleFormDialog');
         }
         async function saveVehicle() {
@@ -493,7 +446,7 @@
           let vehicles = DB.get('vehicles', []);
           if (vehicles.some(v => v.plate === plate)) { showToast('该车牌已存在', 'error'); return; }
           const maxId = vehicles.reduce((max, v) => Math.max(max, v.id), 0);
-          vehicles.push({ id: maxId + 1, plate, route, status });
+          vehicles.push({ id: maxId+1, plate, route, status });
           DB.set('vehicles', vehicles);
           DB.addLog('车辆添加', `添加车辆: ${plate} (${route})`);
           showToast('车辆已添加');
@@ -504,15 +457,12 @@
           const vehicles = DB.get('vehicles', []);
           const v = vehicles.find(v => v.id === id);
           if (!v) return;
-          currentVehicleEditId = id;
-          currentVehicleStatus = v.status || 'active';
-          const title = document.getElementById('vehicleEditTitle');
-          if (title) title.textContent = '编辑车辆';
-          const plate = document.getElementById('vehicleEditPlate');
-          if (plate) plate.value = v.plate;
+          currentVehicleEditId = id; currentVehicleStatus = v.status || 'active';
+          const title = document.getElementById('vehicleEditTitle'); if (title) title.textContent = '编辑车辆';
+          const plate = document.getElementById('vehicleEditPlate'); if (plate) plate.value = v.plate;
           const activeBtn = document.getElementById('vehicleEditStatusActive');
           const inactiveBtn = document.getElementById('vehicleEditStatusInactive');
-          if (v.status === 'active') { if (activeBtn) activeBtn.classList.add('active'); if (inactiveBtn) inactiveBtn.classList.remove('active'); }
+          if (v.status==='active') { if (activeBtn) activeBtn.classList.add('active'); if (inactiveBtn) inactiveBtn.classList.remove('active'); }
           else { if (inactiveBtn) inactiveBtn.classList.add('active'); if (activeBtn) activeBtn.classList.remove('active'); }
           openDialog('vehicleEditDialog');
         }
@@ -545,12 +495,12 @@
           renderVehicles();
         }
 
-        // --- OCR 管理 ---
+        // --- OCR ---
         let currentOCRId = null, ocrFilter = 'pending';
         function openOCRManagement() { openDialog('ocrDialog'); renderOCR(); }
         function switchOCRtab(tab) {
           ocrFilter = tab;
-          document.querySelectorAll('.admin-tabs button').forEach(btn => btn.classList.remove('active'));
+          document.querySelectorAll('.admin-tabs button').forEach(b => b.classList.remove('active'));
           event.target.classList.add('active');
           renderOCR();
         }
@@ -559,17 +509,12 @@
           let filtered = ocrs.filter(o => o.status === ocrFilter);
           const pendingEl = document.getElementById('ocrPendingCount');
           const resolvedEl = document.getElementById('ocrResolvedCount');
-          if (pendingEl) pendingEl.textContent = ocrs.filter(o => o.status === 'pending').length;
-          if (resolvedEl) resolvedEl.textContent = ocrs.filter(o => o.status === 'resolved').length;
+          if (pendingEl) pendingEl.textContent = ocrs.filter(o=>o.status==='pending').length;
+          if (resolvedEl) resolvedEl.textContent = ocrs.filter(o=>o.status==='resolved').length;
           const container = document.getElementById('ocrList');
           if (!container) return;
           if (!filtered.length) { container.innerHTML = '<div class="admin-empty">暂无反馈记录</div>'; return; }
-          container.innerHTML = filtered.map(o => `
-            <div class="admin-list-item" onclick="viewOCRDetail(${o.id})" style="cursor:pointer;">
-              <div class="info"><div class="name">${o.image}</div><div class="sub">${o.error} → ${o.correct}</div></div>
-              <div style="font-size:12px;color:#7F8B98;">${o.time}</div>
-            </div>
-          `).join('');
+          container.innerHTML = filtered.map(o => `<div class="admin-list-item" onclick="viewOCRDetail(${o.id})" style="cursor:pointer;"><div class="info"><div class="name">${o.image}</div><div class="sub">${o.error} → ${o.correct}</div></div><div style="font-size:12px;color:#7F8B98;">${o.time}</div></div>`).join('');
         }
         function viewOCRDetail(id) {
           const ocrs = DB.get('ocr', []);
@@ -578,15 +523,7 @@
           currentOCRId = id;
           const content = document.getElementById('ocrDetailContent');
           if (!content) return;
-          content.innerHTML = `
-            <div style="background:#05070A;padding:16px;border-radius:12px;margin-bottom:12px;">
-              <div><strong>图片：</strong>${ocr.image}</div>
-              <div><strong>错误识别：</strong><span style="color:#E74C3C;">${ocr.error}</span></div>
-              <div><strong>正确值：</strong><span style="color:#27AE60;">${ocr.correct}</span></div>
-              <div><strong>状态：</strong>${ocr.status === 'pending' ? '⏳ 待处理' : '✅ 已解决'}</div>
-              <div><strong>时间：</strong>${ocr.time}</div>
-            </div>
-          `;
+          content.innerHTML = `<div style="background:#05070A;padding:16px;border-radius:12px;margin-bottom:12px;"><div><strong>图片：</strong>${ocr.image}</div><div><strong>错误识别：</strong><span style="color:#E74C3C;">${ocr.error}</span></div><div><strong>正确值：</strong><span style="color:#27AE60;">${ocr.correct}</span></div><div><strong>状态：</strong>${ocr.status==='pending'?'⏳ 待处理':'✅ 已解决'}</div><div><strong>时间：</strong>${ocr.time}</div></div>`;
           openDialog('ocrDetailDialog');
         }
         function resolveOCR() {
@@ -598,33 +535,26 @@
         function exportOCRData() {
           const ocrs = DB.get('ocr', []);
           if (!ocrs.length) { showToast('暂无数据', 'warning'); return; }
-          const blob = new Blob([JSON.stringify(ocrs, null, 2)], { type: 'application/json' });
+          const blob = new Blob([JSON.stringify(ocrs,null,2)], {type:'application/json'});
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = url;
-          a.download = `ocr_feedback_${new Date().toISOString().split('T')[0]}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
+          a.href = url; a.download = `ocr_feedback_${new Date().toISOString().split('T')[0]}.json`;
+          a.click(); URL.revokeObjectURL(url);
           showToast('导出成功');
         }
 
-        // --- 备份管理 ---
+        // --- 备份 ---
         function openBackupManagement() { openDialog('backupDialog'); renderBackups(); }
         function renderBackups() {
           const backups = DB.get('backups', []);
           const container = document.getElementById('backupList');
           if (!container) return;
           if (!backups.length) { container.innerHTML = '<div class="admin-empty">暂无备份</div>'; return; }
-          container.innerHTML = backups.map(b => `
-            <div class="admin-list-item">
-              <div class="info"><div class="name">${b.name}</div><div class="sub">${b.time} · ${b.size}</div></div>
-              <div class="actions"><button class="edit-btn" onclick="restoreBackup(${b.id})">恢复</button><button class="del-btn" onclick="deleteBackup(${b.id})">删除</button></div>
-            </div>
-          `).join('');
+          container.innerHTML = backups.map(b => `<div class="admin-list-item"><div class="info"><div class="name">${b.name}</div><div class="sub">${b.time} · ${b.size}</div></div><div class="actions"><button class="edit-btn" onclick="restoreBackup(${b.id})">恢复</button><button class="del-btn" onclick="deleteBackup(${b.id})">删除</button></div></div>`).join('');
         }
         function createBackup() {
-          const data = { users: DB.get('users', []), vehicles: DB.get('vehicles', []), ocr: DB.get('ocr', []), stores: JSON.parse(localStorage.getItem('base_data') || '[]') };
-          const size = (JSON.stringify(data).length / 1024).toFixed(1) + 'KB';
+          const data = { users: DB.get('users',[]), vehicles: DB.get('vehicles',[]), ocr: DB.get('ocr',[]), stores: JSON.parse(localStorage.getItem('base_data')||'[]') };
+          const size = (JSON.stringify(data).length/1024).toFixed(1)+'KB';
           const backups = DB.get('backups', []);
           backups.unshift({ id: Date.now(), name: `备份_${new Date().toISOString().split('T')[0]}`, time: new Date().toLocaleString(), size, data });
           if (backups.length > 20) backups.length = 20;
@@ -655,14 +585,12 @@
           renderBackups();
         }
         function exportAllData() {
-          const data = { users: DB.get('users', []), vehicles: DB.get('vehicles', []), ocr: DB.get('ocr', []), stores: JSON.parse(localStorage.getItem('base_data') || '[]'), logs: DB.get('logs', []), exportTime: new Date().toISOString() };
-          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const data = { users: DB.get('users',[]), vehicles: DB.get('vehicles',[]), ocr: DB.get('ocr',[]), stores: JSON.parse(localStorage.getItem('base_data')||'[]'), logs: DB.get('logs',[]), exportTime: new Date().toISOString() };
+          const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = url;
-          a.download = `full_backup_${new Date().toISOString().split('T')[0]}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
+          a.href = url; a.download = `full_backup_${new Date().toISOString().split('T')[0]}.json`;
+          a.click(); URL.revokeObjectURL(url);
           showToast('数据导出成功');
         }
         function importData(event) {
@@ -681,46 +609,38 @@
               showToast('数据导入成功');
               updateStats();
               renderBackups();
-            } catch (err) { showToast('导入失败: ' + err.message, 'error'); }
+            } catch(err) { showToast('导入失败: '+err.message, 'error'); }
           };
           reader.readAsText(file);
           event.target.value = '';
         }
 
-        // --- 日志管理 ---
+        // --- 日志 ---
         function openLogManagement() { openDialog('logDialog'); renderLogs(); }
-        function renderLogs(filter = '') {
+        function renderLogs(filter='') {
           let logs = DB.get('logs', []);
           if (filter) logs = logs.filter(l => l.action.includes(filter) || l.detail.includes(filter) || l.user.includes(filter));
           const container = document.getElementById('logList');
           if (!container) return;
           if (!logs.length) { container.innerHTML = '<div class="admin-empty">暂无日志</div>'; return; }
-          container.innerHTML = logs.map(l => `
-            <div class="admin-list-item">
-              <div class="info"><div class="name">${l.action}</div><div class="sub">${l.detail} · ${l.user}</div></div>
-              <div style="font-size:12px;color:#7F8B98;">${l.time}</div>
-            </div>
-          `).join('');
+          container.innerHTML = logs.map(l => `<div class="admin-list-item"><div class="info"><div class="name">${l.action}</div><div class="sub">${l.detail} · ${l.user}</div></div><div style="font-size:12px;color:#7F8B98;">${l.time}</div></div>`).join('');
         }
         function filterLogs() { renderLogs(document.getElementById('logSearch')?.value?.trim() || ''); }
         function clearLogs() { if (!confirm('确定清空所有日志吗？')) return; DB.set('logs', []); showToast('日志已清空', 'warning'); renderLogs(); }
         function exportLogs() {
           const logs = DB.get('logs', []);
           if (!logs.length) { showToast('暂无日志', 'warning'); return; }
-          const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
+          const blob = new Blob([JSON.stringify(logs,null,2)], {type:'application/json'});
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = url;
-          a.download = `logs_${new Date().toISOString().split('T')[0]}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
+          a.href = url; a.download = `logs_${new Date().toISOString().split('T')[0]}.json`;
+          a.click(); URL.revokeObjectURL(url);
           showToast('日志导出成功');
         }
 
         // --- 原始数据 ---
         function openRouteSelectDialog() {
-          const input = document.getElementById('routeSelectInput');
-          if (input) input.value = '';
+          const input = document.getElementById('routeSelectInput'); if (input) input.value = '';
           openDialog('routeSelectDialog');
         }
         async function confirmRouteSelect() {
@@ -735,12 +655,10 @@
         }
 
         // --- 退出 ---
-        function logout() {
-          if (confirm('确定退出登录吗？')) Auth.logout();
-        }
+        function logout() { if (confirm('确定退出登录吗？')) Auth.logout(); }
 
         // ============================================================
-        // 显式暴露所有函数到全局（修复 openUserManagement is not defined）
+        // 显式暴露所有全局函数（关键修复）
         // ============================================================
         window.openUserManagement = openUserManagement;
         window.openVehicleManagement = openVehicleManagement;
@@ -784,17 +702,12 @@
         // --- 初始化 ---
         initAdmin();
 
-        // 更新加载状态
         document.getElementById('load-status').textContent = '✅ 管理中心已加载';
-
         console.log('✅ admin.html 所有函数已暴露到全局');
       } catch (err) {
         console.error('❌ 致命错误:', err);
         const box = document.getElementById('error-box');
-        if (box) {
-          box.textContent = '加载失败: ' + err.message;
-          box.classList.add('show');
-        }
+        if (box) { box.textContent = '加载失败: ' + err.message; box.classList.add('show'); }
         document.getElementById('load-status').textContent = '❌ 加载失败: ' + err.message;
       }
     })();
