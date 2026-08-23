@@ -1,3 +1,4 @@
+// functions/api/[route].js
 export async function onRequest(context) {
   const { request, params, env } = context;
   const route = params.route;
@@ -12,7 +13,6 @@ export async function onRequest(context) {
       headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
     });
     if (!resp.ok) {
-      // 返回空数据或默认数据
       return new Response(JSON.stringify({ route, stores: [] }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -31,7 +31,6 @@ export async function onRequest(context) {
   }
 
   if (method === 'PUT') {
-    // 保存线路数据（可选）
     const body = await request.json();
     const redisKey = `route:${route}`;
     await fetch(`${UPSTASH_URL}/set/${redisKey}`, {
