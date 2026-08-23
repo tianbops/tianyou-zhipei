@@ -4,11 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>智配One</title>
-  <!-- 引入图片压缩库 -->
   <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.min.js"></script>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* ===== Uber风格上传弹窗 ===== */
+    /* ===== Uber风格上传弹窗 (同前，保持不变) ===== */
     .upload-overlay {
       display: none;
       position: fixed;
@@ -473,18 +472,20 @@
     });
 
     // ============================================================
-    // 加载基准门店
+    // 加载基准门店（从 /api/routes 获取）
     // ============================================================
     async function loadRouteData(route) {
       try {
-        let data = Auth.getCachedRouteData(route);
-        if (!data) {
-          const response = await fetch(`/api/route/${encodeURIComponent(route)}`);
-          if (response.ok) data = await response.json();
+        const response = await fetch(`/api/routes?route=${encodeURIComponent(route)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.stores) {
+            baseStores = data.stores;
+            // 缓存到 localStorage 供离线使用
+            Auth.cacheRouteData(route, { route, stores: data.stores });
+          }
         }
-        if (data && data.stores) {
-          baseStores = data.stores;
-        }
+        // 加载今日运单
         const todayOrders = getTodayOrders();
         if (todayOrders && todayOrders.length > 0) {
           const count = todayOrders.length;
@@ -515,14 +516,33 @@
       } catch { return null; }
     }
 
+    // ============================================================
+    // 保存运单到云端（调用 /api/orders）
+    // ============================================================
+    async function saveOrdersToCloud(route, orders, totalWeight, vehicle) {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route, orders, totalWeight, vehicle })
+      });
+      if (!response.ok) throw new Error('保存失败');
+      return await response.json();
+    }
+
+    // ============================================================
+    // 保存今日运单（本地 + 云端）
+    // ============================================================
     function saveTodayOrders(orders) {
+      // 保存到本地（保持兼容）
       localStorage.setItem('today_orders', JSON.stringify(orders));
       saveToHistory(orders);
       Auth.saveCurrentUserData();
+      // 刷新首页数据
       loadRouteData(Auth.getCurrentRoute());
     }
 
     function saveToHistory(orders) {
+      // 已由云端保存，本地只做缓存
       const today = new Date().toISOString().split('T')[0];
       const route = Auth.getCurrentRoute();
       let history = JSON.parse(localStorage.getItem('delivery_history') || '[]');
@@ -658,15 +678,15 @@
     }
 
     // ============================================================
-    // 图片压缩（优化版）
+    // 图片压缩
     // ============================================================
     async function compressImage(file) {
       try {
         const options = {
-          maxSizeMB: 0.15,          // 更小体积
-          maxWidthOrHeight: 320,     // 更小尺寸
+          maxSizeMB: 0.15,
+          maxWidthOrHeight: 320,
           useWebWorker: true,
-          fileType: 'image/jpeg',    // 强制 JPEG
+          fileType: 'image/jpeg',
           initialQuality: 0.7
         };
         const compressedFile = await imageCompression(file, options);
@@ -676,7 +696,6 @@
           reader.readAsDataURL(compressedFile);
         });
       } catch (e) {
-        // 压缩失败，返回原始文件（但可能仍失败）
         return new Promise((resolve) => {
           const reader = new FileReader();
           reader.onload = (e) => resolve(e.target.result);
@@ -760,7 +779,6 @@
               callOCR(compressedBase64);
             });
           } else {
-            // 文本文件直接读取
             const reader = new FileReader();
             reader.onload = function(e) {
               const text = e.target.result;
@@ -839,7 +857,7 @@
     }
 
     // ============================================================
-    // 提交录入（云端保存）
+    // 提交录入（云端保存 + 本地缓存）
     // ============================================================
     function submitManualOrder() {
       const rawText = document.getElementById('manualOrderInput').value.trim();
@@ -871,24 +889,32 @@
         if (vehicleMatch) vehicle = vehicleMatch[1];
       }
 
-      fetch('/api/order/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route, orders, totalWeight, vehicle })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
+      // 转换为标准格式
+      const orderObjects = orders.map((name, idx) => ({
+        id: Date.now() + idx,
+        name: name,
+        weight: 0,
+        note: '',
+        status: '待配送'
+      }));
+
+      // 先更新本地
+      saveTodayOrders(orderObjects);
+      
+      // 同步到云端
+      saveOrdersToCloud(route, orders, totalWeight, vehicle)
+        .then(() => {
           Auth.addLog('运单录入', `录入 ${orders.length} 条运单`);
           toggleUpload();
+          // 跳转今日运单详情
           window.location.href = "pages/order_detail.html";
-        } else {
-          alert('❌ 保存失败，请重试');
-        }
-      })
-      .catch(err => {
-        alert('❌ 网络错误，请重试');
-      });
+        })
+        .catch(err => {
+          // 即使云端失败，本地已保存，仍然跳转
+          alert('⚠️ 云端保存失败，但数据已保存在本地');
+          toggleUpload();
+          window.location.href = "pages/order_detail.html";
+        });
     }
 
     // ============================================================
