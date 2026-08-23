@@ -2,12 +2,8 @@ name = "tianyou-zhipei"
 main = "functions/api/[route].js"
 compatibility_date = "2024-12-18"
 
-# 绑定 Cloudflare AI
 [[ai]]
 binding = "AI"
 
 [env.production]
-vars = { 
-  UPSTASH_REDIS_REST_URL = "https://your-upstash-url.upstash.io",
-  UPSTASH_REDIS_REST_TOKEN = "your-token"
-}
+vars = { UPSTASH_REDIS_REST_URL = "https://your-upstash-url.upstash.io", UPSTASH_REDIS_REST_TOKEN = "your-token" }
