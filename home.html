@@ -19,5 +19,42 @@
 <div class="upload-overlay" id="uploadOverlay"><div class="upload-sheet"><div style="width:36px;height:4px;background:rgba(255,255,255,.15);border-radius:4px;margin:0 auto 14px"></div><div style="text-align:center;font-size:18px;font-weight:600;margin-bottom:4px">📤 上传运单</div><div style="text-align:center;font-size:12px;color:#5A6A7A;margin-bottom:20px">从相册选取或上传文件</div><div class="upload-icons"><div class="upload-icon-btn" onclick="triggerUpload('album')"><span class="icon">🖼️</span><span class="icon-label">相册</span></div><div class="upload-icon-btn" onclick="triggerUpload('file')"><span class="icon">📄</span><span class="icon-label">文件</span></div></div><div class="divider-line"><hr><span>或手动输入</span><hr></div><div class="parse-status" id="parseStatus"><div style="display:flex;align-items:center;gap:10px"><span id="statusIcon">⏳</span><span id="statusText">正在解析...</span></div><div style="margin-top:8px;height:2px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden"><div id="progressBar" style="height:100%;background:#2457A6;width:0%"></div></div><div id="statusCount" style="font-size:12px;color:#5A6A7A;margin-top:4px"></div><div id="parsedTags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;max-height:60px;overflow-y:auto"></div></div><div class="input-area"><textarea id="manualOrderInput" rows="3" placeholder="输入门店名称，每行一个&#10;或粘贴运单列表"></textarea><span id="charCount" style="display:block;text-align:right;color:#3A4A5A;font-size:10px;margin-top:2px">0</span></div><div class="quick-actions"><button onclick="pasteFromClipboard()">📋 粘贴</button><button onclick="clearManualInput()">🗑️ 清空</button><button onclick="loadExampleData()">📝 示例</button><button onclick="parseManualInput()">🔍 解析</button></div><div class="sheet-footer"><button class="btn-cancel" onclick="toggleUpload()">取消</button><button class="btn-confirm" id="confirmBtn" onclick="submitManualOrder()">确认录入</button></div></div></div>
 </div>
 <script src="js/auth.js"></script><script src="js/home.js"></script>
+<script>
+(function(){
+  function read(key, fallback){try{const v=localStorage.getItem(key);return v?JSON.parse(v):fallback}catch(e){return fallback}}
+  function refresh(){
+    const route=localStorage.getItem('currentRoute')||'';
+    let orders=read('today_orders',[]);
+    const date=new Date();
+    const today=date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+    if(!Array.isArray(orders)) orders=[];
+    const savedDate=localStorage.getItem('today_order_date');
+    if(savedDate && savedDate!==today) orders=[];
+    if(!orders.length){
+      const history=read('delivery_history',[]);
+      const found=Array.isArray(history)?history.find(x=>x&&x.date===today&&(!route||x.route===route)):null;
+      if(found&&Array.isArray(found.orders)) orders=found.orders;
+    }
+    let weight=Number(String(localStorage.getItem('today_total_weight')||'').replace(/[^0-9.]/g,''))||0;
+    if(!weight){
+      const history=read('delivery_history',[]);
+      const found=Array.isArray(history)?history.find(x=>x&&x.date===today&&(!route||x.route===route)):null;
+      weight=Number(found?.totalWeight)||0;
+    }
+    if(!weight) weight=orders.reduce((s,x)=>s+(Number(x?.weight)||0),0);
+    const count=orders.length;
+    const vehicle=localStorage.getItem('today_vehicle')||'';
+    const set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
+    set('menuRoute',route||'未选择线路');
+    set('homeRoute',vehicle?'🚚 '+vehicle:'🚚 '+(route||''));
+    set('storeCount',count?count+'家门店':'无数据');
+    set('totalWeight',weight?Number(weight.toFixed(2))+' kg':'无数据');
+    const dot=document.getElementById('statusDot');if(dot)dot.style.background=count?'#27AE60':'#5A6A7A';
+  }
+  document.addEventListener('DOMContentLoaded',function(){refresh();setTimeout(refresh,300);});
+  window.addEventListener('pageshow',refresh);
+  window.addEventListener('storage',refresh);
+})();
+</script>
 </body>
 </html>
