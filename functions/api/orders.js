@@ -1,110 +1,127 @@
 // functions/api/orders.js
-// 运单保存 API（替代原来的 order/save.js）
+// 今日运单保存 API
 
 export async function onRequest(context) {
   const { request, env } = context;
 
   if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Method not allowed' }, 405);
   }
 
   try {
-    const { route, orders, totalWeight, vehicle, date } = await request.json();
-    if (!route || !orders || !Array.isArray(orders)) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    const body = await request.json();
+    const { route, orders, totalWeight, vehicle, date } = body;
+
+    if (!route || !Array.isArray(orders)) {
+      return json({ error: 'Missing required fields' }, 400);
     }
 
-    const today = date || new Date().toISOString().split('T')[0];
     const UPSTASH_URL = env.UPSTASH_REDIS_REST_URL;
     const UPSTASH_TOKEN = env.UPSTASH_REDIS_REST_TOKEN;
-
     if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-      return new Response(JSON.stringify({ error: 'Redis not configured' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return json({ error: 'Redis not configured' }, 500);
     }
 
-    // 1. 保存今日运单
-    const todayKey = `today_orders:${route}`;
+    const today = date || new Date().toISOString().slice(0, 10);
+    const normalizedOrders = orders
+      .map((item, index) => normalizeOrder(item, index))
+      .filter(item => item.name);
+
     const todayData = {
       date: today,
       route,
       vehicle: vehicle || '',
-      orders: orders.map((name, idx) => ({
-        id: Date.now() + idx,
-        name: typeof name === 'string' ? name : name.name || '',
-        weight: 0,
-        note: '',
-        status: '待配送'
-      })),
-      totalWeight: totalWeight || '0',
-      count: orders.length
+      orders: normalizedOrders,
+      totalWeight: normalizeWeight(totalWeight),
+      count: normalizedOrders.length,
+      updatedAt: new Date().toISOString()
     };
 
-    await fetch(`${UPSTASH_URL}/set/${todayKey}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${UPSTASH_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(JSON.stringify(todayData))
-    });
+    await redisSet(UPSTASH_URL, UPSTASH_TOKEN, `today_orders:${route}`, todayData);
 
-    // 2. 保存历史记录
     const historyKey = `history:${route}:${today}`;
-    const historyResp = await fetch(`${UPSTASH_URL}/get/${historyKey}`, {
-      headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
-    });
-    let historyData = [];
-    if (historyResp.ok) {
-      const existing = await historyResp.json();
-      if (existing.result) {
-        historyData = JSON.parse(existing.result);
-      }
-    }
+    const historyData = await redisGet(UPSTASH_URL, UPSTASH_TOKEN, historyKey);
+    let history = Array.isArray(historyData) ? historyData : [];
 
     const record = {
       date: today,
       route,
       vehicle: vehicle || '',
-      count: orders.length,
-      weight: totalWeight || '0',
-      orders: todayData.orders
+      count: normalizedOrders.length,
+      weight: normalizeWeight(totalWeight),
+      orders: normalizedOrders,
+      updatedAt: new Date().toISOString()
     };
 
-    const existingIndex = historyData.findIndex(item => item.date === today);
-    if (existingIndex >= 0) {
-      historyData[existingIndex] = record;
-    } else {
-      historyData.push(record);
-    }
-    // 只保留最近30天
-    if (historyData.length > 30) historyData = historyData.slice(-30);
+    const index = history.findIndex(item => item?.date === today);
+    if (index >= 0) history[index] = record;
+    else history.push(record);
 
-    await fetch(`${UPSTASH_URL}/set/${historyKey}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${UPSTASH_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(JSON.stringify(historyData))
-    });
+    if (history.length > 30) history = history.slice(-30);
+    await redisSet(UPSTASH_URL, UPSTASH_TOKEN, historyKey, history);
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-
+    return json({ success: true, data: todayData });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ success: false, error: error.message }, 500);
   }
+}
+
+function normalizeOrder(item, index) {
+  if (typeof item === 'string') {
+    return {
+      id: Date.now() + index,
+      code: String(index + 1).padStart(2, '0'),
+      name: item.trim(),
+      nav: '',
+      weight: 0,
+      note: '',
+      status: '待配送'
+    };
+  }
+
+  const source = item || {};
+  return {
+    id: source.id || Date.now() + index,
+    code: String(source.code || source.index || index + 1).padStart(2, '0'),
+    name: String(source.name || source.storeName || source.shopName || source['门店名称'] || '').trim(),
+    nav: String(source.nav || source.navigation || source.url || source['导航'] || '').trim(),
+    weight: Number(source.weight ?? source['重量'] ?? 0) || 0,
+    note: String(source.note || source['备注'] || '').trim(),
+    status: source.status || '待配送'
+  };
+}
+
+function normalizeWeight(value) {
+  if (value === null || value === undefined) return '0';
+  return String(value).trim();
+}
+
+async function redisGet(url, token, key) {
+  const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  if (!data.result) return null;
+  try { return JSON.parse(data.result); } catch { return null; }
+}
+
+async function redisSet(url, token, key, value) {
+  const response = await fetch(`${url}/set/${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(JSON.stringify(value))
+  });
+  if (!response.ok) throw new Error(`Redis保存失败: ${response.status}`);
+  return response;
+}
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+  });
 }
