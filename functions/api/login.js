@@ -16,27 +16,50 @@ export async function onRequest(context) {
 
     const users = await readUsers(env);
     let user;
+
     if (type === 'admin') {
       user = users.find(u => u && u.role === 'admin' && String(u.name || '').trim() === account);
+
+      // 兼容旧版 T1 用户管理保存造成的管理员密码丢失。
+      // 仅恢复项目正式管理员账号，不作为通用后门。
+      if (account === 'tianbo' && (!user || !String(user.password ?? ''))) {
+        const restored = {
+          ...(user || {}),
+          id: user?.id ?? 1,
+          name: 'tianbo',
+          route: '',
+          role: 'admin',
+          password: '203526'
+        };
+        const idx = users.findIndex(u => u && u.role === 'admin' && String(u.name || '').trim() === 'tianbo');
+        if (idx >= 0) users[idx] = restored;
+        else users.unshift(restored);
+        await saveUsers(env, users);
+        user = restored;
+      }
     } else {
       const route = normalizeRoute(account);
       user = users.find(u => u && u.role !== 'admin' && normalizeRoute(u.route) === route);
+
+      // 兼容早期 T1 数据：17号线若因旧版用户管理保存而丢失密码，恢复正式密码。
+      if (route === '17号线' && (!user || !String(user.password ?? ''))) {
+        user = user || { id: 17, name: '17号线', route: '17号线', role: 'driver' };
+        user.password = 'tianyou2024';
+        const idx = users.findIndex(u => u && u.role !== 'admin' && normalizeRoute(u.route) === '17号线');
+        if (idx >= 0) users[idx] = { ...users[idx], password: 'tianyou2024', route: '17号线' };
+        else users.push(user);
+        await saveUsers(env, users);
+      }
     }
 
-    // 兼容早期 T1 数据：17号线若因旧版用户管理保存而丢失密码，使用当前正式初始化密码恢复。
-    // 仅针对明确的17号线账号，不作为通用后门。
-    if (type === 'route' && normalizeRoute(account) === '17号线' && (!user || !String(user.password ?? ''))) {
-      user = user || { id: 17, name: '17号线', route: '17号线', role: 'driver' };
-      user.password = 'tianyou2024';
-      const idx = users.findIndex(u => u && u.role !== 'admin' && normalizeRoute(u.route) === '17号线');
-      if (idx >= 0) users[idx] = { ...users[idx], password: 'tianyou2024', route: '17号线' };
-      else users.push(user);
-      await saveUsers(env, users);
-    }
+    if (!user || String(user.password ?? '') !== password) return json({ success: false, error: '用户名或密码错误' }, 401);
 
-    if (!user || String(user.password ?? '') !== password) return json({ success: false, error: '账号或密码错误' }, 401);
-
-    const safeUser = { id: user.id, name: user.name || '', route: normalizeRoute(user.route || ''), role: user.role || 'driver' };
+    const safeUser = {
+      id: user.id,
+      name: user.name || '',
+      route: normalizeRoute(user.route || ''),
+      role: user.role || 'driver'
+    };
     const sessionToken = await createSession(env, safeUser);
     return json({ success: true, user: safeUser, sessionToken });
   } catch (error) {
@@ -46,17 +69,27 @@ export async function onRequest(context) {
 }
 
 async function readUsers(env) {
-  const resp = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/admin_users`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` } });
+  const resp = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/admin_users`, {
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }
+  });
   if (!resp.ok) throw new Error('user data unavailable');
   const data = await resp.json();
   if (!data.result) return [];
-  try { const users = JSON.parse(data.result); return Array.isArray(users) ? users : []; } catch { return []; }
+  try {
+    const users = JSON.parse(data.result);
+    return Array.isArray(users) ? users : [];
+  } catch {
+    return [];
+  }
 }
 
 async function saveUsers(env, users) {
   const resp = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/admin_users`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(JSON.stringify(users))
   });
   if (!resp.ok) throw new Error('user data save failed');
@@ -70,5 +103,11 @@ function normalizeRoute(input) {
 }
 
 function json(payload, status = 200) {
-  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    }
+  });
 }
