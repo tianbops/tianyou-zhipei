@@ -61,10 +61,12 @@
     const route = Auth.getCurrentRoute();
     const local = readJSON('base_data', null);
     const cached = readJSON(`route_cache_${route}`, null);
-    baseStores = Array.isArray(local) && local.length ? local : (Array.isArray(cached?.stores) ? cached.stores : []);
+    baseStores = Array.isArray(local) && local.length
+      ? local
+      : (Array.isArray(cached?.stores) ? cached.stores : []);
 
     try {
-      const response = await fetch(`/api/route/${encodeURIComponent(route)}`, { cache: 'no-store' });
+      const response = await fetch(`/api/routes?route=${encodeURIComponent(route)}`, { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         const stores = Array.isArray(data) ? data : (data?.stores || data?.data || []);
@@ -85,14 +87,17 @@
       if (name) rank.set(name, i);
       if (s?.code) rank.set(String(s.code), i);
     });
-    return (Array.isArray(list) ? list : []).map((item, i) => ({ ...item, _i: i }))
+
+    return (Array.isArray(list) ? list : [])
+      .map((item, i) => ({ ...item, _i: i }))
       .sort((a, b) => {
         const an = normalizeName(a?.name || a?.storeName || a?.shopName || a?.门店名称);
         const bn = normalizeName(b?.name || b?.storeName || b?.shopName || b?.门店名称);
         const ai = rank.has(an) ? rank.get(an) : (rank.has(String(a?.code)) ? rank.get(String(a.code)) : 999999);
         const bi = rank.has(bn) ? rank.get(bn) : (rank.has(String(b?.code)) ? rank.get(String(b.code)) : 999999);
         return ai - bi || a._i - b._i;
-      }).map(({ _i, ...item }) => item);
+      })
+      .map(({ _i, ...item }) => item);
   }
 
   function totalWeight(orders) {
@@ -105,9 +110,11 @@
   function updateSummary() {
     const orders = Auth.getTodayOrders ? Auth.getTodayOrders() : readJSON('today_orders', []);
     const count = Array.isArray(orders) ? orders.length : 0;
-    const weight = totalWeight(orders);
+    const storedWeight = Number.parseFloat(String(localStorage.getItem('today_total_weight') || '').replace(/[^\d.]/g, '')) || 0;
+    const weight = storedWeight || totalWeight(orders);
     const route = Auth.getCurrentRoute();
     const vehicle = localStorage.getItem('today_vehicle') || '';
+
     if ($('menuRoute')) $('menuRoute').textContent = route || '未选择线路';
     if ($('homeRoute')) $('homeRoute').textContent = vehicle ? `🚚 ${vehicle}` : `🚚 ${route || ''}`;
     if ($('storeCount')) $('storeCount').textContent = count ? `${count}家门店` : '无数据';
@@ -189,11 +196,15 @@
       status: item.status || '待配送'
     }));
 
+    const weightValue = meta.totalWeight !== undefined && meta.totalWeight !== ''
+      ? meta.totalWeight
+      : totalWeight(normalized);
+
     localStorage.setItem('today_orders', JSON.stringify(normalized));
     localStorage.setItem('today_order_date', date);
     localStorage.setItem('today_order_source', meta.source || 'manual');
+    localStorage.setItem('today_total_weight', String(weightValue));
     if (meta.vehicle) localStorage.setItem('today_vehicle', meta.vehicle);
-    if (meta.totalWeight !== undefined) localStorage.setItem('today_total_weight', String(meta.totalWeight));
 
     const history = readJSON('delivery_history', []);
     const entry = {
@@ -201,7 +212,7 @@
       route,
       vehicle: meta.vehicle || localStorage.getItem('today_vehicle') || '',
       stores: normalized.length,
-      totalWeight: meta.totalWeight || totalWeight(normalized),
+      totalWeight: weightValue,
       orders: normalized
     };
     const next = Array.isArray(history) ? [...history] : [];
@@ -213,6 +224,7 @@
       const data = Auth.getUserOrderData(route) || {};
       data.today_orders = normalized;
       data.today_vehicle = entry.vehicle;
+      data.today_total_weight = weightValue;
       data.delivery_history = next;
       data.lastOrderDate = date;
       Auth.saveUserOrderData(route, data);
@@ -222,11 +234,9 @@
       await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route, orders: normalized, totalWeight: entry.totalWeight, vehicle: entry.vehicle, date })
+        body: JSON.stringify({ route, orders: normalized, totalWeight: weightValue, vehicle: entry.vehicle, date })
       });
-    } catch (_) {
-      // 云端不可用时保留本地结果，仍可继续使用
-    }
+    } catch (_) {}
 
     updateSummary();
     return normalized;
@@ -368,6 +378,9 @@
         const button = document.querySelector('.menu-btn');
         if (menu && menu.style.display === 'block' && !menu.contains(event.target) && !button?.contains(event.target)) menu.style.display = 'none';
       });
-    } catch (e) { console.error(e); error(e.message || '首页初始化失败'); }
+    } catch (e) {
+      console.error(e);
+      error(e.message || '首页初始化失败');
+    }
   });
 })();
