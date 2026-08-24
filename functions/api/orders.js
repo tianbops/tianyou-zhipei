@@ -1,127 +1,55 @@
 // functions/api/orders.js
-// 今日运单保存 API
+// 服务器端今日运单/历史数据 API：浏览器仅作缓存，真实数据保存在 Upstash。
+import { authRequired } from './_auth.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
-
-  if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405);
-  }
+  const session = await authRequired(request, env);
+  if (!session) return json({ error: '登录已失效或无权限' }, 401);
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
+  const route = normalizeRoute(session.route);
+  if (!route && session.role !== 'admin') return json({ error: '用户未绑定线路' }, 403);
 
   try {
-    const body = await request.json();
-    const { route, orders, totalWeight, vehicle, date } = body;
-
-    if (!route || !Array.isArray(orders)) {
-      return json({ error: 'Missing required fields' }, 400);
+    if (request.method === 'POST') {
+      const body = await request.json();
+      const targetRoute = session.role === 'admin' ? normalizeRoute(body.route) : route;
+      if (!targetRoute || !Array.isArray(body.orders)) return json({ error: 'Missing required fields' }, 400);
+      const today = body.date || new Date().toISOString().slice(0, 10);
+      const normalizedOrders = body.orders.map((item, index) => normalizeOrder(item, index)).filter(item => item.name);
+      const todayData = { date: today, route: targetRoute, vehicle: body.vehicle || '', orders: normalizedOrders, totalWeight: normalizeWeight(body.totalWeight), count: normalizedOrders.length, updatedAt: new Date().toISOString() };
+      await redisSet(env, `today_orders:${targetRoute}`, todayData);
+      await saveHistory(env, targetRoute, today, todayData);
+      return json({ success: true, data: todayData });
     }
 
-    const UPSTASH_URL = env.UPSTASH_REDIS_REST_URL;
-    const UPSTASH_TOKEN = env.UPSTASH_REDIS_REST_TOKEN;
-    if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-      return json({ error: 'Redis not configured' }, 500);
+    if (request.method === 'GET') {
+      const url = new URL(request.url);
+      const targetRoute = session.role === 'admin' ? normalizeRoute(url.searchParams.get('route') || '') : route;
+      if (!targetRoute) return json({ error: '缺少线路' }, 400);
+      const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+      const today = await redisGet(env, `today_orders:${targetRoute}`);
+      const history = await redisGet(env, `history:${targetRoute}:${date}`);
+      return json({ success: true, today: today || null, history: Array.isArray(history) ? history : [] });
     }
-
-    const today = date || new Date().toISOString().slice(0, 10);
-    const normalizedOrders = orders
-      .map((item, index) => normalizeOrder(item, index))
-      .filter(item => item.name);
-
-    const todayData = {
-      date: today,
-      route,
-      vehicle: vehicle || '',
-      orders: normalizedOrders,
-      totalWeight: normalizeWeight(totalWeight),
-      count: normalizedOrders.length,
-      updatedAt: new Date().toISOString()
-    };
-
-    await redisSet(UPSTASH_URL, UPSTASH_TOKEN, `today_orders:${route}`, todayData);
-
-    const historyKey = `history:${route}:${today}`;
-    const historyData = await redisGet(UPSTASH_URL, UPSTASH_TOKEN, historyKey);
-    let history = Array.isArray(historyData) ? historyData : [];
-
-    const record = {
-      date: today,
-      route,
-      vehicle: vehicle || '',
-      count: normalizedOrders.length,
-      weight: normalizeWeight(totalWeight),
-      orders: normalizedOrders,
-      updatedAt: new Date().toISOString()
-    };
-
-    const index = history.findIndex(item => item?.date === today);
-    if (index >= 0) history[index] = record;
-    else history.push(record);
-
-    if (history.length > 30) history = history.slice(-30);
-    await redisSet(UPSTASH_URL, UPSTASH_TOKEN, historyKey, history);
-
-    return json({ success: true, data: todayData });
-  } catch (error) {
-    return json({ success: false, error: error.message }, 500);
-  }
+    return json({ error: 'Method not allowed' }, 405);
+  } catch (error) { console.error('orders api error', error); return json({ success: false, error: error.message }, 500); }
 }
 
-function normalizeOrder(item, index) {
-  if (typeof item === 'string') {
-    return {
-      id: Date.now() + index,
-      code: String(index + 1).padStart(2, '0'),
-      name: item.trim(),
-      nav: '',
-      weight: 0,
-      note: '',
-      status: '待配送'
-    };
-  }
-
-  const source = item || {};
-  return {
-    id: source.id || Date.now() + index,
-    code: String(source.code || source.index || index + 1).padStart(2, '0'),
-    name: String(source.name || source.storeName || source.shopName || source['门店名称'] || '').trim(),
-    nav: String(source.nav || source.navigation || source.url || source['导航'] || '').trim(),
-    weight: Number(source.weight ?? source['重量'] ?? 0) || 0,
-    note: String(source.note || source['备注'] || '').trim(),
-    status: source.status || '待配送'
-  };
+async function saveHistory(env, route, date, todayData) {
+  const key = `history:${route}:${date}`;
+  const old = await redisGet(env, key);
+  let history = Array.isArray(old) ? old : [];
+  const record = { date, route, vehicle: todayData.vehicle, count: todayData.count, weight: todayData.totalWeight, orders: todayData.orders, updatedAt: todayData.updatedAt };
+  const i = history.findIndex(x => x?.date === date);
+  if (i >= 0) history[i] = record; else history.push(record);
+  if (history.length > 30) history = history.slice(-30);
+  await redisSet(env, key, history);
 }
 
-function normalizeWeight(value) {
-  if (value === null || value === undefined) return '0';
-  return String(value).trim();
-}
-
-async function redisGet(url, token, key) {
-  const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!response.ok) return null;
-  const data = await response.json();
-  if (!data.result) return null;
-  try { return JSON.parse(data.result); } catch { return null; }
-}
-
-async function redisSet(url, token, key, value) {
-  const response = await fetch(`${url}/set/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(JSON.stringify(value))
-  });
-  if (!response.ok) throw new Error(`Redis保存失败: ${response.status}`);
-  return response;
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' }
-  });
-}
+function normalizeOrder(item,index){if(typeof item==='string')return{id:Date.now()+index,code:String(index+1).padStart(2,'0'),name:item.trim(),nav:'',weight:0,note:'',status:'待配送'};const s=item||{};return{id:s.id||Date.now()+index,code:String(s.code||s.index||index+1).padStart(2,'0'),name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),weight:Number(s.weight??s['重量']??0)||0,note:String(s.note||s['备注']||'').trim(),status:s.status||'待配送'};}
+function normalizeWeight(v){return v===null||v===undefined?'0':String(v).trim();}
+function normalizeRoute(v){const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s;}
+async function redisGet(env,key){const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`,{headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`}});if(!r.ok)return null;const d=await r.json();if(!d.result)return null;try{return JSON.parse(d.result)}catch{return null}}
+async function redisSet(env,key,value){const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`,{method:'POST',headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify(JSON.stringify(value))});if(!r.ok)throw Error(`Redis保存失败: ${r.status}`);}
+function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}})}
