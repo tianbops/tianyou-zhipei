@@ -1,5 +1,6 @@
 // functions/api/users.js
 // 用户管理 API
+// 安全规则：GET/POST 响应均不返回 password，密码只允许在服务端登录验证时使用。
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -9,81 +10,81 @@ export async function onRequest(context) {
   const UPSTASH_TOKEN = env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-    return new Response(JSON.stringify({ error: 'Redis not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Redis not configured' }, 500);
   }
 
   const REDIS_KEY = 'admin_users';
 
-  // ============================================================
-  // GET - 获取所有用户
-  // ============================================================
   if (method === 'GET') {
     try {
-      const resp = await fetch(`${UPSTASH_URL}/get/${REDIS_KEY}`, {
-        headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
-      });
-      if (!resp.ok) {
-        return new Response(JSON.stringify({ users: [] }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      const data = await resp.json();
-      let users = [];
-      if (data.result) {
-        try {
-          users = JSON.parse(data.result);
-        } catch (e) {
-          users = [];
-        }
-      }
-      return new Response(JSON.stringify({ users }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const users = await readUsers(UPSTASH_URL, UPSTASH_TOKEN, REDIS_KEY);
+      return json({ users: sanitizeUsers(users) });
     } catch (e) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return json({ error: '用户数据服务不可用', users: [] }, 503);
     }
   }
 
-  // ============================================================
-  // POST - 保存所有用户
-  // ============================================================
   if (method === 'POST') {
     try {
       const body = await request.json();
-      const users = body.users || [];
+      if (!Array.isArray(body.users)) {
+        return json({ error: 'users 必须是数组' }, 400);
+      }
+
+      // POST 仍允许现有管理端保存完整用户对象，密码由服务端原样写入 Upstash；
+      // 但响应绝不把密码返回给浏览器。
       const resp = await fetch(`${UPSTASH_URL}/set/${REDIS_KEY}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${UPSTASH_TOKEN}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(JSON.stringify(users))
+        body: JSON.stringify(JSON.stringify(body.users))
       });
+
       if (!resp.ok) {
-        return new Response(JSON.stringify({ error: 'Failed to save users' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return json({ error: '保存用户失败' }, 500);
       }
-      return new Response(JSON.stringify({ success: true, users }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+
+      return json({ success: true, users: sanitizeUsers(body.users) });
     } catch (e) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return json({ error: '保存用户失败' }, 500);
     }
   }
 
-  return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-    status: 405,
-    headers: { 'Content-Type': 'application/json' }
+  return json({ error: 'Method not allowed' }, 405);
+}
+
+async function readUsers(url, token, key) {
+  const resp = await fetch(`${url}/get/${key}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  if (!resp.ok) throw new Error('Upstash request failed');
+
+  const data = await resp.json();
+  if (!data.result) return [];
+
+  try {
+    const users = JSON.parse(data.result);
+    return Array.isArray(users) ? users : [];
+  } catch {
+    return [];
+  }
+}
+
+function sanitizeUsers(users) {
+  return users.map(user => {
+    const { password, ...safeUser } = user || {};
+    return safeUser;
+  });
+}
+
+function json(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    }
   });
 }
