@@ -7,51 +7,26 @@
   <link rel="stylesheet" href="../css/order.css">
   <style>
     .store-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);gap:10px}
-    .store-item:last-child{border-bottom:none}.store-item .store-index{color:#7F8B98;font-weight:500;min-width:28px;font-size:14px;flex-shrink:0}
-    .store-item .store-name{flex:1;font-size:15px;color:#fff;line-height:1.5;word-break:break-word;max-height:3em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-    .store-item .nav-btn{background:#2457A6;border:none;color:#fff;border-radius:10px;padding:6px 14px;font-size:13px;cursor:pointer;flex-shrink:0;transition:background .2s}
-    .store-item .nav-btn:active{transform:scale(.94)}.store-item .nav-btn:hover{background:#2A6BC4}.store-list{max-height:380px;overflow-y:auto;padding-right:4px}
-    .store-list::-webkit-scrollbar{width:4px}.store-list::-webkit-scrollbar-thumb{background:#3A4654;border-radius:10px}
-    .empty-tip{text-align:center;padding:40px 20px;color:#7F8B98;font-size:15px}.empty-tip .icon{font-size:48px;display:block;margin-bottom:12px}
+    .store-item:last-child{border-bottom:none}.store-index{color:#7F8B98;font-weight:500;min-width:32px;font-size:14px;flex-shrink:0}.store-name{flex:1;font-size:15px;color:#fff;line-height:1.5;word-break:break-word;max-height:3em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.new-mark{font-size:12px;margin-right:5px}.nav-btn{background:#2457A6;border:none;color:#fff;border-radius:10px;padding:6px 14px;font-size:13px;cursor:pointer;flex-shrink:0}.nav-btn:active{transform:scale(.94)}.nav-btn:hover{background:#2A6BC4}.store-list{max-height:380px;overflow-y:auto;padding-right:4px}.store-list::-webkit-scrollbar{width:4px}.store-list::-webkit-scrollbar-thumb{background:#3A4654;border-radius:10px}.empty-tip{text-align:center;padding:40px 20px;color:#7F8B98;font-size:15px}.empty-tip .icon{font-size:48px;display:block;margin-bottom:12px}
   </style>
 </head>
 <body>
   <div class="app-container">
     <header class="top-bar">
-      <button class="back-btn" onclick="goBack()">←</button>
-      <div class="app-title">今日运单详情</div>
-      <button class="menu-btn" onclick="toggleMenu()">☰</button>
+      <button class="back-btn" onclick="goBack()">←</button><div class="app-title">今日运单详情</div><button class="menu-btn" onclick="toggleMenu()">☰</button>
     </header>
-
     <div id="menuPanel" class="menu-panel">
-      <div class="menu-line" id="menuRoute">加载中...</div>
-      <div onclick="openVehicle()">🚚 更换车辆</div>
-      <div onclick="window.location.href='route_edit.html'">⚙ 原始数据</div>
-      <div onclick="shareOrder()">↗ 分享运单</div>
-      <div onclick="logout()" class="logout-item">🚪 退出登录</div>
+      <div class="menu-line" id="menuRoute">加载中...</div><div onclick="openVehicle()">🚚 更换车辆</div><div onclick="window.location.href='route_edit.html'">⚙ 原始数据</div><div onclick="shareOrder()">↗ 分享运单</div><div onclick="logout()" class="logout-item">🚪 退出登录</div>
     </div>
-
     <section class="task-card">
       <div class="info-row top-row"><div id="routeName">加载中...</div><div id="todayDate"></div></div>
       <div class="info-row"><span class="label">今日用车：</span><span class="value" id="vehicleText">渝DK7692</span></div>
       <div class="info-row"><span class="label">今日配送：</span><span class="value warning">总 <span id="storeCount">0</span> 家</span></div>
       <div class="info-row"><span class="label">商品总量：</span><span class="value" id="totalWeight">0 kg</span></div>
     </section>
-
-    <section class="task-card">
-      <div class="route-title">配送路线</div>
-      <div class="store-list" id="routeList"><div class="empty-tip"><span class="icon">📭</span>今日暂无配送数据</div></div>
-    </section>
-
-    <div id="vehicleDialog" class="dialog">
-      <div class="dialog-box">
-        <h3>更换今日用车</h3>
-        <input id="newVehicle" placeholder="请输入车辆号码" value="渝DK7692">
-        <div class="dialog-btn"><button onclick="closeVehicle()">取消</button><button onclick="saveVehicle()">确认</button></div>
-      </div>
-    </div>
+    <section class="task-card"><div class="route-title">配送路线</div><div class="store-list" id="routeList"><div class="empty-tip"><span class="icon">📭</span>今日暂无配送数据</div></div></section>
+    <div id="vehicleDialog" class="dialog"><div class="dialog-box"><h3>更换今日用车</h3><input id="newVehicle" placeholder="请输入车辆号码" value="渝DK7692"><div class="dialog-btn"><button onclick="closeVehicle()">取消</button><button onclick="saveVehicle()">确认</button></div></div></div>
   </div>
-  <script src="../js/auth.js"></script>
-  <script src="../js/order_detail.js"></script>
+  <script src="../js/auth.js"></script><script src="../js/order_engine.js"></script><script src="../js/order_detail.js"></script>
 </body>
 </html>
