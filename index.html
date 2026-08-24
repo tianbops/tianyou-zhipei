@@ -9,8 +9,7 @@
 <body>
   <div class="login-container">
     <div class="logo-area">
-      <img src="assets/logo.png" alt="天友乳业" class="logo" 
-           onerror="this.style.display='none';this.parentElement.querySelector('.logo-fallback').style.display='block'">
+      <img src="assets/logo.png" alt="天友乳业" class="logo" onerror="this.style.display='none';this.parentElement.querySelector('.logo-fallback').style.display='block'">
       <div class="logo-fallback" style="display:none; font-size:80px; margin-bottom:10px;">🥛</div>
       <div class="brand-main">天友乳业</div>
       <div class="brand-sub">路线优化引擎</div>
@@ -32,7 +31,6 @@
     </div>
   </div>
 
-  <!-- ===== 注册弹窗（已移除密码明文显示） ===== -->
   <div class="admin-login-overlay" id="registerOverlay">
     <div class="admin-login-box">
       <div class="admin-login-header">
@@ -40,10 +38,7 @@
         <button class="admin-login-close" onclick="closeRegister()">✕</button>
       </div>
       <div class="admin-login-body">
-        <div style="color:#7F8B98; font-size:14px; text-align:center; margin-bottom:16px;">
-          请输入线路编号和企业统一密码完成注册
-        </div>
-        <!-- 已删除显示统一密码的 div -->
+        <div style="color:#7F8B98; font-size:14px; text-align:center; margin-bottom:16px;">请输入线路编号和企业统一密码完成注册</div>
         <div class="input-box">
           <input id="registerRoute" type="text" placeholder="请输入线路 (如 17)">
         </div>
@@ -58,7 +53,6 @@
     </div>
   </div>
 
-  <!-- ===== 管理员登录弹窗 ===== -->
   <div class="admin-login-overlay" id="adminLoginOverlay">
     <div class="admin-login-box">
       <div class="admin-login-header">
@@ -80,307 +74,6 @@
   </div>
 
   <script src="js/auth.js"></script>
-  <script>
-    // ============================================================
-    // 获取统一密码（内部使用，不显示）
-    // ============================================================
-    function getUnifiedPassword() {
-      return localStorage.getItem('unified_password') || 'tianyou2024';
-    }
-
-    // ============================================================
-    // 线路格式转换
-    // ============================================================
-    function formatRouteCode(input) {
-      if (!input) return '';
-      let code = input.trim();
-      if (code.includes('号线')) {
-        const numMatch = code.match(/(\d+)号线/);
-        if (numMatch) {
-          const num = parseInt(numMatch[1]);
-          return String(num).padStart(2, '0') + '号线';
-        }
-      }
-      const numMatch = code.match(/^(\d+)$/);
-      if (numMatch) {
-        const num = parseInt(numMatch[1]);
-        return String(num).padStart(2, '0') + '号线';
-      }
-      return code;
-    }
-
-    function isValidRouteCode(code) {
-      return /^\d{2,}号线$/.test(code);
-    }
-
-    // ============================================================
-    // 普通用户登录 - 从 Upstash 实时验证
-    // ============================================================
-    async function login() {
-      const rawRoute = document.getElementById('routeCode').value.trim();
-      const password = document.getElementById('password').value.trim();
-      const errorEl = document.getElementById('loginError');
-      errorEl.style.display = 'none';
-
-      if (!rawRoute) {
-        errorEl.textContent = '⚠️ 请输入线路编号';
-        errorEl.style.display = 'block';
-        return;
-      }
-      if (!password) {
-        errorEl.textContent = '⚠️ 请输入密码';
-        errorEl.style.display = 'block';
-        return;
-      }
-
-      const routeCode = formatRouteCode(rawRoute);
-      if (!isValidRouteCode(routeCode)) {
-        errorEl.textContent = '⚠️ 线路格式错误，请输入如 17 或 105';
-        errorEl.style.display = 'block';
-        return;
-      }
-
-      try {
-        const user = await Auth.findUserByRoute(routeCode);
-
-        if (!user) {
-          errorEl.textContent = '❌ 线路未注册，请点击「注册」创建';
-          errorEl.style.display = 'block';
-          return;
-        }
-
-        if (password === user.password) {
-          Auth.login(routeCode);
-          Auth.addLog('用户登录', `${routeCode} 登录系统`);
-          window.location.href = 'home.html';
-        } else {
-          errorEl.textContent = '❌ 密码错误，请重试';
-          errorEl.style.display = 'block';
-        }
-      } catch (error) {
-        errorEl.textContent = '⚠️ 网络错误，请稍后重试';
-        errorEl.style.display = 'block';
-        console.error('登录错误:', error);
-      }
-    }
-
-    function togglePassword() {
-      const pwd = document.getElementById('password');
-      pwd.type = pwd.type === 'password' ? 'text' : 'password';
-    }
-
-    // ============================================================
-    // 注册
-    // ============================================================
-    function openRegister() {
-      document.getElementById('registerOverlay').classList.add('active');
-      document.getElementById('registerRoute').value = '';
-      document.getElementById('registerPassword').value = '';
-      document.getElementById('registerError').style.display = 'none';
-      document.getElementById('registerInfo').style.display = 'none';
-    }
-
-    function closeRegister() {
-      document.getElementById('registerOverlay').classList.remove('active');
-    }
-
-    function toggleRegisterPassword() {
-      const pwd = document.getElementById('registerPassword');
-      pwd.type = pwd.type === 'password' ? 'text' : 'password';
-    }
-
-    async function doRegister() {
-      const rawRoute = document.getElementById('registerRoute').value.trim();
-      const password = document.getElementById('registerPassword').value.trim();
-      const errorEl = document.getElementById('registerError');
-      const infoEl = document.getElementById('registerInfo');
-      errorEl.style.display = 'none';
-      infoEl.style.display = 'none';
-
-      if (!rawRoute) {
-        errorEl.textContent = '⚠️ 请输入线路编号';
-        errorEl.style.display = 'block';
-        return;
-      }
-      if (!password) {
-        errorEl.textContent = '⚠️ 请输入企业统一密码';
-        errorEl.style.display = 'block';
-        return;
-      }
-
-      const routeCode = formatRouteCode(rawRoute);
-      if (!isValidRouteCode(routeCode)) {
-        errorEl.textContent = '⚠️ 线路格式错误，请输入如 17 或 105';
-        errorEl.style.display = 'block';
-        return;
-      }
-
-      // 验证统一密码
-      const unifiedPassword = getUnifiedPassword();
-      if (password !== unifiedPassword) {
-        errorEl.textContent = '❌ 企业统一密码错误，请重试';
-        errorEl.style.display = 'block';
-        return;
-      }
-
-      try {
-        const isRegistered = await Auth.isRouteRegistered(routeCode);
-        if (isRegistered) {
-          errorEl.textContent = '❌ 该线路已被注册，请直接登录';
-          errorEl.style.display = 'block';
-          return;
-        }
-
-        infoEl.textContent = '⏳ 正在创建新线路...';
-        infoEl.style.display = 'block';
-        infoEl.style.color = '#FFB020';
-
-        const newRouteData = await Auth.createRoute(routeCode, unifiedPassword, 'driver', '');
-
-        if (newRouteData) {
-          infoEl.textContent = '✅ 线路注册成功！正在跳转...';
-          infoEl.style.color = '#27AE60';
-          infoEl.style.display = 'block';
-
-          Auth.login(routeCode);
-          Auth.addLog('线路注册', `${routeCode} 注册成功`);
-
-          setTimeout(() => {
-            window.location.href = 'home.html';
-          }, 1500);
-        } else {
-          errorEl.textContent = '❌ 线路创建失败，请重试';
-          errorEl.style.display = 'block';
-        }
-      } catch (error) {
-        console.error('注册错误:', error);
-        errorEl.textContent = '⚠️ 网络异常，请稍后重试';
-        errorEl.style.display = 'block';
-      }
-    }
-
-    document.getElementById('registerOverlay').addEventListener('click', function(e) {
-      if (e.target === this) closeRegister();
-    });
-
-    // ============================================================
-    // 管理员登录
-    // ============================================================
-    function openAdminLogin() {
-      document.getElementById('adminLoginOverlay').classList.add('active');
-      document.getElementById('adminRoute').value = '';
-      document.getElementById('adminPassword').value = '';
-      document.getElementById('adminLoginError').style.display = 'none';
-    }
-
-    function closeAdminLogin() {
-      document.getElementById('adminLoginOverlay').classList.remove('active');
-    }
-
-    function toggleAdminPassword() {
-      const pwd = document.getElementById('adminPassword');
-      pwd.type = pwd.type === 'password' ? 'text' : 'password';
-    }
-
-    async function adminLogin() {
-      const route = document.getElementById('adminRoute').value.trim();
-      const password = document.getElementById('adminPassword').value.trim();
-      const errorEl = document.getElementById('adminLoginError');
-      errorEl.style.display = 'none';
-
-      if (!route) {
-        errorEl.textContent = '⚠️ 请输入用户名';
-        errorEl.style.display = 'block';
-        return;
-      }
-      if (!password) {
-        errorEl.textContent = '⚠️ 请输入密码';
-        errorEl.style.display = 'block';
-        return;
-      }
-
-      try {
-        const adminUser = await Auth.findAdminByName(route);
-
-        if (!adminUser) {
-          errorEl.textContent = '❌ 管理员不存在';
-          errorEl.style.display = 'block';
-          return;
-        }
-
-        if (password === adminUser.password) {
-          Auth.login(route, '管理员');
-          Auth.addLog('管理员登录', `${route} 登录管理系统`);
-          closeAdminLogin();
-          window.location.href = 'admin.html';
-        } else {
-          errorEl.textContent = '❌ 密码错误，请重试';
-          errorEl.style.display = 'block';
-        }
-      } catch (error) {
-        errorEl.textContent = '⚠️ 网络错误，请稍后重试';
-        errorEl.style.display = 'block';
-        console.error('管理员登录错误:', error);
-      }
-    }
-
-    document.getElementById('adminLoginOverlay').addEventListener('click', function(e) {
-      if (e.target === this) closeAdminLogin();
-    });
-
-    // ============================================================
-    // 回车触发
-    // ============================================================
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        const adminOverlay = document.getElementById('adminLoginOverlay');
-        const registerOverlay = document.getElementById('registerOverlay');
-
-        if (adminOverlay.classList.contains('active')) {
-          adminLogin();
-        } else if (registerOverlay.classList.contains('active')) {
-          doRegister();
-        } else {
-          login();
-        }
-      }
-    });
-
-    // ============================================================
-    // 已登录自动跳转
-    // ============================================================
-    if (localStorage.getItem('loginStatus') === 'true') {
-      const currentRoute = localStorage.getItem('currentRoute');
-      const adminRoutes = ['admin', '管理员', 'ADMIN'];
-      if (adminRoutes.includes(currentRoute)) {
-        window.location.href = 'admin.html';
-      } else {
-        window.location.href = 'home.html';
-      }
-    }
-
-    // ============================================================
-    // 输入框自动格式化
-    // ============================================================
-    document.getElementById('routeCode').addEventListener('blur', function() {
-      const val = this.value.trim();
-      if (val) {
-        const formatted = formatRouteCode(val);
-        if (formatted !== val && isValidRouteCode(formatted)) {
-          this.value = formatted;
-        }
-      }
-    });
-
-    document.getElementById('registerRoute').addEventListener('blur', function() {
-      const val = this.value.trim();
-      if (val) {
-        const formatted = formatRouteCode(val);
-        if (formatted !== val && isValidRouteCode(formatted)) {
-          this.value = formatted;
-        }
-      }
-    });
-  </script>
+  <script src="js/login.js"></script>
 </body>
 </html>
