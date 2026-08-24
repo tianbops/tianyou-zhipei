@@ -6,7 +6,7 @@ export async function onRequest({request,env}){
     const body=await request.json(),image=body?.image,route=String(body?.route||'').trim();
     if(!image||!route)return json({success:false,error:'缺少运单图片或线路'},400);
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
-    const parsed=await runVisionOCR(env.AI,image),base=await getBaseStores(env,route),result=normalizeAndSort(parsed.stores,base,parsed.rawText);
+    const parsed=await runVisionOCR(env.AI,image),base=await getBaseStores(env,route,request),result=normalizeAndSort(parsed.stores,base,parsed.rawText);
     if(!result.stores.length)return json({success:false,error:'图片中未识别到有效门店，请重新上传清晰截图'},422);
     return json({success:true,data:{route,date:normalizeDate(parsed.date),vehicle:normalizeVehicle(parsed.vehicle),totalWeight:normalizeWeight(parsed.totalWeight),rawOrderCount:Number(parsed.rawOrderCount)||0,stores:result.stores,storeCount:result.stores.length,matchedCount:result.matchedCount,newStoreCount:result.newStoreCount,recognizedCount:result.recognizedCount,warning:result.newStoreCount?`发现 ${result.newStoreCount} 家新增门店，请核对`:''}});
   }catch(e){console.error('OCR error',e);return json({success:false,error:e?.message||'运单图片处理失败'},500)}
@@ -44,7 +44,24 @@ function countArrows(v){return String(v||'').match(/->|→|＞|》|➜|➤|⇒/g
 function expandStoreList(items){const out=[];for(const item of items||[]){const v=typeof item==='string'?item:item?.name||item?.storeName||item?.customerName||'';splitStoreChain(v).forEach(x=>{const n=cleanStoreName(x);if(n)out.push(n)})}return unique(out)}
 function splitStoreChain(v){return String(v||'').replace(/→|＞|》|➜|➤|⇒/g,'->').split(/\s*(?:->|-->)\s*/).map(x=>x.trim()).filter(Boolean)}
 function fallback(s){const chains=s.match(/[^\n{}]{2,}(?:\s*(?:->|→|〉|》|➜|➤|⇒)\s*[^\n{}]{2,})+/g)||[];const stores=[];chains.forEach(c=>splitStoreChain(c).forEach(p=>{const n=cleanStoreName(p);if(isLikelyStore(n))stores.push(n)}));const w=s.match(/总重量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i),v=s.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i),d=s.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/),c=s.match(/总数量\s*[:：]?\s*(\d+)/);return{stores:unique(stores),date:d?d[1]:'',vehicle:v?v[1]:'',totalWeight:w?`${w[1]}${w[2]||'kg'}`:'',rawOrderCount:c?Number(c[1]):0}}
-async function getBaseStores(env,route){const url=env.UPSTASH_REDIS_REST_URL,token=env.UPSTASH_REDIS_REST_TOKEN;if(!url||!token)return[];try{const r=await fetch(`${url}/get/${encodeURIComponent(`route:${route}`)}`,{headers:{Authorization:`Bearer ${token}`}});if(!r.ok)return[];const d=await r.json();let p=d?.result;try{p=typeof p==='string'?JSON.parse(p):p}catch(_){p=null}return Array.isArray(p?.stores)?p.stores:[]}catch(_){return[]}}
+async function getBaseStores(env,route,request){
+  const key=`route:${route}`,url=env.UPSTASH_REDIS_REST_URL,token=env.UPSTASH_REDIS_REST_TOKEN;
+  // 第一优先级：Upstash 中该线路的实时基准数据。
+  if(url&&token){
+    try{
+      const r=await fetch(`${url.replace(/\/$/,'')}/get/${encodeURIComponent(key)}`,{headers:{Authorization:`Bearer ${token}`}});
+      if(r.ok){const d=await r.json();let p=d?.result;try{p=typeof p==='string'?JSON.parse(p):p}catch(_){p=null}if(Array.isArray(p?.stores)&&p.stores.length)return p.stores;}
+    }catch(_){/* 继续使用仓库 Golden Source */}
+  }
+  // 第二优先级：仓库中的 Golden Source，避免数据库临时异常导致所有门店被误判为新增。
+  try{
+    const origin=new URL(request.url).origin;
+    const r=await fetch(`${origin}/data/base_data.json`,{cache:'no-store'});
+    if(r.ok){const d=await r.json();if(normalizeRoute(d?.line)===normalizeRoute(route)&&Array.isArray(d?.stores)&&d.stores.length)return d.stores;}
+  }catch(_){/* 最后允许返回空数组 */}
+  return [];
+}
+function normalizeRoute(v){const s=String(v||'').trim(),m=s.match(/^(\d+)号线$/);return m?`${String(parseInt(m[1],10)).padStart(2,'0')}号线`:s}
 function normalizeBase(s,i){if(typeof s==='string')return{name:cleanStoreName(s),code:String(i+1).padStart(2,'0'),nav:'',index:i};if(!s)return null;const name=cleanStoreName(s.name||s.storeName||s.title||s.customerName||'');return name?{name,code:String(s.code||i+1).padStart(2,'0'),nav:s.nav||s.navigation||s.url||'',index:i}:null}
 function matchKey(s){return cleanStoreName(s).replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"'‘’·-]/g,'').toLowerCase()}
 function normalizeAndSort(recognized,baseStores,rawText=''){const src=unique((recognized||[]).map(cleanStoreName).filter(Boolean)),base=(baseStores||[]).map(normalizeBase).filter(Boolean);let candidate=src;if(base.length&&candidate.length<2&&rawText){const recovered=[];for(const b of base){const n=matchKey(b.name);if(n.length>=6&&matchKey(rawText).includes(n))recovered.push(b.name)}candidate=unique(candidate.concat(recovered))}
