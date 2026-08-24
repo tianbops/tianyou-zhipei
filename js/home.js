@@ -61,9 +61,7 @@
     const route = Auth.getCurrentRoute();
     const local = readJSON('base_data', null);
     const cached = readJSON(`route_cache_${route}`, null);
-    baseStores = Array.isArray(local) && local.length
-      ? local
-      : (Array.isArray(cached?.stores) ? cached.stores : []);
+    baseStores = Array.isArray(local) && local.length ? local : (Array.isArray(cached?.stores) ? cached.stores : []);
 
     try {
       const response = await fetch(`/api/routes?route=${encodeURIComponent(route)}`, { cache: 'no-store' });
@@ -84,7 +82,7 @@
     const rank = new Map();
     baseStores.forEach((s, i) => {
       const name = storeName(s);
-      if (name) rank.set(name, i);
+      if (name) rank.set(normalizeName(name), i);
       if (s?.code) rank.set(String(s.code), i);
     });
 
@@ -100,17 +98,24 @@
       .map(({ _i, ...item }) => item);
   }
 
+  function parseWeight(value) {
+    if (value === null || value === undefined || value === '') return 0;
+    const text = String(value).trim().replace(/,/g, '');
+    const match = text.match(/[\d]+(?:\.\d+)?/);
+    if (!match) return 0;
+    const number = Number(match[0]);
+    if (!Number.isFinite(number)) return 0;
+    return /吨|\bt\b/i.test(text) ? number * 1000 : number;
+  }
+
   function totalWeight(orders) {
-    return (Array.isArray(orders) ? orders : []).reduce((sum, item) => {
-      const n = Number(item?.weight ?? item?.totalWeight ?? 0);
-      return sum + (Number.isFinite(n) ? n : 0);
-    }, 0);
+    return (Array.isArray(orders) ? orders : []).reduce((sum, item) => sum + parseWeight(item?.weight ?? item?.totalWeight), 0);
   }
 
   function updateSummary() {
     const orders = Auth.getTodayOrders ? Auth.getTodayOrders() : readJSON('today_orders', []);
     const count = Array.isArray(orders) ? orders.length : 0;
-    const storedWeight = Number.parseFloat(String(localStorage.getItem('today_total_weight') || '').replace(/[^\d.]/g, '')) || 0;
+    const storedWeight = parseWeight(localStorage.getItem('today_total_weight'));
     const weight = storedWeight || totalWeight(orders);
     const route = Auth.getCurrentRoute();
     const vehicle = localStorage.getItem('today_vehicle') || '';
@@ -147,18 +152,21 @@
   function parseText(text) {
     const result = [];
     const seen = new Set();
-    for (const raw of String(text || '').split(/\r?\n/)) {
+    const source = String(text || '').replace(/→|＞|》|➜|➤/g, '->');
+    const fragments = source.split(/\s*(?:->|\r?\n)\s*/);
+    for (const raw of fragments) {
       let line = normalizeName(raw);
       if (!line) continue;
-      const weightMatch = line.match(/(\d+(?:\.\d+)?)\s*(kg|KG|千克|公斤)/i);
-      line = line.replace(/\d+(?:\.\d+)?\s*(kg|KG|千克|公斤)/ig, '').trim();
+      const weightMatch = line.match(/(\d+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)/i);
+      line = line.replace(/\d+(?:\.\d+)?\s*(kg|KG|千克|公斤|吨|t)/ig, '').trim();
       const codeMatch = line.match(/^(\d{1,3})[、.．)）\s-]+(.+)$/);
       const code = codeMatch ? codeMatch[1].padStart(2, '0') : '';
       const name = normalizeName(codeMatch ? codeMatch[2] : line);
       if (!name || seen.has(name)) continue;
-      if (/(总重量|合计|总计|车牌|车辆|日期|线路)/.test(name)) continue;
+      if (/(总重量|总数量|总体积|合计|总计|车牌|车辆|日期|线路|主司机|送货员|额定装载|额定载重|额定体积|订单编号|运单编号)/.test(name)) continue;
+      if (!/(店|公司|经销商|加盟|中心|超市|便利|生鲜|食品|贸易|供应链|商行|门市|乳业|大厦|酒店|餐饮)/.test(name)) continue;
       seen.add(name);
-      result.push({ code, name, weight: weightMatch ? Number(weightMatch[1]) : 0 });
+      result.push({ code, name, weight: weightMatch ? parseWeight(weightMatch[0]) : 0 });
     }
     return rankOrders(result);
   }
@@ -175,11 +183,7 @@
   async function callOCR(file) {
     const route = Auth.getCurrentRoute();
     const image = await imageToDataURL(file);
-    const response = await fetch('/api/ocr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image, route })
-    });
+    const response = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image, route }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.success) throw new Error(data.error || `OCR接口错误 ${response.status}`);
     return data.data;
@@ -196,10 +200,7 @@
       status: item.status || '待配送'
     }));
 
-    const weightValue = meta.totalWeight !== undefined && meta.totalWeight !== ''
-      ? meta.totalWeight
-      : totalWeight(normalized);
-
+    const weightValue = meta.totalWeight !== undefined && meta.totalWeight !== '' ? meta.totalWeight : totalWeight(normalized);
     localStorage.setItem('today_orders', JSON.stringify(normalized));
     localStorage.setItem('today_order_date', date);
     localStorage.setItem('today_order_source', meta.source || 'manual');
@@ -207,14 +208,7 @@
     if (meta.vehicle) localStorage.setItem('today_vehicle', meta.vehicle);
 
     const history = readJSON('delivery_history', []);
-    const entry = {
-      date,
-      route,
-      vehicle: meta.vehicle || localStorage.getItem('today_vehicle') || '',
-      stores: normalized.length,
-      totalWeight: weightValue,
-      orders: normalized
-    };
+    const entry = { date, route, vehicle: meta.vehicle || localStorage.getItem('today_vehicle') || '', stores: normalized.length, totalWeight: weightValue, orders: normalized };
     const next = Array.isArray(history) ? [...history] : [];
     const index = next.findIndex(x => x?.date === date && x?.route === route);
     if (index >= 0) next[index] = entry; else next.unshift(entry);
@@ -231,11 +225,7 @@
     }
 
     try {
-      await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route, orders: normalized, totalWeight: weightValue, vehicle: entry.vehicle, date })
-      });
+      await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ route, orders: normalized, totalWeight: weightValue, vehicle: entry.vehicle, date }) });
     } catch (_) {}
 
     updateSummary();
@@ -330,19 +320,15 @@
           code: item.code || '',
           name: item.name || '',
           nav: item.nav || '',
-          weight: Number(String(item.weight || '').replace(/[^\d.]/g, '')) || 0,
-          matched: item.matched !== false,
+          weight: parseWeight(item.weight),
+          matched: item.matched === true,
           isNew: !!item.isNew
         })).filter(item => item.name) : [];
         if (!stores.length) throw new Error('AI未识别到有效门店');
         parsedOrders = rankOrders(stores);
         renderTags(parsedOrders);
-        renderStatus('success', parsedOrders.length);
-        const orders = await saveTodayOrders(parsedOrders, {
-          source: 'ai-ocr',
-          vehicle: data.vehicle || '',
-          totalWeight: data.totalWeight || totalWeight(parsedOrders)
-        });
+        renderStatus('success', parsedOrders.length, `解析完成：${parsedOrders.length} 家门店`);
+        const orders = await saveTodayOrders(parsedOrders, { source: 'ai-ocr', vehicle: data.vehicle || '', totalWeight: data.totalWeight || totalWeight(parsedOrders) });
         toast(`AI识别完成：${orders.length} 家门店`);
         $('uploadOverlay')?.classList.remove('active');
         setTimeout(window.goToOrderDetail, 700);
