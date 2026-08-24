@@ -6,8 +6,8 @@ export async function onRequest({request,env}){
     const body=await request.json(),image=body?.image,route=String(body?.route||'').trim();
     if(!image||!route)return json({success:false,error:'缺少运单图片或线路'},400);
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
-    const parsed=await runVisionOCR(env.AI,image),base=await getBaseStores(env,route),result=normalizeAndSort(parsed.stores,base);
-    if(!result.stores.length)return json({success:false,error:'未识别到承运订单中的有效门店，请重新上传清晰截图'},422);
+    const parsed=await runVisionOCR(env.AI,image),base=await getBaseStores(env,route),result=normalizeAndSort(parsed.stores,base,parsed.rawText);
+    if(!result.stores.length)return json({success:false,error:'图片中未识别到有效门店，请重新上传清晰截图'},422);
     return json({success:true,data:{route,date:normalizeDate(parsed.date),vehicle:normalizeVehicle(parsed.vehicle),totalWeight:normalizeWeight(parsed.totalWeight),rawOrderCount:Number(parsed.rawOrderCount)||0,stores:result.stores,storeCount:result.stores.length,matchedCount:result.matchedCount,newStoreCount:result.newStoreCount,recognizedCount:result.recognizedCount,warning:result.newStoreCount?`发现 ${result.newStoreCount} 家新增门店，请核对`:''}});
   }catch(e){console.error('OCR error',e);return json({success:false,error:e?.message||'运单图片处理失败'},500)}
 }
@@ -24,23 +24,22 @@ async function runVisionOCR(AI,image){
 6. 必须从第一个客户一直读到最后一个客户，不能只输出前几家。
 7. 保留区域、JM/Q编号、公司全称和括号内容。
 8. 忽略额定载重18吨、额定体积40m³、主司机、送货员以及底部ZW订单编号。
-9. stores数量必须等于完整routeText按箭头拆分后的数量。
+9. 如果“承运订单”四个字没有被清楚识别，也不要失败；请继续从整张图片中寻找所有客户/门店名称。
+10. 不要把门店数量猜成总数量；门店数量由实际客户名称决定。
 
 只返回JSON，不要Markdown，不要解释：
 {"date":"2026-08-22","vehicle":"渝DK7692","rawOrderCount":207,"totalWeight":"1.806213t","routeText":"A -> B -> C","stores":["A","B","C"]}`;
-  const dataUrl=String(image);
-  const messages=[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:dataUrl}}]}];
+  const dataUrl=String(image),messages=[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:dataUrl}}]}];
   try{
     const r=await AI.run('@cf/google/gemma-4-26b-a4b-it',{messages,max_completion_tokens:4096,temperature:0,chat_template_kwargs:{thinking:false}});
     return parseAIResponse(r);
   }catch(first){
-    // Gemma不可用时保留原LLaVA兼容路径。
     const r=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{prompt,image:Array.from(bytes),max_tokens:4096,temperature:0.01});
     return parseAIResponse(r);
   }
 }
 function extractAIText(r){if(typeof r==='string')return r;if(!r||typeof r!=='object')return '';return String(r.response??r.text??r.description??r.result?.response??r.result?.text??r.result?.description??'')}
-function parseAIResponse(r){const s=extractAIText(r).trim(),c=[];const f=s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);if(f)c.push(f[1]);c.push(s);const a=s.indexOf('{'),z=s.lastIndexOf('}');if(a>=0&&z>a)c.push(s.slice(a,z+1));for(const x of c){try{const d=JSON.parse(x);if(d&&Array.isArray(d.stores)){let stores=expandStoreList(d.stores);if(d.routeText&&countArrows(d.routeText)>0){const rs=splitStoreChain(d.routeText).map(cleanStoreName).filter(isLikelyStore);if(rs.length>=stores.length)stores=unique(rs)}return{stores,date:d.date||'',vehicle:d.vehicle||'',totalWeight:d.totalWeight||'',rawOrderCount:d.rawOrderCount||0}}}catch(_){}}return fallback(s)}
+function parseAIResponse(r){const s=extractAIText(r).trim(),c=[];const f=s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);if(f)c.push(f[1]);c.push(s);const a=s.indexOf('{'),z=s.lastIndexOf('}');if(a>=0&&z>a)c.push(s.slice(a,z+1));for(const x of c){try{const d=JSON.parse(x);if(d&&Array.isArray(d.stores)){let stores=expandStoreList(d.stores);if(d.routeText&&countArrows(d.routeText)>0){const rs=splitStoreChain(d.routeText).map(cleanStoreName).filter(isLikelyStore);if(rs.length>=stores.length)stores=unique(rs)}return{stores,date:d.date||'',vehicle:d.vehicle||'',totalWeight:d.totalWeight||'',rawOrderCount:d.rawOrderCount||0,rawText:s}}}catch(_){}}const fb=fallback(s);fb.rawText=s;return fb}
 function countArrows(v){return String(v||'').match(/->|→|＞|》|➜|➤|⇒/g)?.length||0}
 function expandStoreList(items){const out=[];for(const item of items||[]){const v=typeof item==='string'?item:item?.name||item?.storeName||item?.customerName||'';splitStoreChain(v).forEach(x=>{const n=cleanStoreName(x);if(n)out.push(n)})}return unique(out)}
 function splitStoreChain(v){return String(v||'').replace(/→|＞|》|➜|➤|⇒/g,'->').split(/\s*(?:->|-->)\s*/).map(x=>x.trim()).filter(Boolean)}
@@ -48,10 +47,12 @@ function fallback(s){const chains=s.match(/[^\n{}]{2,}(?:\s*(?:->|→|〉|》|�
 async function getBaseStores(env,route){const url=env.UPSTASH_REDIS_REST_URL,token=env.UPSTASH_REDIS_REST_TOKEN;if(!url||!token)return[];try{const r=await fetch(`${url}/get/${encodeURIComponent(`route:${route}`)}`,{headers:{Authorization:`Bearer ${token}`}});if(!r.ok)return[];const d=await r.json();let p=d?.result;try{p=typeof p==='string'?JSON.parse(p):p}catch(_){p=null}return Array.isArray(p?.stores)?p.stores:[]}catch(_){return[]}}
 function normalizeBase(s,i){if(typeof s==='string')return{name:cleanStoreName(s),code:String(i+1).padStart(2,'0'),nav:'',index:i};if(!s)return null;const name=cleanStoreName(s.name||s.storeName||s.title||s.customerName||'');return name?{name,code:String(s.code||i+1).padStart(2,'0'),nav:s.nav||s.navigation||s.url||'',index:i}:null}
 function matchKey(s){return cleanStoreName(s).replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"'‘’·-]/g,'').toLowerCase()}
-function normalizeAndSort(recognized,baseStores){const src=unique((recognized||[]).map(cleanStoreName).filter(Boolean)),base=(baseStores||[]).map(normalizeBase).filter(Boolean);if(!base.length)return{stores:src.map((name,i)=>({code:String(i+1).padStart(2,'0'),name,nav:'',isNew:true,matched:false})),recognizedCount:src.length,matchedCount:0,newStoreCount:src.length};const matched=[],news=[],used=new Set();src.forEach(raw=>{const rk=matchKey(raw);let hit=null;for(const b of base){if(used.has(b.index))continue;const bk=matchKey(b.name);if(rk===bk){hit=b;break}if(rk.length>10&&bk.length>10&&(rk.includes(bk)||bk.includes(rk)))hit=hit||b}if(hit){used.add(hit.index);matched.push({code:hit.code,name:hit.name,nav:hit.nav||'',isNew:false,matched:true,_i:hit.index})}else news.push({code:'',name:raw,nav:'',isNew:true,matched:false})});matched.sort((a,b)=>a._i-b._i);news.forEach((x,i)=>x.code=`N${String(i+1).padStart(2,'0')}`);return{stores:matched.concat(news).map(x=>{const y={...x};delete y._i;return y}),recognizedCount:src.length,matchedCount:matched.length,newStoreCount:news.length}}
+function normalizeAndSort(recognized,baseStores,rawText=''){const src=unique((recognized||[]).map(cleanStoreName).filter(Boolean)),base=(baseStores||[]).map(normalizeBase).filter(Boolean);let candidate=src;if(base.length&&candidate.length<2&&rawText){const recovered=[];for(const b of base){const n=matchKey(b.name);if(n.length>=6&&matchKey(rawText).includes(n))recovered.push(b.name)}candidate=unique(candidate.concat(recovered))}
+  if(!base.length)return{stores:candidate.map((name,i)=>({code:String(i+1).padStart(2,'0'),name,nav:'',isNew:true,matched:false})),recognizedCount:candidate.length,matchedCount:0,newStoreCount:candidate.length};
+  const matched=[],news=[],used=new Set();candidate.forEach(raw=>{const rk=matchKey(raw);let hit=null;for(const b of base){if(used.has(b.index))continue;const bk=matchKey(b.name);if(rk===bk){hit=b;break}if(rk.length>10&&bk.length>10&&(rk.includes(bk)||bk.includes(rk)))hit=hit||b}if(hit){used.add(hit.index);matched.push({code:hit.code,name:hit.name,nav:hit.nav||'',isNew:false,matched:true,_i:hit.index})}else if(isLikelyStore(raw))news.push({code:'',name:raw,nav:'',isNew:true,matched:false})});matched.sort((a,b)=>a._i-b._i);news.forEach((x,i)=>x.code=`N${String(i+1).padStart(2,'0')}`);return{stores:matched.concat(news).map(x=>{const y={...x};delete y._i;return y}),recognizedCount:candidate.length,matchedCount:matched.length,newStoreCount:news.length}}
 function cleanStoreName(v){return String(v||'').replace(/^[\s\d]+[、.．)）-]+/,'').replace(/\s+/g,' ').trim()}
 function unique(a){const s=new Set();return a.filter(x=>{const k=matchKey(x);if(!k||s.has(k))return false;s.add(k);return true})}
-function isLikelyStore(v){if(!v||v.length<3||v.length>160)return false;if(/总重量|总数量|总体积|订单编号|运单编号|车牌|车辆|运输日期|日期|司机|送货员|主司机|承运订单|额定装载|额定载重|额定体积|总计|合计|单价|金额/.test(v))return false;return /店|公司|经销商|加盟|中心|超市|便利|生鲜|食品|贸易|供应链|商行|门市|乳业|大厦|药房|餐饮|酒店|委员会|管理中心|服务中心/.test(v)}
+function isLikelyStore(v){if(!v||v.length<3||v.length>160)return false;if(/总重量|总数量|总体积|订单编号|运单编号|车牌|车辆|运输日期|日期|司机|送货员|主司机|承运订单|额定装载|额定载重|额定体积|总计|合计|单价|金额/.test(v))return false;return /店|公司|经销商|加盟|中心|超市|便利|生鲜|食品|贸易|商行|门市|乳业|大厦|药房|餐饮|酒店|委员会|管理中心|服务中心/.test(v)}
 function decodeImageBase64(input){let v=String(input||'').trim(),comma=v.indexOf(',');if(v.startsWith('data:')&&comma>=0)v=v.slice(comma+1);v=v.replace(/\s/g,'');const b=atob(v),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim(),m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return/吨|\bt\b/i.test(s)?`${n}t`:`${n}kg`}
 function normalizeVehicle(v){return String(v||'').replace(/[\s>]+$/,'').trim()}
