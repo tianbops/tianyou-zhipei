@@ -3,7 +3,6 @@
 
 export async function onRequest(context) {
   const { request, env } = context;
-
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
 
   try {
@@ -42,14 +41,11 @@ export async function onRequest(context) {
 }
 
 async function runAI(AI, imageInput) {
-  let imageBase64 = String(imageInput || '').trim();
-  imageBase64 = imageBase64.replace(/^data:image\/[^;]+;base64,/i, '');
-  imageBase64 = imageBase64.replace(/^data:application\/octet-stream;base64,/i, '').trim();
+  const bytes = decodeImageBase64(imageInput);
+  if (!bytes.length) throw new Error('图片数据无效或无法解码');
+  if (bytes.length < 100) throw new Error('图片数据过小');
+  if (!isSupportedImage(bytes)) throw new Error('无法识别手机截图图片格式，请使用 PNG 或 JPG 截图');
 
-  if (!imageBase64 || imageBase64.length < 100) throw new Error('图片数据无效或过小');
-
-  // Cloudflare Workers AI 的 LLaVA Image-to-Text 接口支持 object 形式，
-  // 其中 image 必须是 Base64 字符串。不要传 Uint8Array，否则会触发 5006 oneOf/schema 错误。
   const prompt = `你是天友乳业配送运单识别助手。
 请仔细读取整张手机截图运单，提取配送门店、总重量、车辆信息。
 只返回一个 JSON 对象，不要 Markdown，不要解释。
@@ -65,16 +61,39 @@ async function runAI(AI, imageInput) {
 7. 不要猜测图片中不存在的门店。
 8. JSON 必须完整闭合。`;
 
-  const response = await AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
+  // Cloudflare Workers AI 的 LLaVA 当前支持 image 为 8-bit 图像字节数组。
+  // 这里先把手机截图的 Base64/DataURL 真正还原成 JPEG/PNG 二进制字节，
+  // 再转成普通数字数组，避免把 Base64 文本本身当成图片字节导致 3016 decode u8。
+  return await AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
     prompt,
-    image: imageBase64,
+    image: Array.from(bytes),
     max_tokens: 2048,
     temperature: 0.1
   });
+}
 
-  const text = extractAIText(response);
-  if (!text) throw new Error('AI 返回空结果');
-  return text;
+function decodeImageBase64(input) {
+  let value = String(input || '').trim();
+  const comma = value.indexOf(',');
+  if (value.startsWith('data:') && comma >= 0) value = value.slice(comma + 1);
+  value = value.replace(/\s/g, '');
+  if (!value) return new Uint8Array();
+
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch (_) {
+    throw new Error('图片Base64数据损坏，无法解码');
+  }
+}
+
+function isSupportedImage(bytes) {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return true;
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return true;
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return true;
+  return false;
 }
 
 function extractAIText(response) {
@@ -83,8 +102,8 @@ function extractAIText(response) {
   return String(response.description ?? response.response ?? response.text ?? response.result?.description ?? response.result?.response ?? response.result?.text ?? '');
 }
 
-function parseAIResponse(text) {
-  const source = String(text || '').trim();
+function parseAIResponse(response) {
+  const source = extractAIText(response).trim();
   const candidates = [];
   const fenced = source.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenced) candidates.push(fenced[1]);
@@ -97,7 +116,7 @@ function parseAIResponse(text) {
       const data = JSON.parse(candidate);
       if (Array.isArray(data.stores)) {
         return {
-          stores: unique(data.stores.map(cleanStoreName).filter(Boolean)),
+          stores: unique(data.stores.map(item => typeof item === 'string' ? cleanStoreName(item) : cleanStoreName(item?.name || item?.storeName || '')).filter(Boolean)),
           totalWeight: data.totalWeight || '',
           vehicle: data.vehicle || ''
         };
@@ -109,13 +128,13 @@ function parseAIResponse(text) {
 
 function extractFallback(text) {
   const stores = [];
-  const lines = text.split(/[\r\n,，、；;]+/);
+  const lines = String(text || '').split(/[\r\n,，、；;]+/);
   for (const line of lines) {
     const value = cleanStoreName(line.replace(/^[-*\d.、）)]+\s*/, ''));
     if (value.length >= 3 && /(?:店|公司|经销商|加盟|厂|中心|超市|便利|生鲜|食品|贸易|供应链|商行|门市|乳业)/.test(value) && !/(总重量|重量|车牌|日期|合计|数量|司机|金额|单价)/.test(value)) stores.push(value);
   }
-  const weight = text.match(/(?:总重量|重量|合计重量|总计)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|吨|t)?/i);
-  const plate = text.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
+  const weight = String(text || '').match(/(?:总重量|重量|合计重量|总计)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|吨|t)?/i);
+  const plate = String(text || '').match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
   return { stores: unique(stores), totalWeight: weight ? `${weight[1]}${weight[2] || 'kg'}` : '', vehicle: plate ? plate[1] : '' };
 }
 
@@ -202,7 +221,7 @@ function normalizeBaseStore(store, index) {
 }
 
 function normalizeForMatch(value) {
-  return cleanStoreName(value).replace(/[（）()【】\[\]「」“”"'‘’·・,，。；;：:、\s]/g, '').replace(/^(重庆|渝北|江北|巴南|南岸|九龙坡|沙坪坝|大渡口|北碚|万州|涪陵)/, '');
+  return cleanStoreName(value).replace(/[（）()【】\[\]「」“”\"'‘’·・,，。；;：:、\s]/g, '').replace(/^(重庆|渝北|江北|巴南|南岸|九龙坡|沙坪坝|大渡口|北碚|万州|涪陵)/, '');
 }
 
 function cleanStoreName(value) {
