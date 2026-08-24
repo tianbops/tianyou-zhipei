@@ -1,315 +1,354 @@
 // functions/api/ocr.js
-// 运单图片 OCR 解析 + 门店匹配排序
+// 天友智配One：运单图片 AI 提取 → 门店标准化 → 去重 → 基准顺序排序
 
 export async function onRequest(context) {
   const { request, env } = context;
 
   if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    return json({ success: false, error: 'Method not allowed' }, 405);
   }
 
   try {
-    const { image, route } = await request.json();
+    const body = await request.json();
+    const image = body?.image;
+    const route = formatRoute(body?.route);
+
     if (!image || !route) {
-      return new Response(JSON.stringify({ error: 'Missing image or route' }), { status: 400 });
+      return json({ success: false, error: '缺少运单图片或线路' }, 400);
     }
 
-    // 1. 调用 AI 识别图片
-    let aiResult;
-    try {
-      aiResult = await runAI(env, image);
-    } catch (aiError) {
-      console.error('AI 调用失败:', aiError);
-      return new Response(JSON.stringify({
+    if (!env.AI || typeof env.AI.run !== 'function') {
+      return json({
         success: false,
-        error: `AI调用失败: ${aiError.message}`,
-        stack: aiError.stack
-      }), { status: 500 });
+        error: 'Cloudflare Workers AI 未绑定，请在 Pages 项目中配置 AI Binding，变量名必须为 AI'
+      }, 500);
     }
 
-    if (!aiResult) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'AI 返回空结果'
-      }), { status: 500 });
-    }
+    const aiText = await runAI(env.AI, image);
+    const parsed = parseAIResponse(aiText);
+    const baseStores = await getBaseStores(env, route);
+    const result = normalizeAndSort(parsed.stores, baseStores);
 
-    // 2. 解析 AI 返回的 JSON
-    let parsed = parseAIResponse(aiResult);
-    if (!parsed) {
-      parsed = extractWithRegex(aiResult);
-    }
-
-    // 3. 获取基准门店（失败时返回空数组，不影响主流程）
-    let baseStores = [];
-    try {
-      baseStores = await getBaseStores(env, route);
-    } catch (e) {
-      console.warn('获取基准门店失败，使用空列表:', e);
-    }
-
-    // 4. 模糊匹配并排序
-    const matchedStores = matchStores(parsed.stores || [], baseStores);
-    const sortedStores = sortByBaseOrder(matchedStores, baseStores);
-
-    // 5. 计算匹配率
-    const totalRecognized = parsed.stores ? parsed.stores.length : 0;
-    const matchRate = totalRecognized > 0 ? sortedStores.length / totalRecognized : 0;
-
-    const responseData = {
+    return json({
       success: true,
       data: {
-        stores: sortedStores,
-        totalWeight: parsed.totalWeight || '',
-        vehicle: parsed.vehicle || '',
-        matchRate: matchRate,
-        warning: matchRate < 0.7 && totalRecognized > 0 ? '部分门店未能识别，请检查' : undefined
+        stores: result.stores,
+        totalWeight: normalizeWeight(parsed.totalWeight),
+        vehicle: normalizeVehicle(parsed.vehicle),
+        recognizedCount: result.recognizedCount,
+        matchedCount: result.matchedCount,
+        newStoreCount: result.newStoreCount,
+        matchRate: result.recognizedCount
+          ? Number((result.matchedCount / result.recognizedCount).toFixed(4))
+          : 0,
+        warning: result.newStoreCount > 0
+          ? `发现 ${result.newStoreCount} 家新增/未匹配门店，请核对`
+          : ''
       }
-    };
-
-    return new Response(JSON.stringify(responseData), {
-      headers: { 'Content-Type': 'application/json' }
     });
-
   } catch (error) {
-    console.error('OCR 未捕获错误:', error);
-    return new Response(JSON.stringify({
+    console.error('OCR error:', error);
+    return json({
       success: false,
-      error: error.message,
-      stack: error.stack
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+      error: error?.message || '运单图片处理失败'
+    }, 500);
   }
 }
 
-// ============================================================
-// AI 调用（核心）
-// ============================================================
-async function runAI(env, imageBase64) {
-  // 去除 base64 前缀（如果有），确保是纯 base64
-  const pureBase64 = imageBase64.split(',')[1] || imageBase64;
-
-  // 验证数据
+async function runAI(AI, imageBase64) {
+  const pureBase64 = String(imageBase64).replace(/^data:image\/[^;]+;base64,/i, '').trim();
   if (!pureBase64 || pureBase64.length < 100) {
     throw new Error('图片数据无效或过小');
   }
 
-  // 日志记录
-  console.log('图片数据长度:', pureBase64.length);
-  console.log('图片数据前30字符:', pureBase64.substring(0, 30));
-
-  const prompt = `你是一个运单信息提取助手。请从图片中提取以下信息，并只返回 JSON 格式：
-- 门店名称列表（数组，每个门店名称用完整名称，按实际顺序）
-- 总重量（字符串，如 "368.5kg"）
-- 车牌号（字符串，如 "渝DK7692"）
-
-要求：
-1. 只返回 JSON，不要任何解释文字。
-2. JSON 格式：{"stores": ["门店1", "门店2"], "totalWeight": "xxx", "vehicle": "xxx"}
-3. 如果某项不存在，请留空字符串或空数组。
-
-图片数据已提供。`;
-
-  try {
-    // === 模型选择（可切换） ===
-    // 1. LLaVA 1.5 7B（推荐）
-    const model = '@cf/llava-hf/llava-1.5-7b-hf';
-    // 2. Llama 3.2 11B Vision（备选）
-    // const model = '@cf/meta/llama-3.2-11b-vision-instruct';
-    // 3. Phi-3.5 Vision（备选）
-    // const model = '@cf/microsoft/phi-3.5-vision-instruct';
-
-    const response = await env.AI.run(model, {
-      prompt: prompt,
-      image: pureBase64
-    });
-
-    const text = typeof response === 'string' ? response : response.response || '';
-    console.log('AI 返回长度:', text.length);
-    return text;
-  } catch (e) {
-    console.error('AI 调用错误:', e);
-    throw new Error(`AI 调用失败: ${e.message}`);
+  // Workers AI 的 LLaVA 图像参数使用图片二进制数据。
+  const binary = atob(pureBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
+
+  const prompt = `你是天友乳业配送运单识别助手。
+请仔细读取这张运单图片，提取配送门店、总重量、车辆信息。
+只返回一个 JSON 对象，不要 Markdown，不要解释。
+格式必须严格为：
+{"stores":["门店1","门店2"],"totalWeight":"368.5kg","vehicle":"渝DK7692"}
+规则：
+1. stores 只填写图片中实际出现的配送门店名称。
+2. 不要把编号、数量、重量、日期、备注单独当成门店。
+3. totalWeight 填图片中的总重量；没有则为空字符串。
+4. vehicle 填车牌号；没有则为空字符串。
+5. 尽可能完整保留中文公司/门店名称。`;
+
+  const response = await AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
+    prompt,
+    image: bytes,
+    max_tokens: 2048
+  });
+
+  const text = typeof response === 'string'
+    ? response
+    : response?.response || response?.description || response?.text || '';
+
+  if (!text) throw new Error('AI 返回空结果');
+  return text;
 }
 
-// ============================================================
-// 解析 AI 返回的 JSON
-// ============================================================
 function parseAIResponse(text) {
-  try {
-    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : text;
-    const data = JSON.parse(jsonStr);
-    if (data.stores && Array.isArray(data.stores)) {
-      return {
-        stores: data.stores.map(s => s.trim()).filter(Boolean),
-        totalWeight: data.totalWeight || '',
-        vehicle: data.vehicle || ''
-      };
-    }
-    return null;
-  } catch (e) {
-    return null;
+  const source = String(text || '').trim();
+  const candidates = [];
+
+  const fenced = source.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) candidates.push(fenced[1]);
+  candidates.push(source);
+
+  const objectMatch = source.match(/\{[\s\S]*\}/);
+  if (objectMatch) candidates.push(objectMatch[0]);
+
+  for (const candidate of candidates) {
+    try {
+      const data = JSON.parse(candidate);
+      if (Array.isArray(data.stores)) {
+        return {
+          stores: data.stores.map(cleanStoreName).filter(Boolean),
+          totalWeight: data.totalWeight || '',
+          vehicle: data.vehicle || ''
+        };
+      }
+    } catch (_) {}
   }
+
+  return extractFallback(source);
 }
 
-// ============================================================
-// 正则提取（备用方案，当 AI 返回非 JSON 时使用）
-// ============================================================
-function extractWithRegex(text) {
+function extractFallback(text) {
   const stores = [];
-  const keywords = ['店', '公司', '经销商', '加盟', '厂', '中心', '超市', '便利', '生鲜', '食品', '贸易', '供应链'];
-  const lines = text.split(/[\n,，、；;]+/);
+  const lines = text.split(/[\r\n,，、；;]+/);
+
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length > 2 && keywords.some(kw => trimmed.includes(kw))) {
-      stores.push(trimmed);
+    const value = cleanStoreName(line.replace(/^[-*\d.、）)]+\s*/, ''));
+    if (
+      value.length >= 3 &&
+      /(?:店|公司|经销商|加盟|厂|中心|超市|便利|生鲜|食品|贸易|供应链|商行|门市|乳业)/.test(value) &&
+      !/(总重量|重量|车牌|日期|合计|数量)/.test(value)
+    ) {
+      stores.push(value);
     }
   }
-  const weightMatch = text.match(/总重量[:：]?\s*([\d.]+)\s*(kg|千克|吨)/i);
-  const totalWeight = weightMatch ? weightMatch[0] : '';
-  const vehicleMatch = text.match(/车牌号[:：]?\s*([A-Z0-9]{6,8})/i);
-  const vehicle = vehicleMatch ? vehicleMatch[1] : '';
-  return { stores, totalWeight, vehicle };
+
+  const weight = text.match(/(?:总重量|重量|合计重量)\s*[:：]?\s*([\d.]+)\s*(kg|KG|千克|吨|t)?/i);
+  const plate = text.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
+
+  return {
+    stores: unique(stores),
+    totalWeight: weight ? `${weight[1]}${weight[2] || 'kg'}` : '',
+    vehicle: plate ? plate[1] : ''
+  };
 }
 
-// ============================================================
-// 获取基准门店（带缓存，失败返回空数组）
-// ============================================================
 async function getBaseStores(env, route) {
-  const cacheKey = `base_stores:${route}`;
-  const cache = caches.default;
+  const cacheKey = `https://tianyou-zhipei-cache.invalid/${encodeURIComponent(route)}`;
 
-  // 尝试从缓存读取
   try {
-    const cached = await cache.match(new Request(`https://cache/${cacheKey}`));
+    const cached = await caches.default.match(new Request(cacheKey));
     if (cached) {
       const data = await cached.json();
-      if (data.stores && data.stores.length) {
-        return data.stores;
-      }
+      if (Array.isArray(data.stores) && data.stores.length) return data.stores;
     }
-  } catch (e) {
-    // 缓存读取失败，继续
-  }
+  } catch (_) {}
 
-  // 从 Upstash 获取
-  const UPSTASH_URL = env.UPSTASH_REDIS_REST_URL;
-  const UPSTASH_TOKEN = env.UPSTASH_REDIS_REST_TOKEN;
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-    console.warn('Upstash 环境变量缺失');
-    return [];
-  }
+  const url = env.UPSTASH_REDIS_REST_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return [];
 
   try {
-    const redisKey = `route:${route}`;
-    const resp = await fetch(`${UPSTASH_URL}/get/${redisKey}`, {
-      headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
+    const response = await fetch(`${url}/get/route:${encodeURIComponent(route)}`, {
+      headers: { Authorization: `Bearer ${token}` }
     });
-    if (!resp.ok) {
-      console.warn('Upstash 请求失败:', resp.status);
-      return [];
-    }
-    const data = await resp.json();
-    let stores = [];
-    if (data.result) {
-      try {
-        const parsed = JSON.parse(data.result);
-        stores = parsed.stores || [];
-      } catch (e) {}
+
+    if (!response.ok) return [];
+    const data = await response.json();
+    let parsed = null;
+
+    if (data?.result) {
+      try { parsed = JSON.parse(data.result); } catch (_) {}
     }
 
-    // 存入缓存（1小时）
-    try {
-      const cacheResp = new Response(JSON.stringify({ stores }), {
-        headers: { 'Cache-Control': 'max-age=3600' }
-      });
-      await cache.put(new Request(`https://cache/${cacheKey}`), cacheResp);
-    } catch (e) {}
+    const stores = Array.isArray(parsed?.stores) ? parsed.stores : [];
+
+    if (stores.length) {
+      try {
+        await caches.default.put(
+          new Request(cacheKey),
+          new Response(JSON.stringify({ stores }), {
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=3600' }
+          })
+        );
+      } catch (_) {}
+    }
 
     return stores;
-  } catch (e) {
-    console.warn('Upstash 读取失败:', e);
+  } catch (error) {
+    console.warn('读取基准门店失败:', error);
     return [];
   }
 }
 
-// ============================================================
-// 模糊匹配（Levenshtein + 子串）
-// ============================================================
-function matchStores(recognized, baseStores) {
-  if (!baseStores.length) return recognized;
-
+function normalizeAndSort(recognized, baseStores) {
+  const base = baseStores.map(normalizeBaseStore).filter(Boolean);
+  const used = new Set();
   const matched = [];
-  const matchedIndices = new Set();
+  const newStores = [];
 
-  for (const name of recognized) {
-    let bestMatch = null;
-    let bestScore = -1;
+  for (const raw of unique(recognized.map(cleanStoreName))) {
+    let best = null;
+    let bestScore = 0;
 
-    for (let i = 0; i < baseStores.length; i++) {
-      if (matchedIndices.has(i)) continue;
-      const base = baseStores[i];
-      // 子串匹配（优先）
-      if (name.includes(base) || base.includes(name)) {
-        bestMatch = base;
-        bestScore = 1;
-        matchedIndices.add(i);
-        break;
-      }
-      // Levenshtein 距离
-      const dist = levenshtein(name, base);
-      const maxLen = Math.max(name.length, base.length);
-      const similarity = 1 - dist / maxLen;
-      if (similarity > 0.6 && similarity > bestScore) {
-        bestScore = similarity;
-        bestMatch = base;
-        matchedIndices.add(i);
+    for (const item of base) {
+      if (used.has(item.index)) continue;
+
+      const a = normalizeForMatch(raw);
+      const b = normalizeForMatch(item.name);
+      if (!a || !b) continue;
+
+      let score = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
+      if (a.includes(b) || b.includes(a)) score = Math.max(score, 0.92);
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = item;
       }
     }
 
-    if (bestMatch) {
-      matched.push(bestMatch);
+    if (best && bestScore >= 0.60) {
+      used.add(best.index);
+      matched.push({
+        code: best.code || String(best.index + 1).padStart(2, '0'),
+        name: best.name,
+        nav: best.nav || '',
+        isNew: false,
+        matchScore: Number(bestScore.toFixed(3)),
+        _order: best.index
+      });
     } else {
-      matched.push(name);
+      newStores.push({
+        code: '',
+        name: raw,
+        nav: '',
+        isNew: true,
+        matchScore: 0,
+        _order: 999999
+      });
     }
   }
 
-  return matched;
+  matched.sort((a, b) => a._order - b._order);
+  const stores = [...matched, ...newStores].map((item, index) => ({
+    code: item.code || String(index + 1).padStart(2, '0'),
+    name: item.name,
+    nav: item.nav,
+    isNew: item.isNew,
+    matchScore: item.matchScore
+  }));
+
+  return {
+    stores,
+    recognizedCount: unique(recognized.map(cleanStoreName)).length,
+    matchedCount: matched.length,
+    newStoreCount: newStores.length
+  };
+}
+
+function normalizeBaseStore(store, index) {
+  if (typeof store === 'string') {
+    return { index, code: '', name: cleanStoreName(store), nav: '' };
+  }
+
+  if (!store || typeof store !== 'object') return null;
+
+  return {
+    index,
+    code: String(store.code || store.id || '').trim(),
+    name: cleanStoreName(store.name || store.storeName || store.title || ''),
+    nav: store.nav || store.navigation || store.url || ''
+  };
+}
+
+function normalizeForMatch(value) {
+  return cleanStoreName(value)
+    .replace(/[（）()【】\[\]「」“”"'‘’·・,，。；;：:、\s]/g, '')
+    .replace(/^(重庆|渝北|江北|巴南|南岸|九龙坡|沙坪坝|大渡口|北碚|万州|涪陵)/, '');
+}
+
+function cleanStoreName(value) {
+  return String(value || '')
+    .replace(/^(门店名称|门店|客户名称|客户|名称)\s*[:：]?/i, '')
+    .replace(/^\s*[\d]{1,3}[.、)）]\s*/, '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function normalizeWeight(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const match = text.match(/[\d]+(?:\.\d+)?/);
+  if (!match) return text;
+  const unit = /吨|t/i.test(text) ? 't' : 'kg';
+  return `${match[0]}${unit}`;
+}
+
+function normalizeVehicle(value) {
+  const text = String(value || '').trim().replace(/\s+/g, '').toUpperCase();
+  const match = text.match(/[\u4e00-\u9fa5][A-Z0-9]{5,7}/);
+  return match ? match[0] : text;
+}
+
+function formatRoute(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const match = text.match(/^(\d+)号线$/);
+  if (match) return `${String(parseInt(match[1], 10)).padStart(2, '0')}号线`;
+  if (/^\d+$/.test(text)) return `${String(parseInt(text, 10)).padStart(2, '0')}号线`;
+  return text;
+}
+
+function unique(list) {
+  const seen = new Set();
+  return list.filter(item => {
+    const key = normalizeForMatch(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function levenshtein(a, b) {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  const matrix = [];
-  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      const cost = a[j - 1] === b[i - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,
-        matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost
       );
     }
+    for (let j = 0; j <= b.length; j++) previous[j] = current[j];
   }
-  return matrix[b.length][a.length];
+  return previous[b.length];
 }
 
-// ============================================================
-// 按基准顺序排序
-// ============================================================
-function sortByBaseOrder(stores, baseStores) {
-  if (!baseStores.length) return stores;
-  const orderMap = {};
-  baseStores.forEach((name, idx) => { orderMap[name] = idx; });
-  return stores.sort((a, b) => {
-    const idxA = orderMap[a] !== undefined ? orderMap[a] : 9999;
-    const idxB = orderMap[b] !== undefined ? orderMap[b] : 9999;
-    return idxA - idxB;
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    }
   });
 }
