@@ -45,8 +45,17 @@
       .replace(/[\u3000]/g, ' ')
       .replace(/^[\s\d、.．)）_-]+/, '')
       .replace(/[，,。；;：:]$/, '')
+      .replace(/[（）]/g, m => m === '（' ? '(' : ')')
+      .replace(/[【】]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  function compactName(name) {
+    return normalizeName(name)
+      .toLowerCase()
+      .replace(/[\s\-_/\\,.，。:：;；'"“”‘’()（）【】\[\]]/g, '')
+      .replace(/(重庆市|重庆|有限公司|有限责任公司|公司|集团有限公司|集团|管理有限公司|餐饮管理有限公司|贸易有限公司|食品有限公司|供应链发展有限公司|供应链科技有限公司)$/g, '');
   }
 
   function storeName(store) {
@@ -55,6 +64,73 @@
 
   function storeCode(store, index) {
     return String(store?.code || store?.id || index + 1).padStart(2, '0');
+  }
+
+  function matchScore(input, canonical) {
+    const a = compactName(input);
+    const b = compactName(canonical);
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    if (a.includes(b) || b.includes(a)) return Math.min(a.length, b.length) / Math.max(a.length, b.length) * 0.96;
+
+    const bigrams = s => {
+      const set = new Set();
+      for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+      return set;
+    };
+    const sa = bigrams(a), sb = bigrams(b);
+    if (!sa.size || !sb.size) return 0;
+    let common = 0;
+    sa.forEach(x => { if (sb.has(x)) common++; });
+    return (2 * common) / (sa.size + sb.size);
+  }
+
+  function matchStore(item) {
+    const inputName = normalizeName(item?.name || item?.storeName || item?.shopName || item?.门店名称);
+    const inputCode = String(item?.code || '').replace(/\D/g, '').padStart(2, '0');
+    if (!inputName && !inputCode) return { item, store: null, score: 0, matched: false, isNew: true };
+
+    if (inputCode) {
+      const byCode = baseStores.find(s => storeCode(s, 0) === inputCode);
+      if (byCode) return { item, store: byCode, score: 1, matched: true, isNew: false };
+    }
+
+    let best = null;
+    for (const store of baseStores) {
+      const score = matchScore(inputName, storeName(store));
+      if (!best || score > best.score) best = { item, store, score };
+    }
+
+    const threshold = inputName.length <= 5 ? 0.72 : 0.58;
+    if (best && best.score >= threshold) {
+      return { item, store: best.store, score: best.score, matched: true, isNew: false };
+    }
+    return { item, store: null, score: best?.score || 0, matched: false, isNew: true };
+  }
+
+  function canonicalizeOrder(item) {
+    const result = matchStore(item);
+    if (!result.matched) {
+      return {
+        ...item,
+        name: normalizeName(item?.name || item?.storeName || item?.shopName || item?.门店名称),
+        code: item?.code || '',
+        matched: false,
+        isNew: true
+      };
+    }
+
+    const store = result.store;
+    return {
+      ...item,
+      code: storeCode(store, baseStores.indexOf(store)),
+      name: storeName(store),
+      nav: item?.nav || store?.nav || '',
+      note: item?.note || store?.note || '',
+      matched: true,
+      isNew: false,
+      matchScore: Number(result.score.toFixed(3))
+    };
   }
 
   async function loadBaseStores() {
@@ -81,20 +157,31 @@
   }
 
   function rankOrders(list) {
+    const canonical = (Array.isArray(list) ? list : []).map(item => canonicalizeOrder(item));
+    const seen = new Set();
+    const unique = [];
+
+    for (const item of canonical) {
+      const key = item.matched
+        ? `base:${item.code}`
+        : `new:${compactName(item.name)}`;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    }
+
     const rank = new Map();
     baseStores.forEach((s, i) => {
       const name = storeName(s);
-      if (name) rank.set(name, i);
-      if (s?.code) rank.set(String(s.code), i);
+      if (name) rank.set(compactName(name), i);
+      if (s?.code) rank.set(`code:${String(s.code).padStart(2, '0')}`, i);
     });
 
-    return (Array.isArray(list) ? list : [])
+    return unique
       .map((item, i) => ({ ...item, _i: i }))
       .sort((a, b) => {
-        const an = normalizeName(a?.name || a?.storeName || a?.shopName || a?.门店名称);
-        const bn = normalizeName(b?.name || b?.storeName || b?.shopName || b?.门店名称);
-        const ai = rank.has(an) ? rank.get(an) : (rank.has(String(a?.code)) ? rank.get(String(a.code)) : 999999);
-        const bi = rank.has(bn) ? rank.get(bn) : (rank.has(String(b?.code)) ? rank.get(String(b.code)) : 999999);
+        const ai = a.matched ? (rank.get(compactName(a.name)) ?? rank.get(`code:${a.code}`) ?? 999999) : 999999;
+        const bi = b.matched ? (rank.get(compactName(b.name)) ?? rank.get(`code:${b.code}`) ?? 999999) : 999999;
         return ai - bi || a._i - b._i;
       })
       .map(({ _i, ...item }) => item);
@@ -146,7 +233,7 @@
 
   function parseText(text) {
     const result = [];
-    const seen = new Set();
+    const seenRaw = new Set();
     for (const raw of String(text || '').split(/\r?\n/)) {
       let line = normalizeName(raw);
       if (!line) continue;
@@ -155,9 +242,11 @@
       const codeMatch = line.match(/^(\d{1,3})[、.．)）\s-]+(.+)$/);
       const code = codeMatch ? codeMatch[1].padStart(2, '0') : '';
       const name = normalizeName(codeMatch ? codeMatch[2] : line);
-      if (!name || seen.has(name)) continue;
+      if (!name) continue;
       if (/(总重量|合计|总计|车牌|车辆|日期|线路)/.test(name)) continue;
-      seen.add(name);
+      const rawKey = compactName(name);
+      if (!rawKey || seenRaw.has(rawKey)) continue;
+      seenRaw.add(rawKey);
       result.push({ code, name, weight: weightMatch ? Number(weightMatch[1]) : 0 });
     }
     return rankOrders(result);
