@@ -1,101 +1,36 @@
 // functions/api/routes.js
-// 线路数据 API（替代原来的 [route].js）
+import { authRequired } from './_auth.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
-  const route = url.searchParams.get('route');
+  const route = normalizeRoute(url.searchParams.get('route'));
   const method = request.method;
+  if (!route) return json({error:'Missing route parameter'},400);
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({error:'Redis not configured'},500);
 
-  if (!route) {
-    return new Response(JSON.stringify({ error: 'Missing route parameter' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  const session = await authRequired(request, env, { route });
+  if (!session) return json({error:'未登录或无权访问该线路'},401);
+  const key = `route:${route}`;
 
-  const UPSTASH_URL = env.UPSTASH_REDIS_REST_URL;
-  const UPSTASH_TOKEN = env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-    return new Response(JSON.stringify({ error: 'Redis not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  const redisKey = `route:${route}`;
-
-  // ============================================================
-  // GET - 获取线路数据
-  // ============================================================
-  if (method === 'GET') {
-    try {
-      const resp = await fetch(`${UPSTASH_URL}/get/${redisKey}`, {
-        headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
-      });
-      if (!resp.ok) {
-        return new Response(JSON.stringify({ route, stores: [] }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      const data = await resp.json();
-      let stores = [];
-      if (data.result) {
-        try {
-          const parsed = JSON.parse(data.result);
-          stores = parsed.stores || [];
-        } catch (e) {}
-      }
-      return new Response(JSON.stringify({ route, stores }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    } catch (e) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+  try {
+    if (method === 'GET') {
+      const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`}});
+      if (!r.ok) return json({route,stores:[]});
+      const d = await r.json(); let stores=[];
+      if(d.result){try{const p=JSON.parse(d.result);stores=Array.isArray(p?.stores)?p.stores:[]}catch{}}
+      return json({route,stores});
     }
-  }
-
-  // ============================================================
-  // PUT - 保存线路数据
-  // ============================================================
-  if (method === 'PUT') {
-    try {
-      const body = await request.json();
-      const dataToSave = JSON.stringify({
-        route: route,
-        stores: body.stores || [],
-        updatedAt: new Date().toISOString()
-      });
-      const resp = await fetch(`${UPSTASH_URL}/set/${redisKey}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${UPSTASH_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(dataToSave)
-      });
-      if (!resp.ok) {
-        return new Response(JSON.stringify({ error: 'Failed to save route' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    } catch (e) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (method === 'PUT') {
+      const body=await request.json();
+      if(!Array.isArray(body.stores))return json({error:'stores 必须是数组'},400);
+      const value=JSON.stringify({route,stores:body.stores,updatedAt:new Date().toISOString()});
+      const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`,{method:'POST',headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify(value)});
+      if(!r.ok)return json({error:'Failed to save route'},500);
+      return json({success:true,route,storeCount:body.stores.length});
     }
-  }
-
-  return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-    status: 405,
-    headers: { 'Content-Type': 'application/json' }
-  });
+    return json({error:'Method not allowed'},405);
+  } catch(e){console.error('routes api error',e);return json({error:'线路数据服务异常'},500)}
 }
+function normalizeRoute(v){const s=String(v||'').trim();const m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s}
+function json(payload,status=200){return new Response(JSON.stringify(payload),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}})}
