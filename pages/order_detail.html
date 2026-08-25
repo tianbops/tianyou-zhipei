@@ -43,31 +43,5 @@
   </div>
   <script src="../js/auth.js"></script>
   <script src="../js/order_detail.js"></script>
-  <script>
-    // 兼容缓存数据：如果详情脚本/API未及时取得数据，直接使用首页刚保存的今日运单。
-    document.addEventListener('DOMContentLoaded', function () {
-      setTimeout(function () {
-        try {
-          const raw = localStorage.getItem('today_orders');
-          if (!raw) return;
-          const orders = JSON.parse(raw);
-          if (!Array.isArray(orders) || !orders.length) return;
-          const list = document.getElementById('routeList');
-          if (!list || list.children.length && !list.textContent.includes('今日暂无配送数据')) return;
-          list.innerHTML = '';
-          orders.forEach(function (item, index) {
-            const row = document.createElement('div'); row.className='store-item';
-            const idx=document.createElement('span'); idx.className='store-index'; idx.textContent=String(item.code||index+1).padStart(2,'0')+'、';
-            const name=document.createElement('span'); name.className='store-name'; name.textContent=(item.isNew?'⚠️ ':'')+(item.name||item.storeName||'');
-            const nav=document.createElement('button'); nav.className='nav-btn'; nav.textContent='导航'; nav.onclick=function(){ if(item.nav) location.href=item.nav; else alert('该门店暂无导航地址'); };
-            row.append(idx,name,nav); list.appendChild(row);
-          });
-          document.getElementById('storeCount').textContent=String(orders.length);
-          const w=localStorage.getItem('today_total_weight');
-          if(w) document.getElementById('totalWeight').textContent=String(w).replace(/\s*kg$/i,'')+' kg';
-        } catch(e) { console.warn('今日运单缓存显示失败',e); }
-      }, 120);
-    });
-  </script>
 </body>
 </html>
