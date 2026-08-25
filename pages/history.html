@@ -5,397 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>历史查询</title>
   <link rel="stylesheet" href="../css/order.css">
-  <style>
-    .date-picker-title {
-      text-align: center;
-      color: #B8C2CC;
-      font-size: 15px;
-      letter-spacing: 2px;
-      margin-bottom: 10px;
-    }
-    .date-picker {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-    }
-    .date-picker select {
-      flex: 1;
-      height: 50px;
-      background: #05070A;
-      color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      text-align: center;
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      padding: 4px 0;
-      cursor: pointer;
-      overflow-y: auto;
-    }
-    .date-picker select:focus {
-      outline: 2px solid rgba(36, 87, 166, 0.45);
-    }
-    .date-picker select option {
-      background: #18212B;
-      color: #fff;
-      padding: 6px 8px;
-      font-size: 14px;
-      text-align: center;
-    }
-    .date-picker select::-webkit-scrollbar {
-      width: 4px;
-    }
-    .date-picker select::-webkit-scrollbar-thumb {
-      background: #3A4654;
-      border-radius: 10px;
-    }
-    .date-picker select {
-      scrollbar-width: thin;
-      scrollbar-color: #3A4654 transparent;
-    }
-    .query-btn {
-      width: 100%;
-      height: 48px;
-      border: none;
-      border-radius: 14px;
-      background: #2457A6;
-      color: #fff;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
-      margin-top: 14px;
-    }
-    .query-btn:active { transform: scale(0.97); }
-    .history-scroll {
-      max-height: 380px;
-      overflow-y: auto;
-      padding-right: 4px;
-      margin-top: 4px;
-    }
-    .history-scroll::-webkit-scrollbar {
-      width: 4px;
-    }
-    .history-scroll::-webkit-scrollbar-thumb {
-      background: #3A4654;
-      border-radius: 10px;
-    }
-    .history-scroll .empty-tip {
-      text-align: center;
-      padding: 40px 20px;
-      color: #7F8B98;
-      font-size: 15px;
-    }
-    .history-scroll .empty-tip .icon {
-      font-size: 48px;
-      display: block;
-      margin-bottom: 12px;
-    }
-    .history-item {
-      background: #05070A;
-      border-radius: 14px;
-      padding: 16px 18px;
-      margin-bottom: 12px;
-      border: 1px solid rgba(255,255,255,0.05);
-    }
-    .history-item:last-child { margin-bottom: 0; }
-    .history-item .history-date {
-      font-size: 16px;
-      font-weight: bold;
-      margin-bottom: 8px;
-      color: #FFB020;
-    }
-    .history-item .info-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      height: 34px;
-      font-size: 14px;
-      border-bottom: none;
-    }
-    .history-item .info-row .label {
-      color: #7F8B98;
-    }
-    .history-item .info-row .value {
-      color: #fff;
-      font-weight: 500;
-    }
-    .history-item .history-btn {
-      width: 100%;
-      height: 40px;
-      margin-top: 10px;
-      background: #2457A6;
-      border: none;
-      border-radius: 12px;
-      color: #fff;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    .history-item .history-btn:active { transform: scale(0.97); }
-    @media (max-height: 700px) {
-      .date-picker select { height: 40px; font-size: 14px; }
-      .date-picker select option { font-size: 12px; padding: 4px 6px; }
-      .history-scroll { max-height: 240px; }
-    }
-  </style>
 </head>
 <body>
   <div class="app-container">
-    <header class="top-bar">
-      <button class="back-btn" onclick="goBack()">←</button>
-      <div class="app-title">历史查询</div>
-      <div style="width:40px;"></div>
-    </header>
-
+    <header class="top-bar"><button class="back-btn" onclick="goBack()">←</button><div class="app-title">历史查询</div><div style="width:40px;"></div></header>
     <section class="task-card">
       <div class="date-picker-title">选择日期</div>
-      <div class="date-picker">
-        <select id="yearSelect" onchange="updateDateDisplay()"></select>
-        <select id="monthSelect" onchange="updateDateDisplay()"></select>
-        <select id="daySelect" onchange="updateDateDisplay()"></select>
-      </div>
-      <button class="query-btn" onclick="queryHistory()">查询配送记录</button>
+      <div class="date-picker"><select id="yearSelect"></select><select id="monthSelect"></select><select id="daySelect"></select></div>
+      <button class="query-btn" id="queryBtn">查询配送记录</button>
     </section>
-
-    <section class="task-card">
-      <div class="route-title">📋 配送记录</div>
-      <div class="history-scroll" id="historyList">
-        <div class="empty-tip">
-          <span class="icon">📭</span>
-          请选择日期并点击查询
-        </div>
-      </div>
-    </section>
+    <section class="task-card"><div class="route-title">📋 配送记录</div><div class="history-scroll" id="historyList"><div class="empty-tip">请选择日期并点击查询</div></div></section>
   </div>
-
-  <script src="../js/auth.js"></script>
-  <script>
-    let selectedYear = '';
-    let selectedMonth = '';
-    let selectedDay = '';
-    let historyData = [];
-
-    // ============================================================
-    // 页面初始化
-    // ============================================================
-    document.addEventListener('DOMContentLoaded', function() {
-      if (!Auth.checkAuth()) return;
-      
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      
-      selectedYear = String(year);
-      selectedMonth = month;
-      selectedDay = day;
-      
-      populateSelectors(year, parseInt(month), parseInt(day));
-      loadHistory(`${year}-${month}-${day}`);
-    });
-
-    // ============================================================
-    // 填充选择器
-    // ============================================================
-    function populateSelectors(year, month, day) {
-      const yearSelect = document.getElementById('yearSelect');
-      const monthSelect = document.getElementById('monthSelect');
-      const daySelect = document.getElementById('daySelect');
-      
-      yearSelect.innerHTML = '';
-      for (let i = year - 5; i <= year + 1; i++) {
-        const option = document.createElement('option');
-        option.value = i;
-        option.textContent = i + '年';
-        if (i === year) option.selected = true;
-        yearSelect.appendChild(option);
-      }
-      
-      monthSelect.innerHTML = '';
-      for (let i = 1; i <= 12; i++) {
-        const option = document.createElement('option');
-        option.value = String(i).padStart(2, '0');
-        option.textContent = i + '月';
-        if (i === month) option.selected = true;
-        monthSelect.appendChild(option);
-      }
-      
-      const daysInMonth = getDaysInMonth(year, month);
-      daySelect.innerHTML = '';
-      for (let i = 1; i <= daysInMonth; i++) {
-        const option = document.createElement('option');
-        option.value = String(i).padStart(2, '0');
-        option.textContent = i + '日';
-        if (i === day) option.selected = true;
-        daySelect.appendChild(option);
-      }
-    }
-
-    function getDaysInMonth(year, month) {
-      return new Date(year, month, 0).getDate();
-    }
-
-    function updateDateDisplay() {
-      const year = document.getElementById('yearSelect').value;
-      const month = document.getElementById('monthSelect').value;
-      const day = document.getElementById('daySelect').value;
-      
-      selectedYear = year;
-      selectedMonth = month;
-      selectedDay = day;
-      
-      const daysInMonth = getDaysInMonth(parseInt(year), parseInt(month));
-      const daySelect = document.getElementById('daySelect');
-      const currentDay = parseInt(day);
-      
-      if (currentDay > daysInMonth) {
-        daySelect.innerHTML = '';
-        for (let i = 1; i <= daysInMonth; i++) {
-          const option = document.createElement('option');
-          option.value = String(i).padStart(2, '0');
-          option.textContent = i + '日';
-          if (i === daysInMonth) option.selected = true;
-          daySelect.appendChild(option);
-        }
-        selectedDay = String(daysInMonth).padStart(2, '0');
-      }
-    }
-
-    // ============================================================
-    // 查询历史（从 /api/history 获取）
-    // ============================================================
-    function queryHistory() {
-      const year = document.getElementById('yearSelect').value;
-      const month = document.getElementById('monthSelect').value;
-      const day = document.getElementById('daySelect').value;
-      const date = `${year}-${month}-${day}`;
-      loadHistory(date);
-    }
-
-    async function loadHistory(date) {
-      const container = document.getElementById('historyList');
-      container.innerHTML = '<div class="empty-tip"><span class="icon">⏳</span>加载中...</div>';
-      
-      const route = Auth.getCurrentRoute();
-      
-      try {
-        const response = await fetch(`/api/history?date=${date}&route=${encodeURIComponent(route)}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.length > 0) {
-            historyData = data;
-            renderHistory(data);
-            return;
-          }
-        }
-        // 尝试从本地读取（兼容旧数据）
-        const allHistory = JSON.parse(localStorage.getItem('delivery_history') || '[]');
-        const filtered = allHistory.filter(item => item.date === date);
-        if (filtered.length > 0) {
-          historyData = filtered;
-          renderHistory(filtered);
-          return;
-        }
-        container.innerHTML = `
-          <div class="empty-tip">
-            <span class="icon">📭</span>
-            暂无配送记录<br>
-            <span style="font-size:13px;color:#4A5568;">${date} 没有配送数据</span>
-          </div>
-        `;
-      } catch (error) {
-        console.error("加载历史失败:", error);
-        container.innerHTML = `
-          <div class="empty-tip">
-            <span class="icon">⚠️</span>
-            加载失败，请重试
-          </div>
-        `;
-      }
-    }
-
-    function renderHistory(records) {
-      const container = document.getElementById('historyList');
-      container.innerHTML = "";
-      
-      if (!records || records.length === 0) {
-        container.innerHTML = `
-          <div class="empty-tip">
-            <span class="icon">📭</span>
-            暂无配送记录
-          </div>
-        `;
-        return;
-      }
-      
-      records.forEach(function(item, index) {
-        const orderCount = item.count || (item.orders ? item.orders.length : 0);
-        const weight = item.weight || '0.0 kg';
-        const route = item.route || Auth.getCurrentRoute();
-        const vehicle = item.vehicle || '渝DK7692';
-        const date = item.date || '未知日期';
-        
-        container.innerHTML += `
-          <div class="history-item">
-            <div class="history-date">📅 ${date}</div>
-            <div class="info-row">
-              <span class="label">线路</span>
-              <span class="value">${route}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">车辆</span>
-              <span class="value">🚚 ${vehicle}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">配送</span>
-              <span class="value">${orderCount} 家门店</span>
-            </div>
-            <div class="info-row">
-              <span class="label">总重量</span>
-              <span class="value">${weight}</span>
-            </div>
-            <button class="history-btn" onclick="viewHistoryDetail(${index})">
-              查看路线 →
-            </button>
-          </div>
-        `;
-      });
-    }
-
-    function viewHistoryDetail(index) {
-      const item = historyData[index];
-      if (!item) {
-        alert('数据不存在');
-        return;
-      }
-      
-      localStorage.setItem('history_view_data', JSON.stringify(item));
-      window.location.href = 'order_detail.html?mode=history';
-    }
-
-    // ============================================================
-    // 返回首页
-    // ============================================================
-    function goBack() {
-      window.location.href = "../home.html";
-    }
-
-    // ============================================================
-    // 事件绑定
-    // ============================================================
-    document.getElementById('yearSelect').addEventListener('change', function() {
-      updateDateDisplay();
-    });
-    document.getElementById('monthSelect').addEventListener('change', function() {
-      updateDateDisplay();
-    });
-
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        queryHistory();
-      }
-    });
-  </script>
+<script src="../js/auth.js"></script>
+<script>
+'use strict';
+let historyData=[];
+const $=id=>document.getElementById(id);
+function today(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')]}
+function daysInMonth(y,m){return new Date(Number(y),Number(m),0).getDate()}
+function fill(y,m,d){$('yearSelect').innerHTML='';for(let i=y-5;i<=y+1;i++)$('yearSelect').add(new Option(i+'年',i,i===y,i===y));$('monthSelect').innerHTML='';for(let i=1;i<=12;i++)$('monthSelect').add(new Option(i+'月',String(i).padStart(2,'0'),i===m,i===m));fillDays(y,m,d)}
+function fillDays(y,m,d){$('daySelect').innerHTML='';const max=daysInMonth(y,m);const selected=Math.min(Number(d),max);for(let i=1;i<=max;i++)$('daySelect').add(new Option(i+'日',String(i).padStart(2,'0'),i===selected,i===selected))}
+function selectedDate(){return `${$('yearSelect').value}-${$('monthSelect').value}-${$('daySelect').value}`}
+$('monthSelect')?.addEventListener('change',()=>fillDays($('yearSelect').value,$('monthSelect').value,$('daySelect').value));
+$('yearSelect')?.addEventListener('change',()=>fillDays($('yearSelect').value,$('monthSelect').value,$('daySelect').value));
+$('queryBtn')?.addEventListener('click',()=>loadHistory(selectedDate()));
+async function loadHistory(date){
+  const box=$('historyList');box.innerHTML='<div class="empty-tip">⏳ 加载中...</div>';
+  try{
+    const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:Auth.getAuthHeaders?Auth.getAuthHeaders():{}});
+    if(!r.ok) throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);
+    const payload=await r.json();
+    const records=Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);
+    historyData=records;
+    render(records);
+  }catch(e){console.error(e);box.innerHTML=`<div class="empty-tip">🌐 ${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}
+}
+function render(records){const box=$('historyList');if(!records.length){box.innerHTML='<div class="empty-tip">📭 暂无配送记录</div>';return}box.innerHTML='';records.forEach((item,i)=>{const card=document.createElement('div');card.className='history-item';const count=item.count??item.orders?.length??0;card.innerHTML=`<div class="history-date">📅 ${escapeHtml(item.date||'未知日期')}</div><div class="info-row"><span>线路</span><b>${escapeHtml(item.route||'')}</b></div><div class="info-row"><span>车辆</span><b>🚚 ${escapeHtml(item.vehicle||'未设置')}</b></div><div class="info-row"><span>配送</span><b>${count} 家门店</b></div><div class="info-row"><span>总重量</span><b>${escapeHtml(formatWeight(item.weight))}</b></div><div class="info-row"><span>批次</span><b>${escapeHtml(item.orderBatchId||'—')}</b></div><button class="history-btn" data-index="${i}">查看路线 →</button>`;card.querySelector('button').addEventListener('click',()=>viewHistoryDetail(i));box.appendChild(card)})}
+function viewHistoryDetail(i){const item=historyData[i];if(!item?.orderBatchId){alert('该历史记录缺少运单批次，无法打开详情');return}const date=encodeURIComponent(item.date||selectedDate());const batch=encodeURIComponent(item.orderBatchId);window.location.href=`order_detail.html?mode=history&date=${date}&orderBatchId=${batch}`}
+function formatWeight(v){if(v===null||v===undefined||v==='')return '0 kg';const s=String(v);if(/[a-zA-Z]/.test(s))return s;return `${s} kg`}
+function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function goBack(){location.href='../home.html'}
+document.addEventListener('DOMContentLoaded',()=>{if(!window.Auth||!Auth.checkAuth())return;const [y,m,d]=today();fill(y,Number(m),Number(d));loadHistory(`${y}-${m}-${d}`)})
+</script>
+<style>
+.date-picker-title{text-align:center;color:#B8C2CC;font-size:15px;letter-spacing:2px;margin-bottom:10px}.date-picker{display:flex;gap:10px}.date-picker select{flex:1;height:50px;background:#05070A;color:#fff;border:0;border-radius:12px;font-size:16px;text-align:center}.query-btn,.history-btn{width:100%;height:48px;border:0;border-radius:14px;background:#2457A6;color:#fff;font-size:16px;font-weight:bold;cursor:pointer;margin-top:14px}.history-scroll{max-height:440px;overflow-y:auto}.empty-tip{text-align:center;padding:40px 20px;color:#7F8B98}.history-item{background:#05070A;border-radius:14px;padding:16px 18px;margin-bottom:12px;border:1px solid rgba(255,255,255,.05)}.history-date{font-size:16px;font-weight:bold;margin-bottom:8px;color:#FFB020}.info-row{display:flex;justify-content:space-between;align-items:center;min-height:34px;font-size:14px}.info-row span{color:#7F8B98}.info-row b{color:#fff;font-weight:500}.history-btn{height:40px;font-size:14px;margin-top:10px}
+</style>
 </body>
 </html>
