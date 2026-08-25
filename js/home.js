@@ -15,7 +15,6 @@
   }
   function error(message) { const box = $('error-box'); if (!box) return; box.textContent = '页面错误：' + message; box.classList.add('show'); setTimeout(() => box.classList.remove('show'), 5000); }
   function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-  function readJSON(key, fallback = null) { try { const v=localStorage.getItem(key); return v?JSON.parse(v):fallback; } catch (_) { return fallback; } }
   function normalizeName(name) { return String(name||'').replace(/[\u3000]/g,' ').replace(/^[\s\d、.．)）_-]+/,'').replace(/[，,。；;：:]$/,'').replace(/\s+/g,' ').trim(); }
   function storeName(store) { return String(store?.name||store?.storeName||store?.shopName||'').trim(); }
   function storeCode(store,index) { return String(store?.code||store?.id||index+1).padStart(2,'0'); }
@@ -32,8 +31,9 @@
     return baseStores;
   }
 
-  async function loadServerToday() {
-    const response = await fetch('/api/orders', { cache:'no-store', headers: Auth.getAuthHeaders ? Auth.getAuthHeaders() : {} });
+  async function loadServerToday(date = '') {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const response = await fetch(`/api/orders${query}`, { cache:'no-store', headers: Auth.getAuthHeaders ? Auth.getAuthHeaders() : {} });
     if (!response.ok) throw new Error(response.status===401?'登录已失效，请重新登录':`今日订单读取失败（${response.status}）`);
     const data = await response.json();
     serverToday = data?.today || null;
@@ -67,9 +67,9 @@
   }
 
   function renderStatus(status,count=0,message='') { const box=$('parseStatus'); if(!box)return; box.classList.add('active'); if($('statusIcon'))$('statusIcon').textContent=status==='success'?'✅':status==='error'?'⚠️':'⏳'; if($('statusText'))$('statusText').textContent=message||(status==='success'?'解析完成':status==='error'?'解析失败':'正在解析...'); if($('progressBar'))$('progressBar').style.width=status==='success'||status==='error'?'100%':'50%'; if($('statusCount'))$('statusCount').textContent=count?`识别 ${count} 家门店`:''; }
-  function renderTags(items) { const box=$('parsedTags'); if(!box)return; box.innerHTML=''; items.slice(0,50).forEach((item,i)=>{const tag=document.createElement('span'); tag.textContent=`${String(i+1).padStart(2,'0')} ${item.name}`; tag.style.cssText='background:rgba(36,87,166,.18);padding:4px 7px;border-radius:7px;color:#AFC7E8;font-size:10px;'; box.appendChild(tag);}); }
+  function renderTags(items) { const box=$('parsedTags'); if(!box)return; box.innerHTML=''; items.slice(0,50).forEach((item,i)=>{const tag=document.createElement('span'); tag.textContent=`${String(item.displayCode||item.code||i+1).padStart(2,'0')} ${item.isNew?'⚠️ ':''}${item.name}`; tag.style.cssText='background:rgba(36,87,166,.18);padding:4px 7px;border-radius:7px;color:#AFC7E8;font-size:10px;'; box.appendChild(tag);}); }
   function parseText(text) {
-    const result=[],seen=new Set(),source=String(text||'').replace(/→|＞|》|➜|➤/g,'->');
+    const result=[],seen=new Set(),source=String(text||'').replace(/→|＞|》|➜|➤|⇒/g,'->');
     for(const raw of source.split(/\s*(?:->|\r?\n)\s*/)){ let line=normalizeName(raw); if(!line)continue; const wm=line.match(/(\d+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)/i); line=line.replace(/\d+(?:\.\d+)?\s*(kg|KG|千克|公斤|吨|t)/ig,'').trim(); const cm=line.match(/^(\d{1,3})[、.．)）\s-]+(.+)$/); const code=cm?cm[1].padStart(2,'0'):''; const name=normalizeName(cm?cm[2]:line); if(!name||seen.has(name))continue; if(/(总重量|总数量|总体积|合计|总计|车牌|车辆|日期|线路|主司机|送货员|额定装载|额定载重|额定体积|订单编号|运单编号)/.test(name))continue; if(!/(店|公司|经销商|加盟|中心|超市|便利|生鲜|食品|贸易|供应链|商行|门市|乳业|大厦|酒店|餐饮)/.test(name))continue; seen.add(name); result.push({code,name,weight:wm?parseWeight(wm[0]):0}); }
     return rankOrders(result);
   }
@@ -77,10 +77,12 @@
   async function callOCR(file){const image=await imageToDataURL(file);const response=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json',...(Auth.getAuthHeaders?Auth.getAuthHeaders():{})},body:JSON.stringify({image})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)throw new Error(data.error||`OCR接口错误 ${response.status}`);return data.data;}
 
   async function saveTodayOrders(orders,meta={}) {
-    const route=Auth.getCurrentRoute(); if(!route)throw new Error('未绑定线路'); const date=today();
+    const route=Auth.getCurrentRoute(); if(!route)throw new Error('未绑定线路');
+    // 业务日期必须优先使用运单OCR识别出的日期，不能用手机当前日期覆盖历史运单。
+    const date=String(meta.date||'').trim()||today();
     const normalized=rankOrders(orders).map((item,index)=>({...item,code:item.code||storeCode(baseStores[index],index),date,route,status:item.status||'待配送'}));
     const weightValue=meta.totalWeight!==undefined&&meta.totalWeight!==''?meta.totalWeight:totalWeight(normalized);
-    const response=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',...(Auth.getAuthHeaders?Auth.getAuthHeaders():{})},body:JSON.stringify({orders:normalized,totalWeight:weightValue,vehicle:meta.vehicle||'',date})});
+    const response=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',...(Auth.getAuthHeaders?Auth.getAuthHeaders():{})},body:JSON.stringify({orders:normalized,totalWeight:weightValue,vehicle:meta.vehicle||'',date,route,source:meta.source||'web',matchedCount:Number(meta.matchedCount)||0,newStoreCount:Number(meta.newStoreCount)||normalized.filter(x=>x.isNew).length,recognizedCount:Number(meta.recognizedCount)||normalized.length})});
     const data=await response.json().catch(()=>({})); if(!response.ok||!data.success)throw new Error(data.error||`订单保存失败（${response.status}）`);
     serverToday=data.data||null;
     updateSummary();
@@ -99,7 +101,7 @@
   window.parseManualInput=function(){try{parsedOrders=parseText($('manualOrderInput')?.value||'');renderStatus(parsedOrders.length?'success':'error',parsedOrders.length);renderTags(parsedOrders);if(!parsedOrders.length)toast('没有识别到有效门店','warning');return parsedOrders;}catch(e){renderStatus('error');error(e.message);return[];}};
   window.submitManualOrder=async function(){try{if(!parsedOrders.length)window.parseManualInput();if(!parsedOrders.length)return toast('请先输入并解析运单','warning');const orders=await saveTodayOrders(parsedOrders,{source:'manual'});toast(`已录入 ${orders.length} 家门店`);$('uploadOverlay')?.classList.remove('active');setTimeout(window.goToOrderDetail,500);}catch(e){error(e.message);}};
   window.triggerUpload=function(type){let input=$('homeUploadInput');if(!input){input=document.createElement('input');input.id='homeUploadInput';input.type='file';input.accept=type==='album'?'image/*':'image/*,.txt,.csv';input.style.display='none';document.body.appendChild(input);input.addEventListener('change',handleUploadFile);}input.value='';input.click();};
-  async function handleUploadFile(event){const file=event.target.files?.[0];if(!file)return;renderStatus('loading');try{if(file.type.startsWith('image/')){toast('正在识别运单图片，请稍候...');const data=await callOCR(file);const stores=Array.isArray(data.stores)?data.stores.map(item=>({code:item.code||'',name:item.name||'',nav:item.nav||'',weight:parseWeight(item.weight),matched:item.matched===true,isNew:!!item.isNew})).filter(item=>item.name):[];if(!stores.length)throw new Error('AI未识别到有效门店');parsedOrders=rankOrders(stores);renderTags(parsedOrders);renderStatus('success',parsedOrders.length,`解析完成：${parsedOrders.length} 家门店`);const orders=await saveTodayOrders(parsedOrders,{source:'ai-ocr',vehicle:data.vehicle||'',totalWeight:data.totalWeight||totalWeight(parsedOrders)});toast(`AI识别完成：${orders.length} 家门店`);$('uploadOverlay')?.classList.remove('active');setTimeout(window.goToOrderDetail,700);return;}if(file.type.startsWith('text/')||/\.csv$/i.test(file.name)){$('manualOrderInput').value=await file.text();window.parseManualInput();return;}throw new Error('暂不支持该文件类型');}catch(e){renderStatus('error',0,e.message||'解析失败');toast(e.message||'运单解析失败','warning');error(e.message||'解析失败');}}
+  async function handleUploadFile(event){const file=event.target.files?.[0];if(!file)return;renderStatus('loading');try{if(file.type.startsWith('image/')){toast('正在识别运单图片，请稍候...');const data=await callOCR(file);const stores=Array.isArray(data.stores)?data.stores.map(item=>({code:item.code||'',name:item.name||'',nav:item.nav||'',weight:parseWeight(item.weight),matched:item.matched===true,isNew:!!item.isNew,status:item.status||'待配送'})).filter(item=>item.name):[];if(!stores.length)throw new Error('AI未识别到有效门店');parsedOrders=rankOrders(stores);renderTags(parsedOrders);renderStatus('success',parsedOrders.length,`解析完成：${parsedOrders.length} 家门店`);const orders=await saveTodayOrders(parsedOrders,{source:'ai-ocr',date:data.date,vehicle:data.vehicle||'',totalWeight:data.totalWeight||totalWeight(parsedOrders),matchedCount:data.matchedCount,newStoreCount:data.newStoreCount,recognizedCount:data.recognizedCount});toast(`AI识别完成：${orders.length} 家门店`);$('uploadOverlay')?.classList.remove('active');setTimeout(window.goToOrderDetail,700);return;}if(file.type.startsWith('text/')||/\.csv$/i.test(file.name)){$('manualOrderInput').value=await file.text();window.parseManualInput();return;}throw new Error('暂不支持该文件类型');}catch(e){renderStatus('error',0,e.message||'解析失败');toast(e.message||'运单解析失败','warning');error(e.message||'解析失败');}}
 
   document.addEventListener('DOMContentLoaded',async function(){try{if(typeof Auth==='undefined')throw new Error('Auth 未加载');if(!Auth.checkAuth())return;await loadBaseStores();await loadServerToday();updateSummary();$('manualOrderInput')?.addEventListener('input',function(){if($('charCount'))$('charCount').textContent=String(this.value.length);});document.addEventListener('click',function(event){const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none';});}catch(e){console.error(e);error(e.message||'首页初始化失败');}});
 })();
