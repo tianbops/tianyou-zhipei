@@ -7,7 +7,7 @@
   function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
   function weight(v){const s=String(v??'').trim().replace(/,/g,'');const m=s.match(/[0-9]+(?:\.[0-9]+)?/);if(!m)return '';const n=Number(m[0]);return /吨|\bt\b/i.test(s)?`${(n*1000).toFixed(3).replace(/\.000$/,'')}kg`:`${n}kg`;}
   function refresh(){try{window.dispatchEvent(new Event('storage'));window.dispatchEvent(new Event('pageshow'));}catch(_){} }
-  function authHeaders(){const token=localStorage.getItem('session_token')||localStorage.getItem('auth_token')||localStorage.getItem('token')||'';return token?{Authorization:`Bearer ${token}`}:{}}
+  function authHeaders(){const token=localStorage.getItem('sessionToken')||'';return token?{Authorization:`Bearer ${token}`}:{}}
   async function persistBatch(d){
     if(!d||!Array.isArray(d.stores)||!d.stores.length)return;
     const response=await originalFetch('/api/ocr-batch',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({route:d.route,date:d.date,vehicle:d.vehicle,totalWeight:d.totalWeight,rawOrderCount:d.rawOrderCount,matchedCount:d.matchedCount,newStoreCount:d.newStoreCount,recognizedCount:d.recognizedCount,stores:d.stores})});
