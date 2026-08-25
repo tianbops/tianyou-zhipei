@@ -3,7 +3,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let currentData={orders:[],weight:'',orderBatchId:'',date:'',vehicle:'',route:''};
-function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()+1).padStart(2,'0')}`}
+function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function clean(v){return String(v||'').replace(/[\u3000]/g,' ').replace(/^\s*[\d０-９]+[、.．)）\s-]*/u,'').replace(/\s+/g,' ').trim()}
 function kg(v){const s=String(v??'').replace(/,/g,'');const m=s.match(/[0-9]+(?:\.[0-9]+)?/);if(!m)return 0;const n=Number(m[0]);return /吨|\bt\b/i.test(s)?n*1000:n}
 function key(v){return clean(v).replace(/[\s，,。；;：:（）()【】\[\]<>《》“”"'‘’·-]/g,'').toLowerCase()}
