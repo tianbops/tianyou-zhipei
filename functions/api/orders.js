@@ -16,9 +16,9 @@ export async function onRequest(context) {
       const body = await request.json();
       const requestedRoute = normalizeRoute(body.route);
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
+      // 普通用户永远不能通过 POST body 指定其它线路；targetRoute 已由 Session 决定。
       if (!targetRoute || !Array.isArray(body.orders)) return json({ error: '缺少线路或订单数据' }, 400);
 
-      // 运单日期优先；只有完全没有日期时才使用中国业务时区日期。
       const date = normalizeDate(body.date) || businessDate();
       const key = `today_orders:${targetRoute}:${date}`;
       const existing = await redisGet(env, key);
@@ -27,19 +27,14 @@ export async function onRequest(context) {
       const updatedAt = new Date().toISOString();
       const normalizedOrders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, targetRoute, date)).filter(item => item.name);
       const todayData = {
-        orderBatchId,
-        date,
-        route: targetRoute,
-        vehicle: String(body.vehicle || '').trim(),
-        orders: normalizedOrders,
-        totalWeight: normalizeWeight(body.totalWeight),
-        count: normalizedOrders.length,
+        orderBatchId, date, route: targetRoute,
+        vehicle: String(body.vehicle || '').trim(), orders: normalizedOrders,
+        totalWeight: normalizeWeight(body.totalWeight), count: normalizedOrders.length,
         matchedCount: Number(body.matchedCount) || normalizedOrders.filter(x => x.matched === true).length,
         newStoreCount: Number(body.newStoreCount) || normalizedOrders.filter(x => x.isNew === true).length,
         recognizedCount: Number(body.recognizedCount) || normalizedOrders.length,
         rawOrderCount: Number(body.rawOrderCount) || 0,
-        source: body.source || 'web',
-        updatedAt
+        source: body.source || 'web', updatedAt
       };
 
       await redisSet(env, key, todayData);
@@ -52,12 +47,12 @@ export async function onRequest(context) {
       const requestedRoute = normalizeRoute(url.searchParams.get('route') || '');
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
       if (!targetRoute) return json({ error: '缺少线路' }, 400);
+      // 普通用户忽略 URL 中的 route，永远使用 Session 线路。
       const date = normalizeDate(url.searchParams.get('date')) || businessDate();
       const today = await redisGet(env, `today_orders:${targetRoute}:${date}`);
       const history = await redisGet(env, `history:${targetRoute}:${date}`);
       return json({ success: true, today: today && normalizeDate(today.date) === date ? today : null, history: Array.isArray(history) ? history : [] });
     }
-
     return json({ error: 'Method not allowed' }, 405);
   } catch (error) {
     console.error('orders api error', error);
@@ -69,22 +64,7 @@ async function saveHistory(env, route, date, todayData) {
   const key = `history:${route}:${date}`;
   const old = await redisGet(env, key);
   let history = Array.isArray(old) ? old : [];
-  const record = {
-    orderBatchId: todayData.orderBatchId,
-    date,
-    route,
-    vehicle: todayData.vehicle,
-    count: todayData.count,
-    weight: todayData.totalWeight,
-    totalWeight: todayData.totalWeight,
-    matchedCount: todayData.matchedCount,
-    newStoreCount: todayData.newStoreCount,
-    recognizedCount: todayData.recognizedCount,
-    rawOrderCount: todayData.rawOrderCount,
-    orders: todayData.orders,
-    source: todayData.source,
-    updatedAt: todayData.updatedAt
-  };
+  const record = { orderBatchId: todayData.orderBatchId, date, route, vehicle: todayData.vehicle, count: todayData.count, weight: todayData.totalWeight, totalWeight: todayData.totalWeight, matchedCount: todayData.matchedCount, newStoreCount: todayData.newStoreCount, recognizedCount: todayData.recognizedCount, rawOrderCount: todayData.rawOrderCount, orders: todayData.orders, source: todayData.source, updatedAt: todayData.updatedAt };
   const i = history.findIndex(x => x?.orderBatchId === todayData.orderBatchId);
   if (i >= 0) history[i] = record; else history.push(record);
   if (history.length > 90) history = history.slice(-90);
@@ -94,20 +74,7 @@ async function saveHistory(env, route, date, todayData) {
 function normalizeOrder(item,index,batchId,route,date){
   if(typeof item==='string') return {id:`${batchId}-${index+1}`,orderBatchId:batchId,code:String(index+1).padStart(2,'0'),name:item.trim(),nav:'',weight:0,note:'',matched:false,isNew:false,status:'待配送',route,date};
   const s=item||{};
-  return {
-    id:s.id||`${batchId}-${index+1}`,
-    orderBatchId:batchId,
-    code:String(s.code||s.index||index+1).padStart(2,'0'),
-    name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),
-    nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),
-    weight:Number(s.weight??s['重量']??0)||0,
-    note:String(s.note||s['备注']||'').trim(),
-    matched:s.matched===true,
-    isNew:s.isNew===true||s.newStore===true,
-    status:s.status||'待配送',
-    route,
-    date
-  };
+  return {id:s.id||`${batchId}-${index+1}`,orderBatchId:batchId,code:String(s.code||s.index||index+1).padStart(2,'0'),name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),weight:Number(s.weight??s['重量']??0)||0,note:String(s.note||s['备注']||'').trim(),matched:s.matched===true,isNew:s.isNew===true||s.newStore===true,status:s.status||'待配送',route,date};
 }
 function createBatchId(route,date){const r=route.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g,'');const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `${date}-${r}-${stamp}`;}
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim();const m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return /吨|\bt\b/i.test(s)?`${n}t`:`${n}kg`;}
