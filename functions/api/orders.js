@@ -21,30 +21,39 @@ export async function onRequest(context) {
 
       const date = normalizeDate(body.date) || businessDate();
       const key = `today_orders:${targetRoute}:${date}`;
-      const existing = await redisGet(env, key);
-      const suppliedBatchId = String(body.orderBatchId || '').trim();
-      const orderBatchId = suppliedBatchId || existing?.orderBatchId || createBatchId(targetRoute, date);
-      const updatedAt = new Date().toISOString();
-      let normalizedOrders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, targetRoute, date)).filter(item => item.name);
+      const lockKey = `lock:orders:${targetRoute}:${date}`;
+      const lockToken = createLockToken();
+      const locked = await acquireLock(env, lockKey, lockToken, 15);
+      if (!locked) return json({ error: '该线路正在保存订单，请稍后再试' }, 409);
 
-      // 最终顺序由服务器根据该线路独立基准库决定：基准门店按 routeOrder，新增门店统一置底。
-      const base = await loadBaseData(env, targetRoute);
-      normalizedOrders = sortByRouteBase(normalizedOrders, base);
+      try {
+        const existing = await redisGet(env, key);
+        const suppliedBatchId = String(body.orderBatchId || '').trim();
+        const orderBatchId = suppliedBatchId || existing?.orderBatchId || createBatchId(targetRoute, date);
+        const updatedAt = new Date().toISOString();
+        let normalizedOrders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, targetRoute, date)).filter(item => item.name);
 
-      const todayData = {
-        orderBatchId, date, route: targetRoute,
-        vehicle: String(body.vehicle || '').trim(), orders: normalizedOrders,
-        totalWeight: normalizeWeight(body.totalWeight), count: normalizedOrders.length,
-        matchedCount: Number(body.matchedCount) || normalizedOrders.filter(x => x.matched === true).length,
-        newStoreCount: Number(body.newStoreCount) || normalizedOrders.filter(x => x.isNew === true).length,
-        recognizedCount: Number(body.recognizedCount) || normalizedOrders.length,
-        rawOrderCount: Number(body.rawOrderCount) || 0,
-        source: body.source || 'web', updatedAt
-      };
+        // 最终顺序由服务器根据该线路独立基准库决定：基准门店按 routeOrder，新增门店统一置底。
+        const base = await loadBaseData(env, targetRoute);
+        normalizedOrders = sortByRouteBase(normalizedOrders, base);
 
-      await redisSet(env, key, todayData);
-      await saveHistory(env, targetRoute, date, todayData);
-      return json({ success: true, data: todayData });
+        const todayData = {
+          orderBatchId, date, route: targetRoute,
+          vehicle: String(body.vehicle || '').trim(), orders: normalizedOrders,
+          totalWeight: normalizeWeight(body.totalWeight), count: normalizedOrders.length,
+          matchedCount: Number(body.matchedCount) || normalizedOrders.filter(x => x.matched === true).length,
+          newStoreCount: Number(body.newStoreCount) || normalizedOrders.filter(x => x.isNew === true).length,
+          recognizedCount: Number(body.recognizedCount) || normalizedOrders.length,
+          rawOrderCount: Number(body.rawOrderCount) || 0,
+          source: body.source || 'web', updatedAt
+        };
+
+        await redisSet(env, key, todayData);
+        await saveHistory(env, targetRoute, date, todayData);
+        return json({ success: true, data: todayData });
+      } finally {
+        await releaseLock(env, lockKey, lockToken).catch(() => {});
+      }
     }
 
     if (request.method === 'GET') {
@@ -83,11 +92,10 @@ function sortByRouteBase(orders, base) {
     return {
       ...order,
       routeOrder: routeOrder || null,
-      // 服务器最终以基准库匹配结果为准，避免客户端伪造 matched/isNew 破坏顺序。
       matched: routeOrder != null,
       isNew: routeOrder == null
     };
-  }).sort((a, b) => {
+  }).map((item, index) => ({ ...item, __inputIndex: index })).sort((a, b) => {
     const ar = Number(a.routeOrder || Number.MAX_SAFE_INTEGER);
     const br = Number(b.routeOrder || Number.MAX_SAFE_INTEGER);
     if (ar !== br) return ar - br;
@@ -107,11 +115,15 @@ async function saveHistory(env, route, date, todayData) {
 }
 
 function normalizeOrder(item,index,batchId,route,date){
-  if(typeof item==='string') return {id:`${batchId}-${index+1}`,orderBatchId:batchId,code:String(index+1).padStart(2,'0'),name:item.trim(),nav:'',weight:0,note:'',matched:false,isNew:false,status:'待配送',route,date,__inputIndex:index};
+  if(typeof item==='string') return {id:`${batchId}-${index+1}`,orderBatchId:batchId,code:String(index+1).padStart(2,'0'),name:item.trim(),nav:'',weight:0,note:'',matched:false,isNew:false,status:'待配送',route,date};
   const s=item||{};
-  return {id:s.id||`${batchId}-${index+1}`,orderBatchId:batchId,code:String(s.code||s.index||index+1).padStart(2,'0'),name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),weight:Number(s.weight??s['重量']??0)||0,note:String(s.note||s['备注']||'').trim(),matched:s.matched===true,isNew:s.isNew===true||s.newStore===true,status:s.status||'待配送',route,date,__inputIndex:index};
+  return {id:s.id||`${batchId}-${index+1}`,orderBatchId:batchId,code:String(s.code||s.index||index+1).padStart(2,'0'),name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),weight:Number(s.weight??s['重量']??0)||0,note:String(s.note||s['备注']||'').trim(),matched:s.matched===true,isNew:s.isNew===true||s.newStore===true,status:s.status||'待配送',route,date};
 }
 function createBatchId(route,date){const r=route.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g,'');const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `${date}-${r}-${stamp}`;}
+function createLockToken(){return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.()||''}`;}
+async function acquireLock(env,key,token,seconds){const url=`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`;const r=await fetch(url,{headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`},cache:'no-store'});if(!r.ok)return false;const d=await r.json().catch(()=>({}));return d.result==='OK';}
+async function releaseLock(env,key,token){const current=await redisGetRaw(env,key);if(current!==token)return;await fetch(`${env.UPSTASH_REDIS_REST_URL}/del/${encodeURIComponent(key)}`,{headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`},cache:'no-store'});}
+async function redisGetRaw(env,key){const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`,{headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`},cache:'no-store'});if(!r.ok)return null;const d=await r.json().catch(()=>({}));return d.result||null;}
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim();const m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return /吨|\bt\b/i.test(s)?`${n}t`:`${n}kg`;}
 function normalizeStoreName(v){return String(v||'').trim().replace(/[\s\u3000]+/g,'').replace(/[（）()【】\[\]{}]/g,'').toLowerCase();}
 function normalizeRoute(v){const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s;}
