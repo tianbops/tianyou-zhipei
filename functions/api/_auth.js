@@ -1,6 +1,7 @@
 // functions/api/_auth.js
 // 服务端会话令牌：用于保护线路、用户等写接口。
 // 密钥使用 Cloudflare 环境中的 Upstash Token，不把密钥发送到浏览器。
+// sessionVersion 存在服务器用户记录中；密码变更时递增，立即使旧会话失效。
 
 const SESSION_TTL = 8 * 60 * 60;
 
@@ -31,7 +32,14 @@ function timingSafeEqual(a, b) {
 export async function createSession(env, user) {
   const secret = env.UPSTASH_REDIS_REST_TOKEN;
   if (!secret) throw new Error('Session secret unavailable');
-  const payload = { id: user.id, name: user.name || '', route: user.route || '', role: user.role || 'driver', exp: Math.floor(Date.now() / 1000) + SESSION_TTL };
+  const payload = {
+    id: user.id,
+    name: user.name || '',
+    route: user.route || '',
+    role: user.role || 'driver',
+    sessionVersion: Number(user.sessionVersion || 1),
+    exp: Math.floor(Date.now() / 1000) + SESSION_TTL
+  };
   const body = base64url(new TextEncoder().encode(JSON.stringify(payload)));
   const sig = base64url(await sign(secret, body));
   return `${body}.${sig}`;
@@ -48,6 +56,24 @@ export async function verifySession(request, env) {
     if (!timingSafeEqual(expected, actual)) return null;
     const payload = JSON.parse(new TextDecoder().decode(decodeBase64url(body)));
     if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+
+    // 密码/账号资料发生变更后，服务器版本号必须匹配；旧 T1 无版本号的会话全部失效。
+    if (!payload.id || !Number.isFinite(Number(payload.sessionVersion))) return null;
+    if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return null;
+    const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/admin_users`, {
+      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+      cache: 'no-store'
+    });
+    if (!response.ok) return null;
+    const data = await response.json().catch(() => ({}));
+    if (!data.result) return null;
+    let users;
+    try { users = JSON.parse(data.result); } catch { return null; }
+    if (!Array.isArray(users)) return null;
+    const user = users.find(u => u && String(u.id) === String(payload.id));
+    if (!user) return null;
+    const currentVersion = Number(user.sessionVersion || 1);
+    if (currentVersion !== Number(payload.sessionVersion)) return null;
     return payload;
   } catch {
     return null;
