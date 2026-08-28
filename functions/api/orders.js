@@ -1,5 +1,6 @@
 // 天友智配One - 服务器端订单 API
 // 服务器为真实数据源；订单按「线路 + 业务日期」独立存储。
+// 服务器保存前再次按对应线路基准库排序，防止客户端篡改顺序。
 import { authRequired } from './_auth.js';
 
 export async function onRequest(context) {
@@ -16,7 +17,6 @@ export async function onRequest(context) {
       const body = await request.json();
       const requestedRoute = normalizeRoute(body.route);
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
-      // 普通用户永远不能通过 POST body 指定其它线路；targetRoute 已由 Session 决定。
       if (!targetRoute || !Array.isArray(body.orders)) return json({ error: '缺少线路或订单数据' }, 400);
 
       const date = normalizeDate(body.date) || businessDate();
@@ -25,7 +25,12 @@ export async function onRequest(context) {
       const suppliedBatchId = String(body.orderBatchId || '').trim();
       const orderBatchId = suppliedBatchId || existing?.orderBatchId || createBatchId(targetRoute, date);
       const updatedAt = new Date().toISOString();
-      const normalizedOrders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, targetRoute, date)).filter(item => item.name);
+      let normalizedOrders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, targetRoute, date)).filter(item => item.name);
+
+      // 最终顺序由服务器根据该线路独立基准库决定：基准门店按 routeOrder，新增门店统一置底。
+      const base = await loadBaseData(env, targetRoute);
+      normalizedOrders = sortByRouteBase(normalizedOrders, base);
+
       const todayData = {
         orderBatchId, date, route: targetRoute,
         vehicle: String(body.vehicle || '').trim(), orders: normalizedOrders,
@@ -47,7 +52,6 @@ export async function onRequest(context) {
       const requestedRoute = normalizeRoute(url.searchParams.get('route') || '');
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
       if (!targetRoute) return json({ error: '缺少线路' }, 400);
-      // 普通用户忽略 URL 中的 route，永远使用 Session 线路。
       const date = normalizeDate(url.searchParams.get('date')) || businessDate();
       const today = await redisGet(env, `today_orders:${targetRoute}:${date}`);
       const history = await redisGet(env, `history:${targetRoute}:${date}`);
@@ -58,6 +62,37 @@ export async function onRequest(context) {
     console.error('orders api error', error);
     return json({ success: false, error: '订单数据服务暂不可用' }, 503);
   }
+}
+
+async function loadBaseData(env, route) {
+  const raw = await redisGet(env, `route:${route}:base`);
+  const stores = Array.isArray(raw?.stores) ? raw.stores : [];
+  return stores.map((s, index) => ({
+    ...s,
+    routeOrder: Number(s?.routeOrder || s?.code || index + 1) || index + 1,
+    nameKey: normalizeStoreName(s?.name || s?.storeName || s?.shopName || s?.['门店名称'])
+  })).filter(s => s.nameKey);
+}
+
+function sortByRouteBase(orders, base) {
+  if (!base.length) return orders;
+  const orderMap = new Map(base.map((s, index) => [s.nameKey, Number(s.routeOrder) || index + 1]));
+  return orders.map((order, index) => {
+    const key = normalizeStoreName(order.name);
+    const routeOrder = orderMap.get(key);
+    return {
+      ...order,
+      routeOrder: routeOrder || null,
+      // 服务器最终以基准库匹配结果为准，避免客户端伪造 matched/isNew 破坏顺序。
+      matched: routeOrder != null,
+      isNew: routeOrder == null
+    };
+  }).sort((a, b) => {
+    const ar = Number(a.routeOrder || Number.MAX_SAFE_INTEGER);
+    const br = Number(b.routeOrder || Number.MAX_SAFE_INTEGER);
+    if (ar !== br) return ar - br;
+    return a.__inputIndex - b.__inputIndex;
+  }).map(({ __inputIndex, ...item }) => item);
 }
 
 async function saveHistory(env, route, date, todayData) {
@@ -72,12 +107,13 @@ async function saveHistory(env, route, date, todayData) {
 }
 
 function normalizeOrder(item,index,batchId,route,date){
-  if(typeof item==='string') return {id:`${batchId}-${index+1}`,orderBatchId:batchId,code:String(index+1).padStart(2,'0'),name:item.trim(),nav:'',weight:0,note:'',matched:false,isNew:false,status:'待配送',route,date};
+  if(typeof item==='string') return {id:`${batchId}-${index+1}`,orderBatchId:batchId,code:String(index+1).padStart(2,'0'),name:item.trim(),nav:'',weight:0,note:'',matched:false,isNew:false,status:'待配送',route,date,__inputIndex:index};
   const s=item||{};
-  return {id:s.id||`${batchId}-${index+1}`,orderBatchId:batchId,code:String(s.code||s.index||index+1).padStart(2,'0'),name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),weight:Number(s.weight??s['重量']??0)||0,note:String(s.note||s['备注']||'').trim(),matched:s.matched===true,isNew:s.isNew===true||s.newStore===true,status:s.status||'待配送',route,date};
+  return {id:s.id||`${batchId}-${index+1}`,orderBatchId:batchId,code:String(s.code||s.index||index+1).padStart(2,'0'),name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),weight:Number(s.weight??s['重量']??0)||0,note:String(s.note||s['备注']||'').trim(),matched:s.matched===true,isNew:s.isNew===true||s.newStore===true,status:s.status||'待配送',route,date,__inputIndex:index};
 }
 function createBatchId(route,date){const r=route.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g,'');const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `${date}-${r}-${stamp}`;}
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim();const m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return /吨|\bt\b/i.test(s)?`${n}t`:`${n}kg`;}
+function normalizeStoreName(v){return String(v||'').trim().replace(/[\s\u3000]+/g,'').replace(/[（）()【】\[\]{}]/g,'').toLowerCase();}
 function normalizeRoute(v){const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s;}
 function normalizeDate(v){const s=String(v||'').trim().replace(/[年月]/g,'-').replace(/日/g,'').replace(/[/.]/g,'-');const m=s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/);return m?`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`:'';}
 function businessDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
