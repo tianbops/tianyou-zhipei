@@ -17,16 +17,16 @@ async function load(){
  const p=new URLSearchParams(location.search),historyMode=p.get('mode')==='history',date=p.get('date')||today(),batch=p.get('orderBatchId')||p.get('batch')||'';let t=null;
  if(historyMode){
    if(!batch)throw Error('历史记录缺少运单批次');
-   const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:authHeaders()});
+   const routeParam=p.get('route')||sessionRoute;
+   const r=await fetch(`/api/history?date=${encodeURIComponent(date)}&route=${encodeURIComponent(routeParam)}`,{cache:'no-store',headers:authHeaders()});
    if(!r.ok)throw Error(`历史数据服务不可用（${r.status}）`);
    const payload=await r.json();const records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
    t=records.find(x=>x?.orderBatchId===batch)||null;if(!t)throw Error('未找到对应运单批次');
  }else{
-   const r=await fetch(`/api/orders?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:authHeaders()});
+   const r=await fetch(`/api/orders?date=${encodeURIComponent(date)}&route=${encodeURIComponent(sessionRoute)}`,{cache:'no-store',headers:authHeaders()});
    if(!r.ok)throw Error(`今日订单服务不可用（${r.status}）`);const d=await r.json();t=d?.today||null;
  }
  if(!t||!Array.isArray(t.orders))return{orders:[],weight:'',orderBatchId:t?.orderBatchId||batch,date:t?.date||date,vehicle:t?.vehicle||'',route:t?.route||sessionRoute};
- // 服务器返回的业务线路优先。管理员 sessionRoute 可能是 admin，历史记录必须使用批次自身线路。
  const dataRoute=String(t.route||'').trim()||sessionRoute;
  const b=await getBase(dataRoute);return{orders:sortOrders(t.orders,b),weight:t.totalWeight??t.weight??'',orderBatchId:t.orderBatchId||batch,date:t.date||date,vehicle:t.vehicle||'',route:dataRoute};
 }
