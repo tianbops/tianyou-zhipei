@@ -19,9 +19,17 @@
   function storeName(store) { return String(store?.name||store?.storeName||store?.shopName||'').trim(); }
   function storeCode(store,index) { return String(store?.code||store?.id||index+1).padStart(2,'0'); }
 
+  // 管理员不能把“admin”当成真实配送线路。管理端进入首页时必须明确指定线路。
+  function currentRoute() {
+    const sessionRoute = Auth.getCurrentRoute();
+    if (sessionRoute !== 'admin') return sessionRoute;
+    const p = new URLSearchParams(location.search);
+    return String(p.get('route') || '').trim();
+  }
+
   async function loadBaseStores() {
-    const route = Auth.getCurrentRoute();
-    if (!route) throw new Error('未绑定线路');
+    const route = currentRoute();
+    if (!route) throw new Error(Auth.getCurrentRoute() === 'admin' ? '管理员查看配送数据时必须指定线路' : '未绑定线路');
     const response = await fetch(`/api/routes?route=${encodeURIComponent(route)}`, { cache:'no-store', headers: Auth.getAuthHeaders ? Auth.getAuthHeaders() : {} });
     if (!response.ok) throw new Error(response.status===401?'登录已失效，请重新登录':`线路基准读取失败（${response.status}）`);
     const data = await response.json();
@@ -32,8 +40,12 @@
   }
 
   async function loadServerToday(date = '') {
-    const query = date ? `?date=${encodeURIComponent(date)}` : '';
-    const response = await fetch(`/api/orders${query}`, { cache:'no-store', headers: Auth.getAuthHeaders ? Auth.getAuthHeaders() : {} });
+    const route = currentRoute();
+    if (!route) throw new Error('未指定配送线路');
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    params.set('route', route);
+    const response = await fetch(`/api/orders?${params.toString()}`, { cache:'no-store', headers: Auth.getAuthHeaders ? Auth.getAuthHeaders() : {} });
     if (!response.ok) throw new Error(response.status===401?'登录已失效，请重新登录':`今日订单读取失败（${response.status}）`);
     const data = await response.json();
     serverToday = data?.today || null;
@@ -57,7 +69,7 @@
     const orders = Array.isArray(serverToday?.orders) ? serverToday.orders : [];
     const count = orders.length;
     const weight = parseWeight(serverToday?.totalWeight);
-    const route = serverToday?.route || Auth.getCurrentRoute() || '';
+    const route = serverToday?.route || currentRoute() || '';
     const vehicle = serverToday?.vehicle || '';
     if ($('menuRoute')) $('menuRoute').textContent = route || '未选择线路';
     if ($('homeRoute')) $('homeRoute').textContent = vehicle ? `🚚 ${vehicle}` : `🚚 ${route}`;
@@ -74,10 +86,10 @@
     return rankOrders(result);
   }
   async function imageToDataURL(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('图片读取失败'));reader.readAsDataURL(file);});}
-  async function callOCR(file){const image=await imageToDataURL(file);const response=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json',...(Auth.getAuthHeaders?Auth.getAuthHeaders():{})},body:JSON.stringify({image})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)throw new Error(data.error||`OCR接口错误 ${response.status}`);return data.data;}
+  async function callOCR(file){const image=await imageToDataURL(file);const response=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json',...(Auth.getAuthHeaders?Auth.getAuthHeaders():{})},body:JSON.stringify({image,route:currentRoute()})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)throw new Error(data.error||`OCR接口错误 ${response.status}`);return data.data;}
 
   async function saveTodayOrders(orders,meta={}) {
-    const route=Auth.getCurrentRoute(); if(!route)throw new Error('未绑定线路');
+    const route=currentRoute(); if(!route)throw new Error('未指定配送线路');
     // 业务日期必须优先使用运单OCR识别出的日期，不能用手机当前日期覆盖历史运单。
     const date=String(meta.date||'').trim()||today();
     const normalized=rankOrders(orders).map((item,index)=>({...item,code:item.code||storeCode(baseStores[index],index),date,route,status:item.status||'待配送'}));
@@ -92,7 +104,7 @@
   window.toggleUpload=function(){const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.toggle('active');if(overlay.classList.contains('active'))$('manualOrderInput')?.focus();};
   window.openHomeMenu=function(){const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block';};
   window.goToRouteEdit=()=>{window.location.href='pages/route_edit.html';};
-  window.goToOrderDetail=()=>{window.location.href='pages/order_detail.html';};
+  window.goToOrderDetail=()=>{const r=currentRoute();window.location.href=`pages/order_detail.html${r?`?route=${encodeURIComponent(r)}`:''}`;};
   window.goToHistory=()=>{window.location.href='pages/history.html';};
   window.logout=()=>Auth.logout();
   window.clearManualInput=function(){if($('manualOrderInput'))$('manualOrderInput').value='';if($('charCount'))$('charCount').textContent='0';parsedOrders=[];renderStatus('idle');renderTags([]);};
