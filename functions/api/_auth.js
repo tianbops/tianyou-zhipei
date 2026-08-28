@@ -1,9 +1,12 @@
 // functions/api/_auth.js
-// 服务端会话令牌：用于保护线路、用户等写接口。
-// 密钥使用 Cloudflare 环境中的 Upstash Token，不把密钥发送到浏览器。
-// sessionVersion 存在服务器用户记录中；密码变更时递增，立即使旧会话失效。
+// 服务端会话令牌：浏览器只持有会话令牌，业务数据全部以服务器为准。
+// SESSION_SECRET 为独立签名密钥；为兼容旧部署，未配置时暂回退到 Upstash Token。
 
 const SESSION_TTL = 8 * 60 * 60;
+
+function getSessionSecret(env) {
+  return env.SESSION_SECRET || env.UPSTASH_REDIS_REST_TOKEN || '';
+}
 
 function base64url(bytes) {
   let s = '';
@@ -30,7 +33,7 @@ function timingSafeEqual(a, b) {
 }
 
 export async function createSession(env, user) {
-  const secret = env.UPSTASH_REDIS_REST_TOKEN;
+  const secret = getSessionSecret(env);
   if (!secret) throw new Error('Session secret unavailable');
   const payload = {
     id: user.id,
@@ -46,7 +49,7 @@ export async function createSession(env, user) {
 }
 
 export async function verifySession(request, env) {
-  const secret = env.UPSTASH_REDIS_REST_TOKEN;
+  const secret = getSessionSecret(env);
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || request.headers.get('X-Session-Token') || '';
   if (!secret || !token || !token.includes('.')) return null;
   const [body, signature] = token.split('.');
@@ -56,10 +59,9 @@ export async function verifySession(request, env) {
     if (!timingSafeEqual(expected, actual)) return null;
     const payload = JSON.parse(new TextDecoder().decode(decodeBase64url(body)));
     if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
-
-    // 密码/账号资料发生变更后，服务器版本号必须匹配；旧 T1 无版本号的会话全部失效。
     if (!payload.id || !Number.isFinite(Number(payload.sessionVersion))) return null;
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return null;
+
     const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/admin_users`, {
       headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
       cache: 'no-store'
