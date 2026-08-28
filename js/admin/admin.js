@@ -1,21 +1,28 @@
 // js/admin/admin.js
 // 管理中心主入口
-// 用户真实数据以服务器为准；localStorage 只作为界面缓存。
+// 重要：浏览器不再保存任何管理业务数据；DB 只是内存缓存，真实数据来自服务器。
+
+const ADMIN_DATA_KEYS = ['vehicles', 'ocr', 'backups', 'logs'];
+const adminMemory = Object.create(null);
+let adminSaveTimer = null;
 
 const DB = {
   get(key, defaultVal) {
-    try { const data = localStorage.getItem(`admin_${key}`); return data ? JSON.parse(data) : defaultVal; }
-    catch { return defaultVal; }
+    return Object.prototype.hasOwnProperty.call(adminMemory, key) ? adminMemory[key] : defaultVal;
   },
   set(key, val) {
-    localStorage.setItem(`admin_${key}`, JSON.stringify(val));
+    adminMemory[key] = val;
     updateStats();
-    if (key === 'users') syncUsersToUpstash(val);
+    if (key === 'users') {
+      syncUsersToUpstash(val);
+    } else if (ADMIN_DATA_KEYS.includes(key)) {
+      scheduleAdminSave();
+    }
   },
   addLog(action, detail) {
-    const logs = this.get('logs', []);
+    const logs = this.get('logs', []).slice();
     logs.unshift({ id: Date.now(), time: new Date().toLocaleString(), action, detail, user: Auth.getCurrentRoute() });
-    if (logs.length > 100) logs.length = 100;
+    if (logs.length > 200) logs.length = 200;
     this.set('logs', logs);
   }
 };
@@ -37,7 +44,40 @@ async function syncUsersToUpstash(users) {
   }
 }
 
-// 管理员统一修改全部普通用户密码；服务器执行，不修改管理员密码。
+async function loadAdminData() {
+  const response = await fetch('/api/admin-data', { cache: 'no-store', headers: { ...authHeaders() } });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) throw new Error(data.error || `HTTP ${response.status}`);
+  for (const key of ADMIN_DATA_KEYS) adminMemory[key] = Array.isArray(data.data?.[key]) ? data.data[key] : [];
+}
+
+let adminSaveInFlight = false;
+async function saveAdminData() {
+  if (adminSaveInFlight) return;
+  adminSaveInFlight = true;
+  try {
+    const payload = {};
+    for (const key of ADMIN_DATA_KEYS) payload[key] = DB.get(key, []);
+    const response = await fetch('/api/admin-data', {
+      method: 'PUT', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) throw new Error(data.error || `HTTP ${response.status}`);
+  } catch (e) {
+    console.error('管理数据保存失败', e);
+    showToast('服务器保存失败，请联网后重试', 'error');
+  } finally {
+    adminSaveInFlight = false;
+  }
+}
+
+function scheduleAdminSave() {
+  clearTimeout(adminSaveTimer);
+  adminSaveTimer = setTimeout(saveAdminData, 250);
+}
+
 async function updateUnifiedPassword(password) {
   const value = String(password || '').trim();
   if (value.length < 6) throw new Error('统一密码至少需要6位');
@@ -48,17 +88,15 @@ async function updateUnifiedPassword(password) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.success) throw new Error(data.error || '统一密码更新失败');
-  localStorage.removeItem('unified_password');
   showToast(data.message || `已更新 ${data.updated || 0} 个普通用户密码`, 'success');
   return data;
 }
 
-// 旧页面可能仍调用此名称；密码绝不从浏览器返回。
 function getUnifiedPassword() { return ''; }
 
 function formatRouteCode(input) {
   if (!input) return '';
-  const num = parseInt(String(input).trim());
+  const num = parseInt(String(input).trim(), 10);
   if (isNaN(num) || num < 1) return '';
   return String(num).padStart(2, '0') + '号线';
 }
@@ -68,8 +106,8 @@ async function isRouteRegistered(route) {
   return user !== null;
 }
 
-function openDialog(id) { document.getElementById(id).classList.add('active'); }
-function closeDialog(id) { document.getElementById(id).classList.remove('active'); }
+function openDialog(id) { document.getElementById(id)?.classList.add('active'); }
+function closeDialog(id) { document.getElementById(id)?.classList.remove('active'); }
 
 function showToast(msg, type = 'success') {
   const toast = document.getElementById('toast');
@@ -81,15 +119,14 @@ function showToast(msg, type = 'success') {
 
 function updateStats() {
   const users = DB.get('users', []), vehicles = DB.get('vehicles', []), logs = DB.get('logs', []);
-  let stores = [];
-  try { stores = JSON.parse(localStorage.getItem('base_data') || '[]'); } catch {}
+  const stores = DB.get('stores', []);
+  const ocr = DB.get('ocr', []);
   document.getElementById('statUsers').textContent = users.length;
   document.getElementById('statVehicles').textContent = vehicles.filter(v => v.status === 'active').length;
   document.getElementById('statStores').textContent = stores.length;
   document.getElementById('statLogs').textContent = logs.length;
   document.getElementById('userBadge').textContent = users.length;
   document.getElementById('vehicleBadge').textContent = vehicles.filter(v => v.status === 'active').length;
-  const ocr = DB.get('ocr', []);
   document.getElementById('ocrBadge').textContent = ocr.filter(o => o.status === 'pending').length;
   document.getElementById('logBadge').textContent = logs.length;
 }
@@ -99,24 +136,27 @@ async function initAdmin() {
   try {
     const users = await Auth.fetchUsersFromUpstash();
     if (!Array.isArray(users)) throw new Error('服务器未返回用户数据');
-    localStorage.setItem('admin_users', JSON.stringify(users));
+    adminMemory.users = users;
+    await loadAdminData();
   } catch (e) {
     console.error(e);
-    showToast('用户信息加载失败，请联网后重试', 'error');
+    showToast('服务器数据加载失败，请联网后重试', 'error');
+    return;
   }
-  if (!localStorage.getItem('admin_vehicles')) localStorage.setItem('admin_vehicles', JSON.stringify([{ id: 1, plate: '渝DK7692', route: '17号线', status: 'active' }]));
-  if (!localStorage.getItem('admin_ocr')) localStorage.setItem('admin_ocr', JSON.stringify([{ id: 1, image: '运单_001.jpg', error: '门店名称识别错误', correct: '江北胡汪洋经销商', status: 'pending', time: new Date().toLocaleString() }]));
-  if (!localStorage.getItem('admin_backups')) localStorage.setItem('admin_backups', JSON.stringify([]));
-  if (!localStorage.getItem('admin_logs')) localStorage.setItem('admin_logs', JSON.stringify([{ id: 1, time: new Date().toLocaleString(), action: '系统初始化', detail: '管理中心已启动', user: 'system' }]));
   updateStats();
 }
 
 function logout() { if (confirm('确定退出登录吗？')) Auth.logout(); }
 
-function openRouteSelectDialog() { document.getElementById('routeSelectInput').value = ''; openDialog('routeSelectDialog'); }
+function openRouteSelectDialog() {
+  const input = document.getElementById('routeSelectInput');
+  if (input) input.value = '';
+  openDialog('routeSelectDialog');
+}
 
 async function confirmRouteSelect() {
-  const rawInput = document.getElementById('routeSelectInput').value.trim();
+  const input = document.getElementById('routeSelectInput');
+  const rawInput = input?.value.trim() || '';
   if (!rawInput) { showToast('请输入线路编号', 'error'); return; }
   const route = formatRouteCode(rawInput);
   if (!route) { showToast('请输入有效数字 (如 1, 17, 105)', 'error'); return; }
@@ -127,10 +167,10 @@ async function confirmRouteSelect() {
   } catch { showToast('线路信息读取失败，请联网后重试', 'error'); }
 }
 
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   const dialog = document.getElementById('routeSelectDialog');
-  if (dialog && dialog.classList.contains('active')) confirmRouteSelect();
+  if (dialog?.classList.contains('active')) confirmRouteSelect();
 });
 
 document.addEventListener('DOMContentLoaded', initAdmin);
