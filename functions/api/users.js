@@ -1,13 +1,31 @@
 // functions/api/users.js
 // 管理员用户管理 API：真实读取/写入 Upstash admin_users。
 // GET/POST 均要求管理员会话；返回数据永远不包含 password。
+// 初始账号密码只允许来自 Cloudflare 环境变量，不再硬编码在公开代码中。
 import { authRequired } from './_auth.js';
 
 const REDIS_KEY = 'admin_users';
-const DEFAULT_USERS = [
-  { id: 1, name: 'tianbo', route: '', role: 'admin', password: '203526', createdAt: '2026-08-25T00:00:00.000Z' },
-  { id: 17, name: '17号线', route: '17号线', role: 'driver', password: 'tianyou2024', createdAt: '2026-08-25T00:00:00.000Z' }
-];
+
+function defaultUsers(env) {
+  return [
+    {
+      id: 1,
+      name: String(env.DEFAULT_ADMIN_NAME || 'tianbo').trim(),
+      route: '',
+      role: 'admin',
+      password: String(env.DEFAULT_ADMIN_PASSWORD || '').trim(),
+      createdAt: '2026-08-25T00:00:00.000Z'
+    },
+    {
+      id: 17,
+      name: '17号线',
+      route: '17号线',
+      role: 'driver',
+      password: String(env.DEFAULT_DRIVER_PASSWORD || '').trim(),
+      createdAt: '2026-08-25T00:00:00.000Z'
+    }
+  ].filter(u => u.password);
+}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -22,9 +40,8 @@ export async function onRequest(context) {
   try {
     let users = await readUsers(UPSTASH_URL, UPSTASH_TOKEN);
 
-    // T1 数据迁移/初始化：如果历史版本没有 admin_users，自动建立正式账号。
-    // 如果已有数据，只补齐缺失的正式账号，不覆盖已有用户资料。
-    const seeded = ensureDefaultUsers(users);
+    // 只在服务器已有用户数据时做结构迁移；空库初始化依赖环境变量。
+    const seeded = ensureDefaultUsers(users, env);
     if (seeded.changed) {
       users = seeded.users;
       await saveUsers(UPSTASH_URL, UPSTASH_TOKEN, users);
@@ -36,7 +53,6 @@ export async function onRequest(context) {
       const body = await request.json();
       if (!Array.isArray(body.users)) return json({ error: 'users 必须是数组' }, 400);
 
-      // 管理端读取的是脱敏数据，保存时从服务器原始数据恢复未提交的密码。
       const byId = new Map(users.map(u => [String(u?.id), u]));
       const byRoute = new Map(users.map(u => [normalizeRoute(u?.route), u]));
       const merged = body.users.map(input => {
@@ -49,8 +65,8 @@ export async function onRequest(context) {
         return user;
       });
 
-      // 不允许管理员管理接口把两个正式账号删除掉。
-      for (const required of DEFAULT_USERS) {
+      // 正式账号不能被管理接口误删除；仅当环境变量提供初始密码时才补建。
+      for (const required of defaultUsers(env)) {
         if (!merged.some(u => u && (String(u.id) === String(required.id) || normalizeRoute(u.route) === normalizeRoute(required.route)) && u.role === required.role)) {
           merged.push(required);
         }
@@ -63,12 +79,12 @@ export async function onRequest(context) {
     return json({ error: 'Method not allowed' }, 405);
   } catch (e) {
     console.error('users api error', e);
-    return json({ error: '用户数据服务不可用', detail: e?.message || '' }, 503);
+    return json({ error: '用户数据服务不可用' }, 503);
   }
 }
 
 async function readUsers(url, token) {
-  const resp = await fetch(`${url}/get/${REDIS_KEY}`, { headers: { Authorization: `Bearer ${token}` } });
+  const resp = await fetch(`${url}/get/${REDIS_KEY}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
   if (!resp.ok) throw new Error('Upstash request failed');
   const data = await resp.json();
   if (!data.result) return [];
@@ -82,23 +98,26 @@ async function saveUsers(url, token, users) {
   const resp = await fetch(`${url}/set/${REDIS_KEY}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(JSON.stringify(users))
+    body: JSON.stringify(JSON.stringify(users)),
+    cache: 'no-store'
   });
   if (!resp.ok) throw new Error('保存用户失败');
+  const data = await resp.json().catch(() => ({}));
+  if (data.result !== undefined && data.result !== 'OK') throw new Error('保存用户未确认');
 }
 
-function ensureDefaultUsers(users) {
+function ensureDefaultUsers(users, env) {
   const list = Array.isArray(users) ? [...users] : [];
   let changed = false;
-  for (const required of DEFAULT_USERS) {
+  for (const required of defaultUsers(env)) {
     const index = list.findIndex(u => String(u?.id) === String(required.id) || normalizeRoute(u?.route) === normalizeRoute(required.route));
     if (index < 0) {
       list.push({ ...required });
       changed = true;
       continue;
     }
-    // 正式账号密码只在缺失时恢复，避免管理员主动修改密码被覆盖。
-    if (!list[index].password) {
+    // 只恢复缺失密码，不覆盖管理员已经主动修改的密码。
+    if (!list[index].password && required.password) {
       list[index] = { ...list[index], password: required.password };
       changed = true;
     }
