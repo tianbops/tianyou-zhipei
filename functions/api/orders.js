@@ -18,8 +18,8 @@ export async function onRequest(context) {
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
       if (!targetRoute || !Array.isArray(body.orders)) return json({ error: '缺少线路或订单数据' }, 400);
 
-      // 业务日期必须使用运单日期；只有没有日期时才使用服务器当前日期。
-      const date = normalizeDate(body.date) || new Date().toISOString().slice(0, 10);
+      // 运单日期优先；只有完全没有日期时才使用中国业务时区日期。
+      const date = normalizeDate(body.date) || businessDate();
       const key = `today_orders:${targetRoute}:${date}`;
       const existing = await redisGet(env, key);
       const suppliedBatchId = String(body.orderBatchId || '').trim();
@@ -52,7 +52,7 @@ export async function onRequest(context) {
       const requestedRoute = normalizeRoute(url.searchParams.get('route') || '');
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
       if (!targetRoute) return json({ error: '缺少线路' }, 400);
-      const date = normalizeDate(url.searchParams.get('date')) || new Date().toISOString().slice(0, 10);
+      const date = normalizeDate(url.searchParams.get('date')) || businessDate();
       const today = await redisGet(env, `today_orders:${targetRoute}:${date}`);
       const history = await redisGet(env, `history:${targetRoute}:${date}`);
       return json({ success: true, today: today && normalizeDate(today.date) === date ? today : null, history: Array.isArray(history) ? history : [] });
@@ -109,11 +109,11 @@ function normalizeOrder(item,index,batchId,route,date){
     date
   };
 }
-
 function createBatchId(route,date){const r=route.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g,'');const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `${date}-${r}-${stamp}`;}
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim();const m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return /吨|\bt\b/i.test(s)?`${n}t`:`${n}kg`;}
 function normalizeRoute(v){const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s;}
 function normalizeDate(v){const s=String(v||'').trim().replace(/[年月]/g,'-').replace(/日/g,'').replace(/[/.]/g,'-');const m=s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/);return m?`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`:'';}
+function businessDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 async function redisGet(env,key){const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`,{headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`},cache:'no-store'});if(!r.ok)throw Error('Redis读取失败');const d=await r.json();if(!d.result)return null;try{return JSON.parse(d.result)}catch{return null}}
 async function redisSet(env,key,value){const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`,{method:'POST',headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify(JSON.stringify(value)),cache:'no-store'});if(!r.ok)throw Error('Redis保存失败');const d=await r.json().catch(()=>({}));if(d.result!==undefined&&d.result!=='OK')throw Error('Redis保存未确认');}
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}})}
