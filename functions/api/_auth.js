@@ -1,6 +1,6 @@
 // functions/api/_auth.js
 // 服务端会话令牌：浏览器只持有会话令牌，业务数据全部以服务器为准。
-// SESSION_SECRET 为独立签名密钥；为兼容旧部署，未配置时暂回退到 Upstash Token。
+// SESSION_SECRET 为独立签名密钥；生产环境应配置该变量。
 
 const SESSION_TTL = 8 * 60 * 60;
 
@@ -72,11 +72,25 @@ export async function verifySession(request, env) {
     let users;
     try { users = JSON.parse(data.result); } catch { return null; }
     if (!Array.isArray(users)) return null;
+
     const user = users.find(u => u && String(u.id) === String(payload.id));
     if (!user) return null;
     const currentVersion = Number(user.sessionVersion || 1);
     if (currentVersion !== Number(payload.sessionVersion)) return null;
-    return payload;
+
+    // 会话中的身份/线路信息不能长期脱离服务器真实用户记录。
+    // 用户被降权、改线路或停用后，旧 token 立即失效，避免越权访问。
+    const currentRole = user.role || 'driver';
+    const currentRoute = normalizeRoute(user.route || '');
+    const tokenRoute = normalizeRoute(payload.route || '');
+    if (String(payload.name || '') !== String(user.name || '') || currentRole !== payload.role || currentRoute !== tokenRoute) return null;
+
+    return {
+      ...payload,
+      name: user.name || '',
+      role: currentRole,
+      route: currentRoute
+    };
   } catch {
     return null;
   }
@@ -89,4 +103,10 @@ export function authRequired(request, env, options = {}) {
     if (options.route && session.role !== 'admin' && session.route !== options.route) return null;
     return session;
   });
+}
+
+function normalizeRoute(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
+  return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s;
 }
