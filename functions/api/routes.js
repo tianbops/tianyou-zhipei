@@ -3,6 +3,8 @@
 // 普通用户只能读取/修改自己的线路；管理员可管理指定线路。
 import { authRequired } from './_auth.js';
 
+const LOCK_TTL_SECONDS = 15;
+
 export async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const route = normalizeRoute(url.searchParams.get('route'));
@@ -22,7 +24,6 @@ export async function onRequest({ request, env }) {
       if (r.result) {
         try {
           const p = typeof r.result === 'string' ? JSON.parse(r.result) : r.result;
-          // 兼容旧版本可能产生的“双重 JSON 编码”数据。
           const data = typeof p === 'string' ? JSON.parse(p) : p;
           stores = Array.isArray(data?.stores) ? data.stores : [];
         } catch (_) {}
@@ -34,16 +35,24 @@ export async function onRequest({ request, env }) {
       const body = await request.json();
       if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
 
-      const stores = body.stores.map((store, index) => ({
-        ...store,
-        code: String(store?.code || index + 1).padStart(2, '0'),
-        routeOrder: index + 1
-      }));
-      // 直接保存对象，由 redisSet 统一进行一次 JSON 编码，避免双重 JSON 编码。
-      const value = { route, stores, updatedAt: new Date().toISOString() };
-      const r = await redisSet(env, key, value);
-      if (!r.ok) return json({ error: '线路基准数据库保存失败' }, 500);
-      return json({ success: true, route, storeCount: stores.length, source: 'server' });
+      const lockKey = `lock:route-base:${route}`;
+      const lockValue = crypto.randomUUID();
+      const locked = await acquireLock(env, lockKey, lockValue, LOCK_TTL_SECONDS);
+      if (!locked) return json({ error: '该线路基准库正在被其他操作修改，请稍后重试' }, 409);
+
+      try {
+        const stores = body.stores.map((store, index) => ({
+          ...store,
+          code: String(store?.code || index + 1).padStart(2, '0'),
+          routeOrder: index + 1
+        }));
+        const value = { route, stores, updatedAt: new Date().toISOString() };
+        const r = await redisSet(env, key, value);
+        if (!r.ok) return json({ error: '线路基准数据库保存失败' }, 500);
+        return json({ success: true, route, storeCount: stores.length, source: 'server' });
+      } finally {
+        await releaseLock(env, lockKey, lockValue).catch(() => {});
+      }
     }
 
     return json({ error: 'Method not allowed' }, 405);
@@ -51,6 +60,33 @@ export async function onRequest({ request, env }) {
     console.error('routes api error', e);
     return json({ error: '线路基准数据库服务异常' }, 500);
   }
+}
+
+async function acquireLock(env, key, value, ttl) {
+  const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}/NX/EX/${ttl}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+    cache: 'no-store'
+  });
+  if (!r.ok) return false;
+  const d = await r.json().catch(() => ({}));
+  return d.result === 'OK';
+}
+
+async function releaseLock(env, key, value) {
+  // Lua 保证只有持有者才能释放锁，避免误删其他请求的新锁。
+  const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+  const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify([script, 1, key, value]),
+    cache: 'no-store'
+  });
+  if (!r.ok) return;
+  await r.json().catch(() => null);
 }
 
 async function redisGet(env, key) {
