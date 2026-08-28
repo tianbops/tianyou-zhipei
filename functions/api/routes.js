@@ -10,7 +10,6 @@ export async function onRequest({ request, env }) {
   if (!route) return json({ error: 'Missing route parameter' }, 400);
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
 
-  // GET 同样必须认证，不能仅凭 URL 参数读取其他线路的基准数据库。
   const session = await authRequired(request, env, { route });
   if (!session) return json({ error: '未登录或无权访问该线路数据' }, 401);
 
@@ -22,8 +21,10 @@ export async function onRequest({ request, env }) {
       let stores = [];
       if (r.result) {
         try {
-          const p = JSON.parse(r.result);
-          stores = Array.isArray(p?.stores) ? p.stores : [];
+          const p = typeof r.result === 'string' ? JSON.parse(r.result) : r.result;
+          // 兼容旧版本可能产生的“双重 JSON 编码”数据。
+          const data = typeof p === 'string' ? JSON.parse(p) : p;
+          stores = Array.isArray(data?.stores) ? data.stores : [];
         } catch (_) {}
       }
       return json({ route, stores, source: 'server', updatedAt: getUpdatedAt(r.result) });
@@ -33,13 +34,13 @@ export async function onRequest({ request, env }) {
       const body = await request.json();
       if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
 
-      // 基准数据库保持顺序；服务端生成顺序号，防止客户端伪造排序结果。
       const stores = body.stores.map((store, index) => ({
         ...store,
         code: String(store?.code || index + 1).padStart(2, '0'),
         routeOrder: index + 1
       }));
-      const value = JSON.stringify({ route, stores, updatedAt: new Date().toISOString() });
+      // 直接保存对象，由 redisSet 统一进行一次 JSON 编码，避免双重 JSON 编码。
+      const value = { route, stores, updatedAt: new Date().toISOString() };
       const r = await redisSet(env, key, value);
       if (!r.ok) return json({ error: '线路基准数据库保存失败' }, 500);
       return json({ success: true, route, storeCount: stores.length, source: 'server' });
@@ -54,25 +55,33 @@ export async function onRequest({ request, env }) {
 
 async function redisGet(env, key) {
   const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+    cache: 'no-store'
   });
   const d = await r.json().catch(() => ({}));
   return { ok: r.ok, result: d.result };
 }
 
 async function redisSet(env, key, value) {
-  return fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
+  const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(value)
+    body: JSON.stringify(JSON.stringify(value)),
+    cache: 'no-store'
   });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok && (d.result === undefined || d.result === 'OK'), result: d.result };
 }
 
 function getUpdatedAt(value) {
-  try { return JSON.parse(value || '{}')?.updatedAt || null; } catch { return null; }
+  try {
+    const a = typeof value === 'string' ? JSON.parse(value || '{}') : value;
+    const data = typeof a === 'string' ? JSON.parse(a) : a;
+    return data?.updatedAt || null;
+  } catch { return null; }
 }
 
 function normalizeRoute(v) {
