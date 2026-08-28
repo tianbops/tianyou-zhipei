@@ -1,9 +1,5 @@
-
 {
   "version": 1,
-  "include": ["/*"],
-  "exclude": [],
-  "fallbacks": {
-    "/*": "/index.html"
-  }
+  "include": ["/api/*"],
+  "exclude": []
 }
