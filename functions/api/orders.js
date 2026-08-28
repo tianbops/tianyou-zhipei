@@ -1,5 +1,5 @@
 // 天友智配One - 服务器端订单 API
-// 服务器为唯一真实数据源；每条线路、每个业务日期独立保存订单。
+// 服务器为真实数据源；订单按「线路 + 业务日期」独立存储。
 import { authRequired } from './_auth.js';
 
 export async function onRequest(context) {
@@ -18,14 +18,14 @@ export async function onRequest(context) {
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
       if (!targetRoute || !Array.isArray(body.orders)) return json({ error: '缺少线路或订单数据' }, 400);
 
+      // 业务日期必须使用运单日期；只有没有日期时才使用服务器当前日期。
       const date = normalizeDate(body.date) || new Date().toISOString().slice(0, 10);
+      const key = `today_orders:${targetRoute}:${date}`;
+      const existing = await redisGet(env, key);
       const suppliedBatchId = String(body.orderBatchId || '').trim();
-      const orderBatchId = suppliedBatchId || createBatchId(targetRoute, date);
+      const orderBatchId = suppliedBatchId || existing?.orderBatchId || createBatchId(targetRoute, date);
       const updatedAt = new Date().toISOString();
-      const normalizedOrders = body.orders
-        .map((item, index) => normalizeOrder(item, index, orderBatchId, targetRoute, date))
-        .filter(item => item.name);
-
+      const normalizedOrders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, targetRoute, date)).filter(item => item.name);
       const todayData = {
         orderBatchId,
         date,
@@ -42,8 +42,7 @@ export async function onRequest(context) {
         updatedAt
       };
 
-      // 关键修复：订单主键包含“线路 + 业务日期”，历史日期不会覆盖另一日期的当前订单。
-      await redisSet(env, orderKey(targetRoute, date), todayData);
+      await redisSet(env, key, todayData);
       await saveHistory(env, targetRoute, date, todayData);
       return json({ success: true, data: todayData });
     }
@@ -54,9 +53,9 @@ export async function onRequest(context) {
       const targetRoute = session.role === 'admin' ? (requestedRoute || sessionRoute) : sessionRoute;
       if (!targetRoute) return json({ error: '缺少线路' }, 400);
       const date = normalizeDate(url.searchParams.get('date')) || new Date().toISOString().slice(0, 10);
-      const current = await redisGet(env, orderKey(targetRoute, date));
+      const today = await redisGet(env, `today_orders:${targetRoute}:${date}`);
       const history = await redisGet(env, `history:${targetRoute}:${date}`);
-      return json({ success: true, today: current && normalizeDate(current.date) === date ? current : null, history: Array.isArray(history) ? history : [] });
+      return json({ success: true, today: today && normalizeDate(today.date) === date ? today : null, history: Array.isArray(history) ? history : [] });
     }
 
     return json({ error: 'Method not allowed' }, 405);
@@ -64,10 +63,6 @@ export async function onRequest(context) {
     console.error('orders api error', error);
     return json({ success: false, error: '订单数据服务暂不可用' }, 503);
   }
-}
-
-function orderKey(route, date) {
-  return `orders:${route}:${date}`;
 }
 
 async function saveHistory(env, route, date, todayData) {
@@ -96,75 +91,29 @@ async function saveHistory(env, route, date, todayData) {
   await redisSet(env, key, history);
 }
 
-function normalizeOrder(item, index, batchId, route, date) {
-  if (typeof item === 'string') return {
-    id: `${batchId}-${index + 1}`, orderBatchId: batchId,
-    code: String(index + 1).padStart(2, '0'), name: item.trim(), nav: '', weight: 0,
-    note: '', matched: false, isNew: false, status: '待配送', route, date
-  };
-  const s = item || {};
+function normalizeOrder(item,index,batchId,route,date){
+  if(typeof item==='string') return {id:`${batchId}-${index+1}`,orderBatchId:batchId,code:String(index+1).padStart(2,'0'),name:item.trim(),nav:'',weight:0,note:'',matched:false,isNew:false,status:'待配送',route,date};
+  const s=item||{};
   return {
-    id: s.id || `${batchId}-${index + 1}`, orderBatchId: batchId,
-    code: String(s.code || s.index || index + 1).padStart(2, '0'),
-    name: String(s.name || s.storeName || s.shopName || s['门店名称'] || '').trim(),
-    nav: String(s.nav || s.navigation || s.url || s['导航'] || '').trim(),
-    weight: Number(s.weight ?? s['重量'] ?? 0) || 0,
-    note: String(s.note || s['备注'] || '').trim(),
-    matched: s.matched === true, isNew: s.isNew === true || s.newStore === true,
-    status: s.status || '待配送', route, date
+    id:s.id||`${batchId}-${index+1}`,
+    orderBatchId:batchId,
+    code:String(s.code||s.index||index+1).padStart(2,'0'),
+    name:String(s.name||s.storeName||s.shopName||s['门店名称']||'').trim(),
+    nav:String(s.nav||s.navigation||s.url||s['导航']||'').trim(),
+    weight:Number(s.weight??s['重量']??0)||0,
+    note:String(s.note||s['备注']||'').trim(),
+    matched:s.matched===true,
+    isNew:s.isNew===true||s.newStore===true,
+    status:s.status||'待配送',
+    route,
+    date
   };
 }
 
-function createBatchId(route, date) {
-  const r = route.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g, '');
-  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-  return `${date}-${r}-${stamp}`;
-}
-
-function normalizeWeight(v) {
-  if (v === null || v === undefined || v === '') return '';
-  const s = String(v).trim();
-  const m = s.match(/[\d]+(?:\.\d+)?/);
-  if (!m) return '';
-  const n = Number(m[0]);
-  return /吨|\bt\b/i.test(s) ? `${n}t` : `${n}kg`;
-}
-
-function normalizeRoute(v) {
-  const s = String(v || '').trim();
-  const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
-  return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s;
-}
-
-function normalizeDate(v) {
-  const s = String(v || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-');
-  const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/);
-  return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : '';
-}
-
-async function redisGet(env, key) {
-  const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
-  });
-  if (!r.ok) throw Error('Redis读取失败');
-  const d = await r.json();
-  if (!d.result) return null;
-  try { return JSON.parse(d.result); } catch { return null; }
-}
-
-async function redisSet(env, key, value) {
-  const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(JSON.stringify(value)), cache: 'no-store'
-  });
-  if (!r.ok) throw Error('Redis保存失败');
-  const d = await r.json().catch(() => ({}));
-  if (d.result !== undefined && d.result !== 'OK') throw Error('Redis保存未确认');
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
-  });
-}
+function createBatchId(route,date){const r=route.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g,'');const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `${date}-${r}-${stamp}`;}
+function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim();const m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return /吨|\bt\b/i.test(s)?`${n}t`:`${n}kg`;}
+function normalizeRoute(v){const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s;}
+function normalizeDate(v){const s=String(v||'').trim().replace(/[年月]/g,'-').replace(/日/g,'').replace(/[/.]/g,'-');const m=s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/);return m?`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`:'';}
+async function redisGet(env,key){const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`,{headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`},cache:'no-store'});if(!r.ok)throw Error('Redis读取失败');const d=await r.json();if(!d.result)return null;try{return JSON.parse(d.result)}catch{return null}}
+async function redisSet(env,key,value){const r=await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`,{method:'POST',headers:{Authorization:`Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify(JSON.stringify(value)),cache:'no-store'});if(!r.ok)throw Error('Redis保存失败');const d=await r.json().catch(()=>({}));if(d.result!==undefined&&d.result!=='OK')throw Error('Redis保存未确认');}
+function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}})}
