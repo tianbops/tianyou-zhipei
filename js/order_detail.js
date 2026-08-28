@@ -11,9 +11,10 @@ function baseName(x){return clean(x?.name||x?.storeName||x?.shopName||x?.title||
 function normalize(raw){if(!Array.isArray(raw))return[];const seen=new Set();return raw.map((x,i)=>typeof x==='string'?{code:String(i+1).padStart(2,'0'),name:clean(x),nav:'',weight:0,isNew:false}:{code:String(x?.code||x?.index||i+1).padStart(2,'0'),name:clean(x?.name||x?.storeName||x?.shopName||x?.门店名称),nav:String(x?.nav||x?.navigation||x?.url||x?.amap||''),weight:kg(x?.weight),isNew:Boolean(x?.isNew||x?.newStore),status:x?.status||'待配送',orderBatchId:x?.orderBatchId||''}).filter(x=>x.name&&!seen.has(key(x.name))&&(seen.add(key(x.name)),true))}
 function sortOrders(raw,base){const src=normalize(raw),bs=(Array.isArray(base)?base:[]).map((x,i)=>({name:baseName(x),idx:i,code:String(x?.code||i+1).padStart(2,'0'),nav:String(x?.nav||x?.navigation||x?.url||x?.amap||'')}));if(!bs.length)return src.map((x,i)=>({...x,displayCode:String(i+1).padStart(2,'0')}));const used=new Set(),matched=[],news=[];src.forEach(o=>{let hit=-1;for(let i=0;i<bs.length;i++)if(!used.has(i)&&key(o.name)===key(bs[i].name)){hit=i;break}if(hit>=0){used.add(hit);const b=bs[hit];matched.push({...o,code:b.code,displayCode:b.code,name:b.name||o.name,nav:b.nav||o.nav,isNew:false,_base:hit})}else news.push({...o,isNew:true})});matched.sort((a,b)=>a._base-b._base);news.forEach((x,i)=>x.displayCode=`N${String(i+1).padStart(2,'0')}`);return matched.concat(news).map(x=>{const y={...x};delete y._base;return y})}
 function authHeaders(){return Auth.getAuthHeaders?Auth.getAuthHeaders():{}}
-async function getBase(route){const r=await fetch(`/api/routes?route=${encodeURIComponent(route)}`,{cache:'no-store',headers:authHeaders()});if(!r.ok)throw Error(`基准数据读取失败（${r.status}）`);const d=await r.json();const a=Array.isArray(d)?d:(d?.stores||d?.data||[]);if(!Array.isArray(a))throw Error('基准数据库格式错误');return a}
+function routeContext(){const sessionRoute=Auth.getCurrentRoute();if(sessionRoute!=='admin')return sessionRoute;return String(new URLSearchParams(location.search).get('route')||'').trim()}
+async function getBase(route){if(!route)throw Error('未指定配送线路');const r=await fetch(`/api/routes?route=${encodeURIComponent(route)}`,{cache:'no-store',headers:authHeaders()});if(!r.ok)throw Error(`基准数据读取失败（${r.status}）`);const d=await r.json();const a=Array.isArray(d)?d:(d?.stores||d?.data||[]);if(!Array.isArray(a))throw Error('基准数据库格式错误');return a}
 async function load(){
- const sessionRoute=Auth.getCurrentRoute();if(!sessionRoute)throw Error('未绑定线路');
+ const sessionRoute=routeContext();if(!sessionRoute)throw Error(Auth.getCurrentRoute()==='admin'?'管理员查看配送数据时必须指定线路':'未绑定线路');
  const p=new URLSearchParams(location.search),historyMode=p.get('mode')==='history',date=p.get('date')||today(),batch=p.get('orderBatchId')||p.get('batch')||'';let t=null;
  if(historyMode){
    if(!batch)throw Error('历史记录缺少运单批次');
@@ -23,7 +24,8 @@ async function load(){
    const payload=await r.json();const records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
    t=records.find(x=>x?.orderBatchId===batch)||null;if(!t)throw Error('未找到对应运单批次');
  }else{
-   const r=await fetch(`/api/orders?date=${encodeURIComponent(date)}&route=${encodeURIComponent(sessionRoute)}`,{cache:'no-store',headers:authHeaders()});
+   const routeParam=p.get('route')||sessionRoute;
+   const r=await fetch(`/api/orders?date=${encodeURIComponent(date)}&route=${encodeURIComponent(routeParam)}`,{cache:'no-store',headers:authHeaders()});
    if(!r.ok)throw Error(`今日订单服务不可用（${r.status}）`);const d=await r.json();t=d?.today||null;
  }
  if(!t||!Array.isArray(t.orders))return{orders:[],weight:'',orderBatchId:t?.orderBatchId||batch,date:t?.date||date,vehicle:t?.vehicle||'',route:t?.route||sessionRoute};
@@ -31,7 +33,7 @@ async function load(){
  const b=await getBase(dataRoute);return{orders:sortOrders(t.orders,b),weight:t.totalWeight??t.weight??'',orderBatchId:t.orderBatchId||batch,date:t.date||date,vehicle:t.vehicle||'',route:dataRoute};
 }
 function render(a,w){const n=a.length,nn=a.filter(x=>x.isNew).length;if($('storeCount'))$('storeCount').textContent=nn?`⚠️ 新${nn}家、总${n}家`:`${n}家`;if($('totalWeight'))$('totalWeight').textContent=`${Number((kg(w)||a.reduce((s,x)=>s+kg(x.weight),0)).toFixed(3))} kg`;const box=$('routeList');if(!box)return;box.innerHTML='';if(!a.length){box.innerHTML='<div class="empty-tip"><span class="icon">📭</span>暂无配送数据</div>';return}a.forEach((s,i)=>{const row=document.createElement('div');row.className='store-item';const idx=document.createElement('span');idx.className='store-index';idx.textContent=`${s.displayCode||s.code||String(i+1).padStart(2,'0')}、`;const name=document.createElement('span');name.className='store-name';name.textContent=s.isNew?`⚠️ 新增 ${s.name}`:s.name;const nav=document.createElement('button');nav.className='nav-btn';nav.type='button';nav.textContent='导航';nav.onclick=()=>s.nav?location.href=s.nav:alert('该门店暂无导航地址');row.append(idx,name,nav);box.appendChild(row)})}
-function header(){const r=currentData.route||Auth.getCurrentRoute();if($('routeName'))$('routeName').textContent=r||'未选择线路';if($('menuRoute'))$('menuRoute').textContent=r||'未选择线路';if($('todayDate'))$('todayDate').textContent=currentData.date||today();if($('vehicleText'))$('vehicleText').textContent=currentData.vehicle||'未设置';if($('newVehicle'))$('newVehicle').value=currentData.vehicle||''}
+function header(){const r=currentData.route||routeContext();if($('routeName'))$('routeName').textContent=r||'未选择线路';if($('menuRoute'))$('menuRoute').textContent=r||'未选择线路';if($('todayDate'))$('todayDate').textContent=currentData.date||today();if($('vehicleText'))$('vehicleText').textContent=currentData.vehicle||'未设置';if($('newVehicle'))$('newVehicle').value=currentData.vehicle||''}
 window.toggleMenu=()=>{const m=$('menuPanel');if(m)m.style.display=m.style.display==='block'?'none':'block'};
 window.openVehicle=()=>{$('vehicleDialog')&&($('vehicleDialog').style.display='flex');$('menuPanel')&&($('menuPanel').style.display='none')};
 window.closeVehicle=()=>{$('vehicleDialog')&&($('vehicleDialog').style.display='none')};
