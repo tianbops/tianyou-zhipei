@@ -3,7 +3,7 @@
 const SESSION_TTL = 8 * 60 * 60;
 const SESSION_COOKIE = 'ty_session';
 
-function getSessionSecret(env) { return env.SESSION_SECRET || ''; }
+function getSessionSecret(env) { return env.SESSION_SECRET || env.UPSTASH_REDIS_REST_TOKEN || ''; }
 function base64url(bytes) { let s=''; for(const b of bytes)s+=String.fromCharCode(b); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,''); }
 function decodeBase64url(s) { const pad=s.length%4?'='.repeat(4-s.length%4):''; const raw=atob(s.replace(/-/g,'+').replace(/_/g,'/')+pad); return Uint8Array.from(raw,c=>c.charCodeAt(0)); }
 async function sign(secret,text){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(text)));}
@@ -11,11 +11,10 @@ function timingSafeEqual(a,b){if(a.length!==b.length)return false;let x=0;for(le
 function readCookie(request,name){const header=request.headers.get('Cookie')||'';for(const part of header.split(';')){const [k,...v]=part.trim().split('=');if(k===name)return decodeURIComponent(v.join('='));}return '';}
 
 export async function createSession(env,user){
-  const secret=getSessionSecret(env); if(!secret)throw new Error('SESSION_SECRET is required');
+  const secret=getSessionSecret(env); if(!secret)throw new Error('Session secret unavailable');
   const payload={id:user.id,name:user.name||'',route:user.route||'',role:user.role||'driver',sessionVersion:Number(user.sessionVersion||1),exp:Math.floor(Date.now()/1000)+SESSION_TTL};
   const body=base64url(new TextEncoder().encode(JSON.stringify(payload))); const sig=base64url(await sign(secret,body)); return `${body}.${sig}`;
 }
-
 export function sessionCookie(token){return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${SESSION_TTL}; Path=/; HttpOnly; Secure; SameSite=Lax`}
 export function clearSessionCookie(){return `${SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax`}
 
