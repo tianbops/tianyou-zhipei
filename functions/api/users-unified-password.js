@@ -18,13 +18,16 @@ export async function onRequest(context) {
 
     const users = await readJson(env, USERS_KEY, []);
     const targets = users.filter(u => u && u.role !== 'admin');
-    const updated = users.map(u => u && u.role !== 'admin' ? { ...u, password } : u);
+    const updated = users.map(u => {
+      if (!u || u.role === 'admin') return u;
+      return { ...u, password, sessionVersion: Number(u.sessionVersion || 1) + 1 };
+    });
 
     await writeJson(env, USERS_KEY, updated);
     const config = await readJson(env, CONFIG_KEY, {});
     await writeJson(env, CONFIG_KEY, { ...(config || {}), unifiedPassword: password, updatedAt: new Date().toISOString() });
 
-    return json({ success: true, updated: targets.length, message: `已成功更新 ${targets.length} 个普通用户密码` });
+    return json({ success: true, updated: targets.length, message: `已成功更新 ${targets.length} 个普通用户密码；旧登录会话已失效` });
   } catch (e) {
     console.error('unified password error', e);
     return json({ error: '统一密码更新失败，请稍后重试' }, 500);
@@ -32,7 +35,7 @@ export async function onRequest(context) {
 }
 
 async function readJson(env, key, fallback) {
-  const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` } });
+  const r = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
   if (!r.ok) throw new Error('读取数据失败');
   const d = await r.json();
   if (!d.result) return fallback;
