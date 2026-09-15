@@ -1,34 +1,55 @@
 // 天友智配One - 运单截图 OCR
-// 第一阶段：图片 -> 可核对的运单文字。
-// OCR阶段只负责忠实读取图片，不做门店纠错、不排序、不保存订单。
-// 门店身份纠正与基准库匹配统一放到 /api/parse，避免硬编码记忆OCR错字。
+// 第一阶段：图片 -> 可核对的高保真运单文字。
+// OCR不做门店纠错、不排序、不保存原图；门店身份确认统一由 /api/parse 完成。
 import { authRequired } from './_auth.js';
 
 const OCR_MODEL='@cf/google/gemma-4-26b-a4b-it';
-const OCR_MAX_TOKENS=4096;
-const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。这不是聊天问答、摘要或门店匹配任务。
+const OCR_MAX_TOKENS=6144;
+const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。
+这不是摘要、问答或门店匹配任务，只进行高保真视觉转录。
 
-任务只有一个：直接阅读附带的运单图片，进行高保真视觉转录。
+【核心目标】
+完整读取图片中实际可见的文字，从图片顶部开始按照视觉顺序一直读取到图片底部。
+门店名称中的每一个汉字、英文字母、数字、业务编号都很重要。
 
-识别方法：
-1. 先从整张图片建立页面结构，再从顶部到底部逐行阅读。
-2. 对配送门店链重点逐字复核：先读完整字符串，再回看容易混淆的单字、字母和数字。
-3. 如果同一段文字因为截图布局、滚动区域或视觉重叠被看到两次，只输出图片中实际出现的一次；只有图片中明确存在两次真实订单记录时才重复输出。
-4. 不要因为某个字“看起来更合理”就改成常见词；最终字符必须以图片字形为依据。
-5. 不要把相似字、同音字、常见公司名称或线路基准名称当作纠错依据。
+【识别流程】
+1. 先观察整张图片的版面结构，再逐行读取。
+2. 对配送链区域逐行复读：第一遍读取整行，第二遍专门检查容易混淆的单字、字母、数字。
+3. 对每一个门店名称，优先依据图片字形本身，不根据常识自动改成“更合理”的词。
+4. 如果一个字符看不清，只保留能够从图像确认的部分，不要凭上下文补写。
+5. 如果同一文字因为截图重叠实际出现两次，只输出一次；只有图片明确存在两条真实重复订单时才输出两次。
+6. 如果图片底部还有内容，即使内容较小，也必须继续读取，不能因为已经识别到很多门店就提前结束。
 
-严格要求：
-1. 从图片顶部开始，按视觉阅读顺序读取直到图片底部，不要只读取局部。
-2. 保留图片中的中文、数字、英文字母、日期、车牌号、重量、体积、订单字段、业务编号以及箭头。
-3. 门店配送链中的“->”“→”“＞”“》”“➜”“➤”“⇒”都要保留。
-4. 尽量保留原始换行。一个门店因屏幕换行拆成两行时，应合并为连续的OCR文本，但不能因此改写门店名称。
-5. Q、JM、A等业务编号必须尽量完整保留。
-6. “总数量”是订单商品数量，不是门店数量。
-7. 不要总结、解释、排序、匹配基准库，也不要补充图片里没有的内容。
-8. 不要输出“请提供图片”“无法读取图片”“这里放文字”等模板回复。
-9. 字符确实无法辨认时，只保留能从图像确认的部分；不要凭上下文猜完整名称。
-10. 最终输出前，对日期、车牌、总数量、总重量、总体积以及配送链重新视觉复核一次。
-11. 只输出OCR转录结果，不要Markdown代码块，不要“识别结果：”等前缀。`;
+【必须保留】
+- 中文原文
+- 英文字母
+- 数字
+- 日期
+- 车牌号
+- 额定载重
+- 额定体积
+- 主司机
+- 送货员
+- 总数量
+- 总重量及占比
+- 总体积及占比
+- Q、JM、A等业务编号
+- 门店配送链
+- 图片中的箭头：->、→、＞、》、➜、➤、⇒
+- 原始换行结构
+
+【特别注意】
+“总数量”是订单商品数量，不是门店数量。
+不要把“总数量266”解释成266家门店。
+不要使用线路基准库、常见公司名称、同音字、相似字作为纠错依据。
+不要把OCR结果改写成标准门店名称。
+不要删除看起来奇怪的字符；例如类似“海gl”的视觉结果，如果图片确实如此，应忠实保留。
+不要输出Markdown、解释、摘要或“识别结果：”前缀。
+
+【最终复核】
+输出前再次从上到下检查一次图片底部，确认没有遗漏后半段配送链。
+再逐项复核日期、车牌、额定载重、额定体积、司机、送货员、总数量、总重量、总体积。
+只输出图片中能够视觉确认的原始文字。`;
 
 export async function onRequest({request,env}){
   if(request.method!=='POST')return json({success:false,error:'Method not allowed'},405);
@@ -41,10 +62,20 @@ export async function onRequest({request,env}){
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
     const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
+
     const parsed=await runVisionOCR(env.AI,image);
     const rawText=cleanRawText(parsed.rawText||'');
     if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片文字提取失败：模型没有读取到运单图片内容，请重新上传清晰、完整的运单图片'},422);
-    return json({success:true,data:{route,date:normalizeDate(parsed.date),vehicle:normalizeVehicle(parsed.vehicle),totalWeight:normalizeWeight(parsed.totalWeight),rawOrderCount:0,rawText,message:'图片文字提取完成，请先检查OCR原文。'}});
+
+    return json({success:true,data:{
+      route,
+      date:normalizeDate(parsed.date),
+      vehicle:normalizeVehicle(parsed.vehicle),
+      totalWeight:normalizeWeight(parsed.totalWeight),
+      rawOrderCount:0,
+      rawText,
+      message:'图片文字提取完成，请先检查OCR原文。'
+    }});
   }catch(e){
     console.error('OCR error',e);
     return json({success:false,error:e?.message||'运单图片处理失败'},500);
@@ -56,15 +87,33 @@ async function runVisionOCR(AI,image){
   if(!payload.length)throw new Error('图片数据无效或无法解码');
   const base64=bytesToBase64(payload);
   const imageDataUrl=toImageDataUrl(image);
+
   try{
-    const result=await AI.run(OCR_MODEL,{image:base64,messages:[{role:'user',content:[{type:'text',text:OCR_PROMPT},{type:'image_url',image_url:{url:imageDataUrl}}]}],max_completion_tokens:OCR_MAX_TOKENS,temperature:0,chat_template_kwargs:{enable_thinking:false}});
+    const result=await AI.run(OCR_MODEL,{
+      image:base64,
+      messages:[{
+        role:'user',
+        content:[
+          {type:'text',text:OCR_PROMPT},
+          {type:'image_url',image_url:{url:imageDataUrl}}
+        ]
+      }],
+      max_completion_tokens:OCR_MAX_TOKENS,
+      temperature:0,
+      chat_template_kwargs:{enable_thinking:false}
+    });
     const text=cleanRawText(extractAIText(result));
     if(hasUsableOCR(text))return extractMeta(text);
     throw new Error('主OCR模型没有读取到运单文字');
   }catch(first){
     console.warn('Primary OCR failed:',first?.message||first);
     try{
-      const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{image:Array.from(payload),prompt:OCR_PROMPT,max_tokens:OCR_MAX_TOKENS,temperature:0});
+      const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{
+        image:Array.from(payload),
+        prompt:OCR_PROMPT,
+        max_tokens:OCR_MAX_TOKENS,
+        temperature:0
+      });
       const text=cleanRawText(extractAIText(result));
       if(hasUsableOCR(text))return extractMeta(text);
     }catch(second){
@@ -79,26 +128,86 @@ function extractMeta(rawText){
   const date=s.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
   const vehicle=s.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
   const weight=s.match(/(?:总重量|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
-  return{date:date?date[1]:'',vehicle:vehicle?vehicle[1]:'',totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',rawText:s};
+  return{
+    date:date?date[1]:'',
+    vehicle:vehicle?vehicle[1]:'',
+    totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',
+    rawText:s
+  };
 }
+
 function extractAIText(r){
   if(typeof r==='string')return r;
   if(!r||typeof r!=='object')return '';
-  return String(r.response??r.text??r.description??r.content??r.result?.response??r.result?.text??r.result?.description??r.result?.content??r.choices?.[0]?.message?.content??'');
+  return String(
+    r.response??r.text??r.description??r.content??
+    r.result?.response??r.result?.text??r.result?.description??r.result?.content??
+    r.choices?.[0]?.message?.content??''
+  );
 }
+
 function hasUsableOCR(v){const s=cleanRawText(v);return !!s&&!isPlaceholderText(s)}
+
 function isPlaceholderText(v){
   const s=cleanRawText(v).replace(/[“”\"'`]/g,'').replace(/\s+/g,'');
   if(!s)return true;
   const bad=['这里放整张图片的完整文字','这里放整张图片的完整原始文字','请提供您需要识别的图片','请上传您需要识别的图片','请上传需要识别的图片','请提供图片','请上传图片','图片无法读取','请重新上传图片'];
   return bad.some(v=>s===v||s.includes(v));
 }
-function cleanRawText(v){return String(v??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\u0000/g,'').trim()}
-function decodeImageBase64(input){let v=String(input||'').trim(),comma=v.indexOf(',');if(v.startsWith('data:')&&comma>=0)v=v.slice(comma+1);v=v.replace(/\s/g,'');if(!v)throw new Error('图片数据为空');const b=atob(v),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
-function bytesToBase64(bytes){let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));return btoa(binary)}
-function toImageDataUrl(input){const v=String(input||'').trim();if(/^data:image\/[a-z0-9.+-]+;base64,/i.test(v))return v;return `data:image/jpeg;base64,${v.replace(/\s/g,'')}`}
-function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim(),m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return/吨|\bt\b/i.test(s)?`${(n*1000).toFixed(3).replace(/\.000$/,'')}kg`:`${n}kg`}
+
+function cleanRawText(v){
+  return String(v??'')
+    .replace(/\r\n/g,'\n')
+    .replace(/\r/g,'\n')
+    .replace(/\u0000/g,'')
+    .trim();
+}
+
+function decodeImageBase64(input){
+  let v=String(input||'').trim();
+  const comma=v.indexOf(',');
+  if(v.startsWith('data:')&&comma>=0)v=v.slice(comma+1);
+  v=v.replace(/\s/g,'');
+  if(!v)throw new Error('图片数据为空');
+  const b=atob(v),a=new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);
+  return a;
+}
+
+function bytesToBase64(bytes){
+  let binary='';
+  const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
+  return btoa(binary);
+}
+
+function toImageDataUrl(input){
+  const v=String(input||'').trim();
+  if(/^data:image\/[a-z0-9.+-]+;base64,/i.test(v))return v;
+  return `data:image/jpeg;base64,${v.replace(/\s/g,'')}`;
+}
+
+function normalizeWeight(v){
+  if(v===null||v===undefined||v==='')return '';
+  const s=String(v).trim(),m=s.match(/[\d]+(?:\.\d+)?/);
+  if(!m)return '';
+  const n=Number(m[0]);
+  return /吨|\bt\b/i.test(s)?`${(n*1000).toFixed(3).replace(/\.000$/,'')}kg`:`${n}kg`;
+}
+
 function normalizeVehicle(v){return String(v||'').replace(/[\s>]+$/,'').trim()}
-function normalizeDate(v){const s=String(v||'').replace(/[年月]/g,'-').replace(/日/g,'').replace(/[/.]/g,'-'),m=s.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);return m?`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`:s}
-function normalizeRoute(v){const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s}
-function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json;charset=UTF-8','Cache-Control':'no-store'}})}
+function normalizeDate(v){
+  const s=String(v||'').replace(/[年月]/g,'-').replace(/日/g,'').replace(/[/.]/g,'-');
+  const m=s.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+  return m?`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`:s;
+}
+function normalizeRoute(v){
+  const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
+  return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s;
+}
+function json(data,status=200){
+  return new Response(JSON.stringify(data),{
+    status,
+    headers:{'Content-Type':'application/json;charset=UTF-8','Cache-Control':'no-store'}
+  });
+}
