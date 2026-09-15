@@ -31,8 +31,6 @@
 
   <script src="js/auth.js"></script>
   <script>
-    const TEST_ROUTE = '17号线';
-
     function showError(message) {
       const el = document.getElementById('loginError');
       el.textContent = message;
@@ -70,14 +68,10 @@
 
       try {
         await Auth.loginWithCredentials('username', username, password);
-        Auth.addLog('用户登录', `${TEST_ROUTE} / ${username} 登录系统`);
         location.href = 'home.html';
       } catch (error) {
-        if (error?.status === 401) {
-          showError('❌ 用户名或密码错误，请重试');
-        } else {
-          showError(error?.message || '⚠️ 网络异常，请稍后重试');
-        }
+        if (error?.status === 401) showError('❌ 用户名或密码错误，请重试');
+        else showError(error?.message || '⚠️ 网络异常，请稍后重试');
       } finally {
         button.disabled = false;
         button.textContent = '登录';
