@@ -12,7 +12,6 @@ const Auth = {
       credentials: 'same-origin',
       body: JSON.stringify({ type: 'route', username: String(account || '').trim(), password })
     });
-
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.success) {
       const error = new Error(data?.error || '登录失败');
@@ -27,6 +26,7 @@ const Auth = {
   getAuthHeaders(extra = {}) { return { ...extra }; },
 
   async getCurrentServerUser() {
+    if (this.serverUser) return this.serverUser;
     const response = await fetch('/api/me', { cache: 'no-store', credentials: 'same-origin' });
     if (!response.ok) {
       this.serverUser = null;
@@ -40,8 +40,8 @@ const Auth = {
   async checkAuth() {
     const page = location.pathname.split('/').pop();
     if (['index.html', 'login.html', ''].includes(page)) return true;
+    if (this.serverUser) return this.serverUser.route === '17号线';
     if (this.authPromise) return this.authPromise;
-
     this.authPromise = this.getCurrentServerUser().then(user => {
       if (!user || user.route !== '17号线') {
         location.href = location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
@@ -52,7 +52,6 @@ const Auth = {
       location.href = location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
       return false;
     }).finally(() => { this.authPromise = null; });
-
     return this.authPromise;
   },
 
@@ -74,10 +73,5 @@ const Auth = {
 
   isValidRouteCode(value) { return this.formatRouteCode(value) === '17号线'; }
 };
-
-document.addEventListener('DOMContentLoaded', () => {
-  const page = location.pathname.split('/').pop();
-  if (!['index.html', 'login.html', ''].includes(page)) Auth.checkAuth();
-});
 
 window.Auth = Auth;
