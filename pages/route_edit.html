@@ -37,9 +37,9 @@ function parseBatch(text){const lines=String(text||'').replace(/\r/g,'').split('
 $('dialogSave').onclick=()=>{if(batchMode){const p=parseBatch($('batchInput').value);if(!p.length)return alert('没有识别到有效门店');stores=stores.concat(p);renumber();closeDialog();render();return}const name=$('storeName').value.trim();if(!name)return alert('请输入门店名称');const item={code:$('storeCode').value.trim(),name,nav:$('storeNav').value.trim()};if(editIndex<0)stores.push(item);else stores[editIndex]=item;renumber();closeDialog();render()};
 $('dialogCancel').onclick=closeDialog;$('addBtn').onclick=openAdd;
 $('saveBtn').onclick=async()=>{if(!currentRoute)return alert('未识别线路');if(!stores.length)return alert('没有可保存的基准门店');const btn=$('saveBtn');btn.disabled=true;btn.textContent='更新中...';try{renumber();const r=await fetch('/api/routes?route='+encodeURIComponent(currentRoute),{method:'PUT',cache:'no-store',credentials:'same-origin',headers:apiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({stores})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'服务器保存失败（'+r.status+'）');
-  // 保存成功后，完全以服务器刚刚保存的基准数据重新读取并刷新页面。
-  await loadStores();
-  $('storeCount').textContent=String(stores.length);
+  // PUT 已返回服务器刚刚保存的完整数据，不再额外 GET Redis。
+  if(Array.isArray(d.stores))stores=d.stores;else renumber();
+  render();
   showStatus('✅ 基准数据已更新，当前客户总数：'+stores.length+' 家','ok');
 }catch(e){showStatus('❌ '+(e.message||'保存失败')+'；服务器数据未修改，请联网后重试','error')}finally{btn.disabled=false;btn.textContent='更新'}};
 function goBack(){if(window.history.length>1){window.history.back();return}window.location.href='../home.html'}
