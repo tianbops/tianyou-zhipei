@@ -85,56 +85,37 @@ function normalizeKnownStoreOCR(text){
 
   // OCR可能把门店名称拆成多行、插入空格，或把相邻字符识别成近似字。
   // 这里按“忽略空白后的连续文本”进行精确纠正，只针对已经确认的17号线基准门店。
-  const compact=s.replace(/[\s]+/g,'');
   const replacements=[
     ['天友24h重庆海滨酒店管理有限公司','天友24h重庆海浚酒店管理有限公司'],
     ['天友24h重庆海浸酒店管理有限公司','天友24h重庆海浚酒店管理有限公司'],
     ['江北重庆彩鲜供应链发展有限公司','江北重庆彩食鲜供应链发展有限公司'],
-    ['江北沁园Q642绿地海外滩米拉公告店','江北沁园Q642绿地海外滩米拉公馆店']
+    ['江北沁园Q642绿地海外滩米拉公告店','江北沁园Q642绿地海外滩米拉公馆店'],
+    ['江北亿达鲜鲜府国际店','江北亿达鲜观府国际店'],
+    ['亿达鲜鲜府国际店','亿达鲜观府国际店']
   ];
 
-  for(const [wrong,right] of replacements){
-    const wrongCompact=wrong.replace(/\s+/g,'');
-    if(!compact.includes(wrongCompact))continue;
-    s=replaceIgnoringWhitespace(s,wrong,right);
-  }
+  for(const [wrong,right] of replacements)s=replaceIgnoringWhitespace(s,wrong,right);
   return s;
 }
 
 function replaceIgnoringWhitespace(text,wrong,replacement){
-  const source=String(text||'');
+  let output=String(text||'');
   const target=String(wrong||'').replace(/\s+/g,'');
-  if(!target)return source;
+  if(!target)return output;
 
-  let compact='';
-  const positions=[];
-  for(let i=0;i<source.length;i++){
-    if(/\s/.test(source[i]))continue;
-    positions.push(i);
-    compact+=source[i];
-  }
-
-  let start=0;
-  let output=source;
   while(true){
-    const index=compact.indexOf(target,start);
-    if(index<0)break;
-    const first=positions[index];
-    const last=positions[index+target.length-1];
-    output=output.slice(0,first)+replacement+output.slice(last+1);
-
-    // 当前替换已经改变字符串长度，重新建立索引，避免后续位置错位。
-    const nextStart=first+replacement.length;
-    compact='';
-    positions.length=0;
+    const positions=[];
+    let compact='';
     for(let i=0;i<output.length;i++){
       if(/\s/.test(output[i]))continue;
       positions.push(i);
       compact+=output[i];
     }
-    start=compact.indexOf(replacement.replace(/\s+/g,''),Math.max(0,nextStart-replacement.length));
-    if(start<0)break;
-    start+=replacement.replace(/\s+/g,'').length;
+    const index=compact.indexOf(target);
+    if(index<0)break;
+    const first=positions[index];
+    const last=positions[index+target.length-1];
+    output=output.slice(0,first)+replacement+output.slice(last+1);
   }
   return output;
 }
