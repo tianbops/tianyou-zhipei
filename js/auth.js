@@ -1,5 +1,5 @@
 // js/auth.js
-// 当前测试版本：仅服务17号线，服务器 Session 是唯一身份来源。
+// 当前版本：仅服务17号线，服务器 Session 是唯一身份来源。
 // 浏览器不保存密码、Session Token 或线路身份。
 const Auth = {
   serverUser: null,
@@ -11,7 +11,11 @@ const Auth = {
       headers: { 'Content-Type': 'application/json' },
       cache: 'no-store',
       credentials: 'same-origin',
-      body: JSON.stringify({ type: 'route', account: '17号线', password })
+      body: JSON.stringify({
+        type: 'route',
+        username: String(account || '').trim(),
+        password
+      })
     });
 
     let d = null;
@@ -102,7 +106,7 @@ const Auth = {
   },
 
   getCurrentRoute() { return '17号线'; },
-  getCurrentUser() { return '17号线'; },
+  getCurrentUser() { return 'tianyou'; },
 
   async logout() {
     this.serverUser = null;
