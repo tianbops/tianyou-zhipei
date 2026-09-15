@@ -106,7 +106,7 @@ const Auth = {
   },
 
   getCurrentRoute() { return '17号线'; },
-  getCurrentUser() { return 'tianyou'; },
+  getCurrentUser() { return '17号线'; },
 
   async logout() {
     this.serverUser = null;
