@@ -20,7 +20,7 @@ export async function onRequest({request,env}){
     const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
     const rawText=cleanRawText(parsed.rawText||'');
-    if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片中未提取到有效文字，请重新拍摄清晰、完整的运单图片'},422);
+    if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片文字提取失败：模型没有读取到运单图片内容，请重新上传清晰、完整的运单图片'},422);
 
     return json({success:true,data:{route,date:normalizeDate(parsed.date),vehicle:normalizeVehicle(parsed.vehicle),totalWeight:normalizeWeight(parsed.totalWeight),rawOrderCount:0,rawText,message:'图片文字提取完成，请先检查OCR原文。'}});
   }catch(e){
@@ -33,21 +33,28 @@ async function runVisionOCR(AI,image){
   const payload=decodeImageBase64(image);
   if(!payload.length)throw new Error('图片数据无效或无法解码');
 
-  const prompt='只做图片文字识别。逐字抄录图片中所有可见文字，按从上到下、从左到右输出。保留中文、数字、字母、日期、车牌、重量、订单号、箭头和换行。不要猜测模糊文字，不要纠错，不要总结，不要解释，不要JSON，不要Markdown。必须读取我提供的图片本身，只输出图片中实际看到的原文；如果图片无法读取，明确返回“图片无法读取”，不要返回这段指令。';
+  const prompt='你现在执行的是运单图片OCR，不是聊天。你必须读取下面附带的图片本身。逐字抄录图片中所有可见文字，按从上到下、从左到右输出。保留中文、数字、字母、日期、车牌、重量、订单号、箭头和换行。不要猜测，不要纠错，不要总结，不要解释，不要回答“请提供图片”，不要复述任务说明。只输出图片中实际看到的文字。';
+  const base64=bytesToBase64(payload);
   const imageDataUrl=toImageDataUrl(image);
 
   try{
-    // Gemma 4 的视觉输入保留 data:image/...;base64,... 形式，避免图片被当成普通文本处理。
+    // 使用Cloudflare官方ImageTextToText支持的多模态content格式，确保模型真正收到图片。
     const result=await AI.run(OCR_MODEL,{
-      image:imageDataUrl,
-      messages:[{role:'user',content:prompt}],
+      image:base64,
+      messages:[{
+        role:'user',
+        content:[
+          {type:'text',text:prompt},
+          {type:'image_url',image_url:{url:imageDataUrl}}
+        ]
+      }],
       max_completion_tokens:OCR_MAX_TOKENS,
       temperature:0,
       chat_template_kwargs:{enable_thinking:false}
     });
     const text=cleanRawText(extractAIText(result));
     if(hasUsableOCR(text))return extractMeta(text);
-    throw new Error('主OCR模型没有返回有效文字');
+    throw new Error('主OCR模型没有读取到运单文字');
   }catch(first){
     console.warn('Primary OCR failed:',first?.message||first);
     try{
@@ -62,7 +69,7 @@ async function runVisionOCR(AI,image){
     }catch(second){
       console.warn('Fallback OCR failed:',second?.message||second);
     }
-    throw new Error('OCR模型未返回有效文字，请重新上传清晰、完整的运单图片');
+    throw new Error('OCR没有成功读取运单图片文字，请重新上传清晰、完整的运单图片');
   }
 }
 
@@ -80,9 +87,25 @@ function extractAIText(r){
   return String(r.response??r.text??r.description??r.content??r.result?.response??r.result?.text??r.result?.description??r.result?.content??r.choices?.[0]?.message?.content??'');
 }
 function hasUsableOCR(v){const s=cleanRawText(v);return !!s&&!isPlaceholderText(s)}
-function isPlaceholderText(v){const s=cleanRawText(v).replace(/[“”\"'`]/g,'').replace(/\s+/g,'');return !s||s==='这里放整张图片的完整文字'||s==='这里放整张图片的完整原始文字'||s.includes('这里放整张图片的完整原始文字')||s.includes('请上传您需要识别的图片')}
+function isPlaceholderText(v){
+  const s=cleanRawText(v).replace(/[“”\"'`]/g,'').replace(/\s+/g,'');
+  if(!s)return true;
+  const bad=[
+    '这里放整张图片的完整文字',
+    '这里放整张图片的完整原始文字',
+    '请提供您需要识别的图片',
+    '请上传您需要识别的图片',
+    '请上传需要识别的图片',
+    '请提供图片',
+    '请上传图片',
+    '图片无法读取',
+    '请重新上传图片'
+  ];
+  return bad.some(v=>s===v||s.includes(v));
+}
 function cleanRawText(v){return String(v??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\u0000/g,'').trim()}
 function decodeImageBase64(input){let v=String(input||'').trim(),comma=v.indexOf(',');if(v.startsWith('data:')&&comma>=0)v=v.slice(comma+1);v=v.replace(/\s/g,'');if(!v)throw new Error('图片数据为空');const b=atob(v),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
+function bytesToBase64(bytes){let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));return btoa(binary)}
 function toImageDataUrl(input){const v=String(input||'').trim();if(/^data:image\/[a-z0-9.+-]+;base64,/i.test(v))return v;return `data:image/jpeg;base64,${v.replace(/\s/g,'')}`}
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim(),m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return/吨|\bt\b/i.test(s)?`${(n*1000).toFixed(3).replace(/\.000$/,'')}kg`:`${n}kg`}
 function normalizeVehicle(v){return String(v||'').replace(/[\s>]+$/,'').trim()}
