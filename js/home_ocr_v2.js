@@ -1,7 +1,7 @@
 /* 天友智配One - OCR V2
- * 第一阶段只做图片转录，不做门店纠错、不排序、不保存原图。
- * 长图采用“有序分块 + 重叠区域复核”读取，避免后半段截断和重复。
- * 合并只使用通用视觉文本相似度，不维护任何门店错字字典。
+ * 第一阶段：图片 -> 可核对的高保真运单文字。
+ * 长图采用“有序分块 + 相邻块序列对齐”，只在确认重叠时去重，禁止跨边界乱插文字。
+ * 不维护任何门店错字字典，不用基准库改写OCR原文。
  */
 (function(){
 'use strict';
@@ -63,7 +63,7 @@ function lineQuality(line){
   const latin=(compact.match(/[A-Za-z]/g)||[]).length;
   const digits=(compact.match(/[0-9]/g)||[]).length;
   const weird=(compact.match(/[|{}[\]<>~`@#$%^*_+=]/g)||[]).length;
-  return compact.length + cjk*1.8 + digits*.25 - latin*.25 - weird*2;
+  return compact.length+cjk*1.8+digits*.25-latin*.25-weird*2;
 }
 
 function representative(a,b){
@@ -84,47 +84,121 @@ function splitLines(block){
     .filter(Boolean);
 }
 
-function findSequenceOverlap(existing,next){
-  const max=Math.min(30,existing.length,next.length);
-  let best=0;
-  let bestScore=-1;
+/*
+ * 相邻OCR块采用“尾部 -> 头部”的单调局部序列对齐。
+ * 旧逻辑的问题是：只要找不到整体重叠，就把下一块所有文字直接追加；
+ * 一旦模型在重叠区产生垃圾文本，就会把垃圾拼进主文本。
+ * 这里严格限制：
+ * 1. 只比较 previous 的尾部与 next 的头部；
+ * 2. 允许少量漏行/多行，但不能跨越方向；
+ * 3. 找到重叠后，只合并重叠部分，其余从 next 的重叠结束位置继续；
+ * 4. 没有可靠重叠时，整块顺序追加，不进行“相似文本插入”。
+ */
+function alignBoundary(previous,next){
+  const a=previous.slice(Math.max(0,previous.length-24));
+  const b=next.slice(0,Math.min(24,next.length));
+  if(!a.length||!b.length)return null;
 
-  for(let n=max;n>=1;n--){
-    let total=0;
-    let strong=0;
-    for(let i=0;i<n;i++){
-      const score=similarity(existing[existing.length-n+i],next[i]);
-      total+=score;
-      if(score>=0.78)strong++;
+  let best=null;
+  const gapPenalty=.055;
+
+  // dp[i][j]：a前i行、b前j行的局部对齐分数。
+  // 允许跳过少量行，以应对OCR在边界处偶尔漏掉一行。
+  const rows=a.length+1,cols=b.length+1;
+  const dp=Array.from({length:rows},()=>Array(cols).fill(0));
+  const path=Array.from({length:rows},()=>Array(cols).fill(null));
+
+  for(let i=1;i<rows;i++){
+    for(let j=1;j<cols;j++){
+      const sim=similarity(a[i-1],b[j-1]);
+      const diag=dp[i-1][j-1]+sim;
+      const up=dp[i-1][j]-gapPenalty;
+      const left=dp[i][j-1]-gapPenalty;
+      let value=diag,move='diag';
+      if(up>value){value=up;move='up';}
+      if(left>value){value=left;move='left';}
+      dp[i][j]=value;
+      path[i][j]=move;
     }
-    const avg=total/n;
-    const required=n===1?0:Math.max(2,Math.ceil(n*.55));
-    const accepted=n===1?avg>=.93:(avg>=.70&&strong>=required);
-    if(accepted&&avg>bestScore){best=n;bestScore=avg;}
   }
-  return best;
+
+  // 只接受落在 previous 尾部、next 头部的局部路径。
+  let bestEnd=null;
+  for(let j=1;j<cols;j++){
+    const score=dp[rows-1][j];
+    if(!bestEnd||score>bestEnd.score)bestEnd={i:rows-1,j,score};
+  }
+  if(!bestEnd)return null;
+
+  const pairs=[];
+  let i=bestEnd.i,j=bestEnd.j;
+  while(i>0&&j>0){
+    const move=path[i][j];
+    if(move==='diag'){
+      const sim=similarity(a[i-1],b[j-1]);
+      if(sim>=.58)pairs.push({ai:i-1,bj:j-1,sim});
+      i--;j--;
+    }else if(move==='up')i--;
+    else if(move==='left')j--;
+    else break;
+  }
+  pairs.reverse();
+
+  if(!pairs.length)return null;
+  const strong=pairs.filter(p=>p.sim>=.78).length;
+  const avg=pairs.reduce((s,p)=>s+p.sim,0)/pairs.length;
+  const first=pairs[0],last=pairs[pairs.length-1];
+  const boundaryA=previous.length-a.length+last.ai+1;
+  const consumedB=last.bj+1;
+
+  // 单行必须非常强；多行必须至少两条可靠对应，防止误把两个不同门店当成重叠。
+  const accepted=pairs.length===1
+    ? pairs[0].sim>=.93
+    : strong>=2&&avg>=.70&&pairs.length>=Math.min(5,strong);
+  if(!accepted)return null;
+
+  return{
+    pairs,
+    previousStart:previous.length-a.length+first.ai,
+    previousEnd:boundaryA,
+    nextConsumed:consumedB,
+    avg,
+    strong
+  };
+}
+
+function mergeAdjacent(previous,next){
+  if(!previous.length)return next.slice();
+  if(!next.length)return previous.slice();
+
+  const alignment=alignBoundary(previous,next);
+  if(!alignment){
+    // 没有可靠边界重叠时，只按空间顺序追加。
+    // 这里绝不再用全局相似度把下一块文字插入旧块内部。
+    return previous.concat(next);
+  }
+
+  const result=previous.slice();
+  for(const pair of alignment.pairs){
+    const index=alignment.previousStart+pair.ai;
+    if(index>=0&&index<result.length){
+      result[index]=representative(result[index],next[pair.bj]);
+    }
+  }
+
+  // 只丢弃已经确认属于重叠区的next行。
+  // 重叠区内如果OCR产生一条没有对应关系的垃圾行，不会被强行插入。
+  const tail=next.slice(alignment.nextConsumed);
+  result.push(...tail);
+  return result;
 }
 
 function mergeOrderedBlocks(blocks){
-  const result=[];
+  let result=[];
   for(const block of blocks){
     const lines=splitLines(block);
     if(!lines.length)continue;
-    if(!result.length){result.push(...lines);continue;}
-
-    const overlap=findSequenceOverlap(result,lines);
-    if(overlap>0){
-      for(let i=0;i<overlap;i++){
-        const idx=result.length-overlap+i;
-        result[idx]=representative(result[idx],lines[i]);
-      }
-      result.push(...lines.slice(overlap));
-    }else{
-      // 没有找到明确重叠时，不丢弃新区域；只过滤极高相似的单行重复。
-      for(const line of lines){
-        if(!result.some(v=>similarity(v,line)>=.96))result.push(line);
-      }
-    }
+    result=mergeAdjacent(result,lines);
   }
   return dedupeRepeatedSequences(result).join('\n');
 }
@@ -146,7 +220,7 @@ function dedupeRepeatedSequences(lines){
         if(score>=.78)strong++;
       }
       const avg=total/n;
-      if(avg>=.80&&strong>=Math.ceil(n*.75)){
+      if(avg>=.82&&strong>=Math.ceil(n*.75)){
         result.push(...first);
         i+=n*2;
         removed=true;
@@ -171,7 +245,6 @@ async function imageTiles(file){
     const ow=img.naturalWidth,oh=img.naturalHeight;
     if(!ow||!oh)throw Error('图片尺寸无效');
 
-    // 提高移动截图的小字可辨识度，但限制最终宽度避免无意义地放大造成速度下降。
     const scale=Math.min(1.8,3000/ow);
     const w=Math.max(1,Math.round(ow*scale));
     const make=(top,bottom)=>{
@@ -190,7 +263,6 @@ async function imageTiles(file){
     const ratio=oh/ow;
     if(ratio<=1.5)return[make(0,oh)];
 
-    // 长图按纵向阅读顺序切块，并保留较大的重叠区，专门防止中后段门店被截断。
     const count=ratio>=3.4?4:3;
     const overlap=oh*(count===4?.18:.20);
     const step=oh/count;
@@ -232,7 +304,6 @@ async function process(file){
 
   if(!results.length)throw Error('OCR没有返回有效文字，请重新拍摄清晰、完整的运单图片');
 
-  // 必须按图片空间顺序合并，不能再以“最长OCR结果”为主，否则长图中后段容易丢失。
   const rawText=mergeOrderedBlocks(results);
   if(!rawText)throw Error('OCR没有形成有效文字，请重新上传清晰、完整的运单图片');
 
