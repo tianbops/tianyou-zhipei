@@ -241,81 +241,66 @@ function normalizeAndSort(recognized, baseStores, originalText = '') {
   }
 
   const matched = [];
-  const news = [];
   const review = [];
+  const news = [];
   const used = new Set();
+  const reviewKeys = new Set();
+  const newKeys = new Set();
 
-  // 同一门店可能在OCR中出现多次，而且每次字形错误不同。
-  // 匹配时先寻找“全基准库最佳身份”，而不是排除已经使用的基准项。
-  // 如果最佳身份已经使用，则将当前OCR候选视为重复，不再错误地分配给另一家门店。
   for (const raw of src) {
-    const rk = matchKey(raw);
-    const rawBusinessCode = extractBusinessCode(raw);
-    let exact = byName.get(rk);
+    const candidate = findBestBaseMatch(raw, base, byName, byBusinessCode, used);
 
-    if (!exact && rawBusinessCode) exact = byBusinessCode.get(rawBusinessCode);
-
-    if (exact) {
-      if (used.has(exact.index)) continue;
-      used.add(exact.index);
-      matched.push(toMatched(exact, false, 1));
+    if (candidate.type === 'exact') {
+      if (!used.has(candidate.item.index)) {
+        used.add(candidate.item.index);
+        matched.push(toMatched(candidate.item, false, candidate.score));
+      }
       continue;
     }
 
-    let best = null;
-    let bestScore = 0;
-    for (const item of base) {
-      const score = similarity(rk, matchKey(item.name));
-      if (score > bestScore) {
-        bestScore = score;
-        best = item;
+    if (candidate.type === 'duplicate') continue;
+
+    if (candidate.type === 'match') {
+      used.add(candidate.item.index);
+      matched.push(toMatched(candidate.item, true, candidate.score));
+      continue;
+    }
+
+    if (candidate.type === 'review') {
+      const key = matchKey(raw);
+      if (!reviewKeys.has(key)) {
+        reviewKeys.add(key);
+        review.push({
+          code: '',
+          name: raw,
+          nav: '',
+          note: '',
+          isNew: false,
+          matched: false,
+          needsReview: true,
+          candidate: candidate.item.name,
+          candidates: candidate.alternatives.map(item => item.name),
+          matchScore: Number(candidate.score.toFixed(3))
+        });
+      }
+      continue;
+    }
+
+    if (isLikelyStore(raw)) {
+      const key = matchKey(raw);
+      if (!newKeys.has(key)) {
+        newKeys.add(key);
+        news.push({ code: '', name: raw, nav: '', note: '', isNew: true, matched: false });
       }
     }
-
-    // 已经识别过的基准门店，允许作为“重复确认对象”参与最佳匹配。
-    // 这样OCR第二段“海滨/海浸”“谪品”等错误不会跑去匹配另一家未使用门店。
-    if (best && used.has(best.index)) {
-      const bestKey = matchKey(best.name);
-      const strongDuplicate =
-        (rawBusinessCode && extractBusinessCode(best.name) === rawBusinessCode) ||
-        (bestScore >= 0.78 && Math.min(rk.length, bestKey.length) >= 7);
-      if (strongDuplicate) continue;
-    }
-
-    if (best && bestScore >= 0.82) {
-      used.add(best.index);
-      matched.push(toMatched(best, true, bestScore));
-      continue;
-    }
-
-    if (best && bestScore >= 0.64 && Math.min(rk.length, matchKey(best.name).length) >= 5) {
-      review.push({
-        code: '',
-        name: raw,
-        nav: '',
-        isNew: false,
-        matched: false,
-        needsReview: true,
-        candidate: best.name,
-        matchScore: Number(bestScore.toFixed(3))
-      });
-      continue;
-    }
-
-    if (isLikelyStore(raw)) news.push({ code: '', name: raw, nav: '', isNew: true, matched: false });
   }
 
-  // 如果候选行没有被识别，但OCR原文中直接出现基准门店名称，再补一次。
-  const originalKey = matchKey(originalText);
-  for (const item of base) {
-    if (used.has(item.index)) continue;
-    const key = matchKey(item.name);
-    const code = extractBusinessCode(item.name);
-    const hit = (key.length >= 8 && originalKey.includes(key)) || (code && originalKey.includes(matchKey(code)));
-    if (hit) {
-      used.add(item.index);
-      matched.push(toMatched(item, true, 0.9));
-    }
+  // 最后再从完整OCR原文做一次基准库扫描，但不改变已经确定的门店身份。
+  const originalCandidates = extractBaseHitsFromOriginal(originalText, base, used);
+  for (const hit of originalCandidates) {
+    if (used.has(hit.item.index)) continue;
+    used.add(hit.item.index);
+    matched.push(toMatched(hit.item, true, hit.score));
   }
 
   matched.sort((a, b) => a._i - b._i);
@@ -335,6 +320,221 @@ function normalizeAndSort(recognized, baseStores, originalText = '') {
   };
 }
 
+function findBestBaseMatch(raw, base, byName, byBusinessCode, used) {
+  const rk = matchKey(raw);
+  if (!rk) return { type: 'new', score: 0 };
+
+  const exact = byName.get(rk);
+  if (exact) {
+    return used.has(exact.index)
+      ? { type: 'duplicate', item: exact, score: 1 }
+      : { type: 'exact', item: exact, score: 1 };
+  }
+
+  const rawCode = extractBusinessCode(raw);
+  if (rawCode) {
+    const coded = byBusinessCode.get(rawCode);
+    if (coded) {
+      return used.has(coded.index)
+        ? { type: 'duplicate', item: coded, score: 1 }
+        : { type: 'exact', item: coded, score: 1 };
+    }
+  }
+
+  const scored = base
+    .map(item => ({ item, score: storeSimilarity(raw, item.name) }))
+    .sort((a, b) => b.score - a.score);
+
+  const best = scored[0];
+  if (!best || best.score < 0.56) return { type: 'new', score: best?.score || 0 };
+
+  if (used.has(best.item.index)) {
+    const duplicateThreshold = rawCode && extractBusinessCode(best.item.name) === rawCode ? 0.56 : 0.76;
+    if (best.score >= duplicateThreshold && hasStableEvidence(raw, best.item.name)) {
+      return { type: 'duplicate', item: best.item, score: best.score };
+    }
+
+    const unused = scored.filter(entry => !used.has(entry.item.index));
+    if (!unused.length) return { type: 'duplicate', item: best.item, score: best.score };
+    const alternate = unused[0];
+    if (alternate.score >= 0.82 && alternate.score - best.score >= 0.08) {
+      return buildDecision(alternate, unused.slice(0, 3));
+    }
+    return { type: 'new', score: best.score };
+  }
+
+  return buildDecision(best, scored.slice(0, 3));
+}
+
+function buildDecision(best, alternatives) {
+  const second = alternatives.find(entry => entry.item.index !== best.item.index);
+  const margin = second ? best.score - second.score : best.score;
+  const length = Math.min(matchKey(best.item.name).length, matchKey(best.item.name).length);
+  const keyLength = matchKey(best.item.name).length;
+
+  // 业务编号、长稳定尾部、以及较大的候选差距可以提高自动匹配可信度。
+  const raw = alternatives[0]?.raw || '';
+  const confidence = best.score >= 0.88 ||
+    (best.score >= 0.82 && margin >= 0.06) ||
+    (best.score >= 0.78 && keyLength >= 12 && margin >= 0.12);
+
+  if (confidence) return { type: 'match', item: best.item, score: best.score };
+
+  if (best.score >= 0.62 && keyLength >= 5) {
+    return {
+      type: 'review',
+      item: best.item,
+      score: best.score,
+      alternatives: alternatives.filter(entry => entry.score >= Math.max(0.58, best.score - 0.12)).slice(0, 3).map(entry => entry.item)
+    };
+  }
+
+  return { type: 'new', score: best.score };
+}
+
+function extractBaseHitsFromOriginal(text, base, used) {
+  const compact = matchKey(text);
+  const hits = [];
+  for (const item of base) {
+    if (used.has(item.index)) continue;
+    const key = matchKey(item.name);
+    const code = extractBusinessCode(item.name);
+    let score = 0;
+    if (code && compact.includes(matchKey(code))) score = 0.97;
+    else if (key.length >= 8 && compact.includes(key)) score = 0.94;
+    else {
+      const stable = stableStoreKey(item.name);
+      if (stable.length >= 8 && compact.includes(stable)) score = 0.90;
+    }
+    if (score) hits.push({ item, score });
+  }
+  return hits.sort((a, b) => a.item.index - b.item.index);
+}
+
+function storeSimilarity(a, b) {
+  const ak = matchKey(a);
+  const bk = matchKey(b);
+  if (!ak || !bk) return 0;
+  if (ak === bk) return 1;
+
+  const codeA = extractBusinessCode(a);
+  const codeB = extractBusinessCode(b);
+  const codeBoost = codeA && codeA === codeB ? 0.30 : 0;
+
+  const stableA = stableStoreKey(a);
+  const stableB = stableStoreKey(b);
+  const stableScore = tokenOverlap(stableA, stableB);
+  const charScore = characterNgramSimilarity(ak, bk, 2);
+  const editScore = normalizedEditSimilarity(ak, bk);
+  const prefixScore = prefixSimilarity(ak, bk);
+  const suffixScore = suffixSimilarity(ak, bk);
+  const containment = ak.includes(bk) || bk.includes(ak)
+    ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length)
+    : 0;
+
+  let score =
+    editScore * 0.27 +
+    charScore * 0.25 +
+    stableScore * 0.20 +
+    prefixScore * 0.10 +
+    suffixScore * 0.10 +
+    containment * 0.08;
+
+  if (codeBoost) score = Math.min(1, score + codeBoost);
+  if (stableA.length >= 10 && stableScore >= 0.82) score += 0.05;
+  if (charScore >= 0.90 && editScore >= 0.82) score += 0.04;
+  return Math.min(1, score);
+}
+
+function hasStableEvidence(raw, baseName) {
+  const a = stableStoreKey(raw);
+  const b = stableStoreKey(baseName);
+  if (a.length < 7 || b.length < 7) return false;
+  return tokenOverlap(a, b) >= 0.72 || characterNgramSimilarity(a, b, 2) >= 0.78;
+}
+
+function tokenOverlap(a, b) {
+  const ta = meaningfulTokens(a);
+  const tb = meaningfulTokens(b);
+  if (!ta.size || !tb.size) return 0;
+  let common = 0;
+  for (const token of ta) if (tb.has(token)) common++;
+  return common / Math.max(ta.size, tb.size);
+}
+
+function meaningfulTokens(value) {
+  const text = matchKey(value);
+  const set = new Set();
+  if (!text) return set;
+  for (const part of text.match(/[a-z]+|\d+|[\u4e00-\u9fff]/g) || []) {
+    if (part.length >= 2 || /\d/.test(part) || /[a-z]/i.test(part)) set.add(part);
+  }
+  return set;
+}
+
+function characterNgramSimilarity(a, b, n = 2) {
+  const sa = ngramSet(a, n);
+  const sb = ngramSet(b, n);
+  if (!sa.size || !sb.size) return 0;
+  let common = 0;
+  for (const x of sa) if (sb.has(x)) common++;
+  return (2 * common) / (sa.size + sb.size);
+}
+
+function ngramSet(value, n) {
+  const text = matchKey(value);
+  const set = new Set();
+  if (text.length <= n) {
+    if (text) set.add(text);
+    return set;
+  }
+  for (let i = 0; i <= text.length - n; i++) set.add(text.slice(i, i + n));
+  return set;
+}
+
+function normalizedEditSimilarity(a, b) {
+  const x = matchKey(a);
+  const y = matchKey(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const distance = editDistance(x, y);
+  return 1 - distance / Math.max(x.length, y.length);
+}
+
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (!a) return b.length;
+  if (!b) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(current[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = current;
+  }
+  return prev[b.length];
+}
+
+function prefixSimilarity(a, b) {
+  const x = matchKey(a);
+  const y = matchKey(b);
+  const limit = Math.min(x.length, y.length);
+  let i = 0;
+  while (i < limit && x[i] === y[i]) i++;
+  return limit ? i / limit : 0;
+}
+
+function suffixSimilarity(a, b) {
+  const x = matchKey(a);
+  const y = matchKey(b);
+  const limit = Math.min(x.length, y.length);
+  let i = 0;
+  while (i < limit && x[x.length - 1 - i] === y[y.length - 1 - i]) i++;
+  return limit ? i / limit : 0;
+}
+
 function toMatched(hit, assisted, score) {
   return {
     code: hit.code,
@@ -344,7 +544,7 @@ function toMatched(hit, assisted, score) {
     isNew: false,
     matched: true,
     matchType: assisted ? 'similarity' : 'exact',
-    matchScore: score,
+    matchScore: Number(score.toFixed(3)),
     _i: hit.index
   };
 }
@@ -384,28 +584,6 @@ function matchKey(value) {
     .replace(/Ⅹ/g, 'X')
     .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '')
     .toLowerCase();
-}
-
-function similarity(a, b) {
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  if (a.includes(b) || b.includes(a)) return Math.min(a.length, b.length) / Math.max(a.length, b.length);
-  const m = a.length;
-  const n = b.length;
-  if (!m || !n) return 0;
-
-  const prev = Array.from({ length: n + 1 }, (_, i) => i);
-  for (let i = 1; i <= m; i++) {
-    let left = prev[0];
-    prev[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const up = prev[j];
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, left + cost);
-      left = up;
-    }
-  }
-  return 1 - prev[n] / Math.max(m, n);
 }
 
 function cleanStoreName(value) {
