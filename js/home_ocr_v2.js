@@ -1,7 +1,7 @@
 /* 天友智配One - OCR V2
- * OCR只负责读取图片；门店身份由 /api/parse + 当前线路基准库确认。
- * 不保存原图、不维护错字记忆。
- * 多视图结果只做通用的视觉文本合并，不写入任何门店纠错字典。
+ * 第一阶段只做图片转录，不做门店纠错、不排序、不保存原图。
+ * 长图采用“有序分块 + 重叠区域复核”读取，避免后半段截断和重复。
+ * 合并只使用通用视觉文本相似度，不维护任何门店错字字典。
  */
 (function(){
 'use strict';
@@ -31,7 +31,9 @@ function placeholder(text){
 function normalizeLine(value){
   return String(value||'')
     .replace(/[→＞》➜➤⇒]/g,'->')
-    .replace(/\s+/g,'')
+    .replace(/[“”‘’]/g,'')
+    .replace(/[\u200B-\u200D\uFEFF]/g,'')
+    .replace(/[ \t]+/g,'')
     .trim();
 }
 
@@ -45,12 +47,32 @@ function similarity(a,b){
     let left=p[0];
     p[0]=i;
     for(let j=1;j<=y.length;j++){
-      const up=p[j],c=x[i-1]===y[j-1]?0:1;
-      p[j]=Math.min(p[j]+1,p[j-1]+1,left+c);
+      const up=p[j],cost=x[i-1]===y[j-1]?0:1;
+      p[j]=Math.min(p[j]+1,p[j-1]+1,left+cost);
       left=up;
     }
   }
   return 1-p[y.length]/Math.max(x.length,y.length);
+}
+
+function lineQuality(line){
+  const s=String(line||'');
+  if(!s)return -999;
+  const compact=normalizeLine(s);
+  const cjk=(compact.match(/[\u4e00-\u9fff]/g)||[]).length;
+  const latin=(compact.match(/[A-Za-z]/g)||[]).length;
+  const digits=(compact.match(/[0-9]/g)||[]).length;
+  const weird=(compact.match(/[|{}[\]<>~`@#$%^*_+=]/g)||[]).length;
+  return compact.length + cjk*1.8 + digits*.25 - latin*.25 - weird*2;
+}
+
+function representative(a,b){
+  if(!a)return b||'';
+  if(!b)return a;
+  if(normalizeLine(a)===normalizeLine(b))return a.length>=b.length?a:b;
+  const sa=lineQuality(a),sb=lineQuality(b);
+  if(Math.abs(sa-sb)>=3)return sa>sb?a:b;
+  return a.length>=b.length?a:b;
 }
 
 function splitLines(block){
@@ -62,24 +84,10 @@ function splitLines(block){
     .filter(Boolean);
 }
 
-function mergeBlocks(blocks){
-  const out=[];
-  for(const block of blocks){
-    const lines=splitLines(block);
-    if(!lines.length)continue;
-    if(!out.length){out.push(...lines);continue;}
-
-    const overlap=findSequenceOverlap(out,lines);
-    out.push(...lines.slice(overlap));
-  }
-
-  return dedupeRepeatedSequences(out).join('\n');
-}
-
 function findSequenceOverlap(existing,next){
-  const max=Math.min(36,existing.length,next.length);
+  const max=Math.min(30,existing.length,next.length);
   let best=0;
-  let bestScore=0;
+  let bestScore=-1;
 
   for(let n=max;n>=1;n--){
     let total=0;
@@ -87,18 +95,38 @@ function findSequenceOverlap(existing,next){
     for(let i=0;i<n;i++){
       const score=similarity(existing[existing.length-n+i],next[i]);
       total+=score;
-      if(score>=0.82)strong++;
+      if(score>=0.78)strong++;
     }
     const avg=total/n;
-    const required=n===1?0.91:Math.max(2,Math.ceil(n*0.45));
-    const accepted=n===1?avg>=0.91:(avg>=0.72&&strong>=required);
-    if(accepted&&avg>bestScore){
-      best=n;
-      bestScore=avg;
+    const required=n===1?0:Math.max(2,Math.ceil(n*.55));
+    const accepted=n===1?avg>=.93:(avg>=.70&&strong>=required);
+    if(accepted&&avg>bestScore){best=n;bestScore=avg;}
+  }
+  return best;
+}
+
+function mergeOrderedBlocks(blocks){
+  const result=[];
+  for(const block of blocks){
+    const lines=splitLines(block);
+    if(!lines.length)continue;
+    if(!result.length){result.push(...lines);continue;}
+
+    const overlap=findSequenceOverlap(result,lines);
+    if(overlap>0){
+      for(let i=0;i<overlap;i++){
+        const idx=result.length-overlap+i;
+        result[idx]=representative(result[idx],lines[i]);
+      }
+      result.push(...lines.slice(overlap));
+    }else{
+      // 没有找到明确重叠时，不丢弃新区域；只过滤极高相似的单行重复。
+      for(const line of lines){
+        if(!result.some(v=>similarity(v,line)>=.96))result.push(line);
+      }
     }
   }
-
-  return best;
+  return dedupeRepeatedSequences(result).join('\n');
 }
 
 function dedupeRepeatedSequences(lines){
@@ -106,75 +134,28 @@ function dedupeRepeatedSequences(lines){
   let i=0;
   while(i<lines.length){
     let removed=false;
-    const max=Math.min(10,Math.floor((lines.length-i)/2));
+    const max=Math.min(8,Math.floor((lines.length-i)/2));
     for(let n=max;n>=2;n--){
       const first=lines.slice(i,i+n);
-      const secondStart=i+n;
-      const second=lines.slice(secondStart,secondStart+n);
+      const second=lines.slice(i+n,i+n*2);
       if(second.length<n)continue;
-
-      let total=0;
-      let strong=0;
+      let total=0,strong=0;
       for(let j=0;j<n;j++){
         const score=similarity(first[j],second[j]);
         total+=score;
-        if(score>=0.78)strong++;
+        if(score>=.78)strong++;
       }
       const avg=total/n;
-
-      // 只删除高度相似的连续重复块；不依赖门店名称或线路文字。
-      if(avg>=0.78&&strong>=Math.ceil(n*0.7)){
+      if(avg>=.80&&strong>=Math.ceil(n*.75)){
         result.push(...first);
         i+=n*2;
         removed=true;
         break;
       }
     }
-    if(!removed){
-      result.push(lines[i]);
-      i++;
-    }
+    if(!removed){result.push(lines[i]);i++;}
   }
   return result;
-}
-
-function consensusMerge(blocks){
-  const parsed=blocks.map(splitLines).filter(v=>v.length);
-  if(!parsed.length)return '';
-  if(parsed.length===1)return dedupeRepeatedSequences(parsed[0]).join('\n');
-
-  // 先以最长文本作为主序列，再用其他OCR视图补充缺失行。
-  const primary=parsed.reduce((a,b)=>b.length>a.length?b:a).slice();
-  const all=parsed.flat();
-
-  for(const line of all){
-    if(!line||primary.some(v=>similarity(v,line)>=0.91))continue;
-    const near=all.filter(v=>similarity(v,line)>=0.84);
-    if(near.length>=2){
-      const position=findInsertionPoint(primary,line);
-      primary.splice(position,0,pickRepresentative(near));
-    }
-  }
-
-  // 同一截图区域重叠造成的连续重复在这里统一消除。
-  return dedupeRepeatedSequences(primary).join('\n');
-}
-
-function findInsertionPoint(primary,line){
-  const target=normalizeLine(line);
-  let bestIndex=primary.length;
-  let bestScore=0;
-  for(let i=0;i<primary.length;i++){
-    const score=similarity(primary[i],target);
-    if(score>bestScore){bestScore=score;bestIndex=i+1;}
-  }
-  return bestIndex;
-}
-
-function pickRepresentative(lines){
-  const counts=lines.map(line=>({line,count:lines.filter(v=>similarity(v,line)>=0.88).length}));
-  counts.sort((a,b)=>b.count-a.count||b.line.length-a.line.length);
-  return counts[0].line;
 }
 
 async function imageTiles(file){
@@ -190,32 +171,36 @@ async function imageTiles(file){
     const ow=img.naturalWidth,oh=img.naturalHeight;
     if(!ow||!oh)throw Error('图片尺寸无效');
 
-    // 手机截图通常只有1080~1440px宽；适度放大后再交给视觉模型，提升小字号中文、Q/JM/A编号的可辨识度。
-    const scale=Math.min(1.6,2600/ow);
+    // 提高移动截图的小字可辨识度，但限制最终宽度避免无意义地放大造成速度下降。
+    const scale=Math.min(1.8,3000/ow);
     const w=Math.max(1,Math.round(ow*scale));
     const make=(top,bottom)=>{
       const c=document.createElement('canvas');
       c.width=w;
       c.height=Math.max(1,Math.round((bottom-top)*scale));
-      const x=c.getContext('2d',{alpha:false});
-      x.imageSmoothingEnabled=true;
-      x.imageSmoothingQuality='high';
-      x.fillStyle='#fff';
-      x.fillRect(0,0,c.width,c.height);
-      x.drawImage(img,0,top,ow,bottom-top,0,0,c.width,c.height);
-      return c.toDataURL('image/jpeg',.94);
+      const ctx=c.getContext('2d',{alpha:false});
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.fillStyle='#fff';
+      ctx.fillRect(0,0,c.width,c.height);
+      ctx.drawImage(img,0,top,ow,bottom-top,0,0,c.width,c.height);
+      return c.toDataURL('image/jpeg',.96);
     };
 
-    if(oh/ow>1.5){
-      const part=oh/3;
-      const overlap=oh*.12;
-      return[
-        make(0,Math.min(oh,part+overlap)),
-        make(Math.max(0,part-overlap),Math.min(oh,part*2+overlap)),
-        make(Math.max(0,part*2-overlap),oh)
-      ];
+    const ratio=oh/ow;
+    if(ratio<=1.5)return[make(0,oh)];
+
+    // 长图按纵向阅读顺序切块，并保留较大的重叠区，专门防止中后段门店被截断。
+    const count=ratio>=3.4?4:3;
+    const overlap=oh*(count===4?.18:.20);
+    const step=oh/count;
+    const tiles=[];
+    for(let i=0;i<count;i++){
+      const top=Math.max(0,i*step-overlap/2);
+      const bottom=Math.min(oh,(i+1)*step+overlap/2);
+      tiles.push(make(top,bottom));
     }
-    return[make(0,oh)];
+    return tiles;
   }finally{
     URL.revokeObjectURL(url);
   }
@@ -230,21 +215,25 @@ async function one(image){
 
 async function process(file){
   if(!file?.type?.startsWith('image/'))throw Error('请选择有效的运单图片');
-  setStatus('正在优化图片...',15);
+  setStatus('正在优化图片...',12);
   const images=await imageTiles(file);
+  setStatus(`正在按顺序识别 ${images.length} 个区域...`,30);
 
-  // 高截图只识别三个重叠区域；普通图片只识别整图。
-  // 不再把每个区域简单首尾拼接，避免重叠区域形成连续重复回访段。
-  setStatus(`正在并行识别 ${images.length} 个视图...`,35);
-  const results=await Promise.allSettled(images.map(one));
-  const ok=results
-    .filter(x=>x.status==='fulfilled')
-    .map(x=>x.value)
-    .filter(x=>x.rawText&&!placeholder(x.rawText));
+  const results=[];
+  for(let i=0;i<images.length;i++){
+    try{
+      const data=await one(images[i]);
+      if(data.rawText&&!placeholder(data.rawText))results.push(data.rawText);
+    }catch(e){
+      console.warn(`OCR区域${i+1}失败`,e);
+    }
+    setStatus(`正在识别第 ${i+1}/${images.length} 个区域...`,30+Math.round((i+1)/images.length*55));
+  }
 
-  if(!ok.length)throw Error('OCR没有返回有效文字，请重新拍摄清晰、完整的运单图片');
+  if(!results.length)throw Error('OCR没有返回有效文字，请重新拍摄清晰、完整的运单图片');
 
-  const rawText=consensusMerge(ok.map(x=>x.rawText));
+  // 必须按图片空间顺序合并，不能再以“最长OCR结果”为主，否则长图中后段容易丢失。
+  const rawText=mergeOrderedBlocks(results);
   if(!rawText)throw Error('OCR没有形成有效文字，请重新上传清晰、完整的运单图片');
 
   const input=$('manualOrderInput');
@@ -286,7 +275,6 @@ async function selectFile(mode){
   input.click();
 }
 
-/* 覆盖旧的callOCR，使现有home.js无需复制一套OCR逻辑。 */
 window.callOCR=async file=>process(file);
 window.triggerUpload=selectFile;
 window.triggerCameraUpload=()=>selectFile('camera');
