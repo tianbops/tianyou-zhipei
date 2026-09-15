@@ -30,8 +30,12 @@ async function saveOrder(request, env) {
   if (!(await acquireLock(env, lockKey, lockToken, 15))) return json({ error: '该线路正在保存订单，请稍后再试' }, 409);
 
   try {
-    const existing = await redisGet(env, key);
-    const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date);
+    // 正常确认流程会直接携带批次号和车辆，因此只有旧调用方未提供批次号时才读取旧订单。
+    let existing = null;
+    let orderBatchId = String(body.orderBatchId || '').trim();
+    if (!orderBatchId || !String(body.vehicle || '').trim()) existing = await redisGet(env, key);
+    orderBatchId = orderBatchId || existing?.orderBatchId || createBatchId(date);
+
     let orders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, date)).filter(item => item.name);
     const base = await loadBaseData(env);
     orders = sortByRouteBase(orders, base);
@@ -56,6 +60,7 @@ async function saveOrder(request, env) {
     await saveHistory(env, date, todayData);
     return json({ success: true, data: todayData });
   } finally {
+    // 使用 Redis EVAL 原子校验并释放锁，避免先 GET 再 DEL 的额外网络往返。
     await releaseLock(env, lockKey, lockToken).catch(() => {});
   }
 }
@@ -153,16 +158,13 @@ async function acquireLock(env, key, token, seconds) {
 }
 
 async function releaseLock(env, key, token) {
-  const current = await redisGetRaw(env, key);
-  if (current !== token) return;
-  await fetch(`${env.UPSTASH_REDIS_REST_URL}/del/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
-}
-
-async function redisGetRaw(env, key) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
-  if (!response.ok) return null;
-  const data = await response.json().catch(() => ({}));
-  return data.result || null;
+  const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+  await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([script, 1, key, token]),
+    cache: 'no-store'
+  });
 }
 
 async function redisGet(env, key) {
