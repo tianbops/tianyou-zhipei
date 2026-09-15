@@ -2,7 +2,6 @@
 // 当前版本只有 17号线司机用户：Session 使用 HttpOnly Cookie，浏览器无法读取 Session Token。
 const SESSION_TTL = 8 * 60 * 60;
 const SESSION_COOKIE = 'ty_session';
-const DRIVER_KEY = 'driver:17';
 
 function getSessionSecret(env) {
   return String(env.SESSION_SECRET || '');
@@ -80,18 +79,14 @@ export async function verifySession(request, env) {
     if (!payload?.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
     if (String(payload.id) !== '17' || normalizeRoute(payload.route) !== '17号线') return null;
 
-    // Session 本身由 SESSION_SECRET 签名，Redis 司机资料仅作为补充信息。
-    // 不再因为 Redis 中旧资料格式、sessionVersion 或用户名历史变化而把刚登录成功的用户踢回登录页。
-    let driver = null;
-    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
-      try { driver = await redisGet(env, DRIVER_KEY); } catch (_) { driver = null; }
-    }
-
+    // Session 本身由 SESSION_SECRET 签名。
+    // 认证请求不再额外查询 Upstash Redis，避免每个 API 请求多一次网络往返。
+    // 登录时仍会维护 driver:17 资料；Session 内已携带当前用户所需身份信息。
     return {
       id: '17',
-      name: String(payload.name || driver?.name || driver?.username || ''),
+      name: String(payload.name || ''),
       route: '17号线',
-      vehicle: String(payload.vehicle || driver?.vehicle || '渝DK7692'),
+      vehicle: String(payload.vehicle || '渝DK7692'),
       sessionVersion: Number(payload.sessionVersion || 1)
     };
   } catch {
@@ -104,17 +99,6 @@ export async function authRequired(request, env, options = {}) {
   if (!session) return null;
   if (options.route && normalizeRoute(options.route) !== session.route) return null;
   return session;
-}
-
-async function redisGet(env, key) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-    cache: 'no-store'
-  });
-  if (!response.ok) return null;
-  const data = await response.json().catch(() => ({}));
-  if (!data.result) return null;
-  try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
 }
 
 function normalizeRoute(value) {
