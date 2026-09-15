@@ -12,7 +12,7 @@ export async function onRequest({request,env}){
     if(!image)return json({success:false,error:'缺少运单图片'},400);
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
     const parsed=await runVisionOCR(env.AI,image);
-    const sessionRoute=normalizeRoute(session.route),requestedRoute=normalizeRoute(body?.route||''),route=session.role==='admin'?(requestedRoute||sessionRoute):sessionRoute;
+    const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
 
     // 第一阶段：rawText 是唯一核心输出。
@@ -93,7 +93,6 @@ function parseAIResponse(r){
   if(fenced)candidates.push(fenced[1]);
   candidates.push(s);
 
-  // 尝试从模型夹杂说明文字的响应中截取最外层JSON。
   const a=s.indexOf('{'),z=s.lastIndexOf('}');
   if(a>=0&&z>a)candidates.push(s.slice(a,z+1));
 
@@ -113,7 +112,6 @@ function parseAIResponse(r){
     }catch(_){/* 继续尝试下一种响应格式 */}
   }
 
-  // JSON失败时不丢掉模型文本，交给前端人工核对。
   return{date:'',vehicle:'',totalWeight:'',rawOrderCount:0,rawText:s};
 }
 
