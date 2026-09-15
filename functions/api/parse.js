@@ -10,7 +10,7 @@ export async function onRequest({request,env}){
     const body=await request.json(),text=String(body?.text||'').trim();
     if(!text)return json({success:false,error:'请输入或先识别运单文字'},400);
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
-    const sessionRoute=normalizeRoute(session.route),requestedRoute=normalizeRoute(body?.route||''),route=session.role==='admin'?(requestedRoute||sessionRoute):sessionRoute;
+    const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
     const base=await getBaseStores(env,route),parsed=await parseOrderText(env.AI,text),result=normalizeAndSort(parsed.stores,base);
     if(!result.stores.length)return json({success:false,error:'未识别到有效门店，请检查OCR文字后再解析'},422);
