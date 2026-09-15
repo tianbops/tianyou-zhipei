@@ -11,15 +11,17 @@ export async function onRequest({request,env}){
   const session=await authRequired(request,env);
   if(!session)return json({success:false,error:'登录已失效或无权限'},401);
   try{
-    const body=await request.json(),image=body?.image;
-    if(!image)return json({success:false,error:'缺少运单图片'},400);
+    const body=await request.json();
+    const images=Array.isArray(body?.images)&&body.images.length?body.images:[body?.image];
+    const validImages=images.filter(Boolean).map(String);
+    if(!validImages.length)return json({success:false,error:'缺少运单图片'},400);
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
-    const parsed=await runVisionOCR(env.AI,image);
+
+    const parsed=await runVisionOCR(env.AI,validImages);
     const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
-
-    const rawText=cleanRawText(parsed.rawText||parsed.text||parsed.content||'');
-    if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片中未提取到完整文字，请重新拍摄清晰、完整的运单图片'},422);
+    const rawText=cleanRawText(parsed.rawText||'');
+    if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片中未提取到有效文字，请重新拍摄清晰、完整的运单图片'},422);
 
     return json({success:true,data:{
       route,
@@ -36,41 +38,72 @@ export async function onRequest({request,env}){
   }
 }
 
-async function runVisionOCR(AI,image){
-  const bytes=decodeImageBase64(image);
-  if(!bytes.length)throw new Error('图片数据无效或无法解码');
+async function runVisionOCR(AI,images){
+  const prompt=`逐字抄录图片中的可见文字。按从上到下、从左到右输出。只做OCR，不解释、不总结、不改写、不纠错。中文、数字、字母、日期、车牌、重量、订单号、箭头和换行都要保留；看不清的字不要猜。只输出识别到的原文，不要标题、JSON、Markdown或说明。`;
 
-  // 只要求模型输出原文，不再要求JSON，减少推理和无效输出，提高速度与稳定性。
-  const prompt=`完整抄录这张天友乳业运单图片中的所有可见文字。\n从顶部到最底部按阅读顺序输出。保留中文、数字、字母、日期、车牌、重量、订单编号、箭头和原有换行。不要删除看起来无关的文字，不要纠正或改写门店名称。图片中的“总数量207”等文字必须原样保留。\n不要计算门店数量，不要匹配基准库，不要排序，不要生成订单。\n只输出图片原始文字，不要标题、说明、JSON、Markdown或任何占位文字。`;
+  // 长运单切块后并行识别，避免整张图中文字过小；每块只负责自己的可见文字。
+  const results=await Promise.all(images.map(async image=>{
+    const bytes=decodeImageBase64(image);
+    if(!bytes.length)throw new Error('图片数据无效或无法解码');
+    try{
+      const result=await AI.run(OCR_MODEL,{
+        messages:[{role:'user',content:[
+          {type:'text',text:prompt},
+          {type:'image_url',image_url:{url:image}}
+        ]}],
+        max_completion_tokens:OCR_MAX_TOKENS,
+        temperature:0,
+        chat_template_kwargs:{thinking:false}
+      });
+      const text=cleanRawText(extractAIText(result));
+      if(!text||isPlaceholderText(text))throw new Error('视觉模型未返回有效文字');
+      return text;
+    }catch(first){
+      console.warn('Primary OCR model failed:',first?.message||first);
+      const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{
+        prompt,
+        image:Array.from(bytes),
+        max_tokens:OCR_MAX_TOKENS,
+        temperature:0
+      });
+      const text=cleanRawText(extractAIText(result));
+      if(!text||isPlaceholderText(text))throw new Error('视觉模型未返回有效文字');
+      return text;
+    }
+  }));
 
-  const messages=[{role:'user',content:[
-    {type:'text',text:prompt},
-    {type:'image_url',image_url:{url:String(image)}}
-  ]}];
+  const rawText=mergeOCRBlocks(results);
+  return extractMeta(rawText);
+}
 
-  try{
-    const result=await AI.run(OCR_MODEL,{
-      messages,
-      max_completion_tokens:OCR_MAX_TOKENS,
-      temperature:0,
-      chat_template_kwargs:{thinking:false}
-    });
-    const parsed=parseAIResponse(result);
-    if(hasUsableOCR(parsed.rawText))return parsed;
-    throw new Error('主视觉模型未返回有效OCR原文');
-  }catch(first){
-    // 只有主模型真正失败时才启动备用模型，正常识别不会产生第二次AI请求。
-    console.warn('Primary OCR model failed, using fallback:',first?.message||first);
-    const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{
-      prompt,
-      image:Array.from(bytes),
-      max_tokens:OCR_MAX_TOKENS,
-      temperature:0.01
-    });
-    const parsed=parseAIResponse(result);
-    if(hasUsableOCR(parsed.rawText))return parsed;
-    throw new Error('视觉模型未返回有效的完整运单文字');
+function extractMeta(rawText){
+  const s=String(rawText||'');
+  const date=s.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
+  const vehicle=s.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
+  const weight=s.match(/(?:总重量|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
+  return{date:date?date[1]:'',vehicle:vehicle?vehicle[1]:'',totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',rawText};
+}
+
+function mergeOCRBlocks(blocks){
+  const out=[];
+  for(const block of blocks){
+    const lines=cleanRawText(block).split('\n').map(v=>v.trim()).filter(Boolean);
+    for(const line of lines){
+      const last=out[out.length-1];
+      if(last&&similarLine(last,line))continue;
+      out.push(line);
+    }
   }
+  return out.join('\n');
+}
+
+function similarLine(a,b){
+  const x=String(a).replace(/\s+/g,'');
+  const y=String(b).replace(/\s+/g,'');
+  if(!x||!y)return false;
+  if(x===y)return true;
+  if(x.length>=8&&y.length>=8&&(x.includes(y)||y.includes(x)))return true;
+  return false;
 }
 
 function extractAIText(r){
@@ -78,31 +111,7 @@ function extractAIText(r){
   if(!r||typeof r!=='object')return '';
   return String(r.response??r.text??r.description??r.content??r.result?.response??r.result?.text??r.result?.description??r.result?.content??'');
 }
-
-function parseAIResponse(r){
-  const s=extractAIText(r).trim();
-  if(!s)return{date:'',vehicle:'',totalWeight:'',rawOrderCount:0,rawText:''};
-
-  // 兼容模型偶尔返回JSON的情况。
-  const candidates=[];
-  const fenced=s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if(fenced)candidates.push(fenced[1]);
-  const a=s.indexOf('{'),z=s.lastIndexOf('}');
-  if(a>=0&&z>a)candidates.push(s.slice(a,z+1));
-  for(const x of candidates){
-    try{
-      const d=JSON.parse(x),source=d?.data&&typeof d.data==='object'?d.data:d;
-      if(d&&typeof d==='object'){
-        const raw=cleanRawText(source?.rawText??source?.text??source?.content??source?.routeText??'');
-        if(raw&&!isPlaceholderText(raw))return{date:source?.date||'',vehicle:source?.vehicle||'',totalWeight:source?.totalWeight||'',rawOrderCount:0,rawText:raw};
-      }
-    }catch(_){/* 按普通OCR文本继续处理 */}
-  }
-  return{date:'',vehicle:'',totalWeight:'',rawOrderCount:0,rawText:cleanRawText(s)};
-}
-
-function hasUsableOCR(v){const s=cleanRawText(v);return !!s&&!isPlaceholderText(s)}
-function isPlaceholderText(v){const s=cleanRawText(v).replace(/[“”"'`]/g,'').replace(/\s+/g,'');return !s||s==='这里放整张图片的完整文字'||s==='这里放整张图片的完整原始文字'||s.includes('这里放整张图片的完整原始文字')}
+function isPlaceholderText(v){const s=cleanRawText(v).replace(/[“”\"'`]/g,'').replace(/\s+/g,'');return !s||s==='这里放整张图片的完整文字'||s==='这里放整张图片的完整原始文字'||s.includes('这里放整张图片的完整原始文字')}
 function cleanRawText(v){return String(v??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\u0000/g,'').trim()}
 function decodeImageBase64(input){let v=String(input||'').trim(),comma=v.indexOf(',');if(v.startsWith('data:')&&comma>=0)v=v.slice(comma+1);v=v.replace(/\s/g,'');const b=atob(v),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim(),m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);return/吨|\bt\b/i.test(s)?`${(n*1000).toFixed(3).replace(/\.000$/,'')}kg`:`${n}kg`}
