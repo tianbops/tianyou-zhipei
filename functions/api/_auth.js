@@ -46,8 +46,9 @@ export async function createSession(env, user) {
   if (!secret) throw new Error('SESSION_SECRET 未配置');
   const payload = {
     id: '17',
-    name: String(user.name || ''),
+    name: String(user.name || user.username || ''),
     route: '17号线',
+    vehicle: String(user.vehicle || '渝DK7692'),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL,
     sessionVersion: Number(user.sessionVersion || 1)
   };
@@ -68,7 +69,6 @@ export async function verifySession(request, env) {
   const secret = getSessionSecret(env);
   const token = readCookie(request, SESSION_COOKIE);
   if (!secret || !token || !token.includes('.')) return null;
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return null;
 
   try {
     const [body, signature] = token.split('.', 2);
@@ -78,14 +78,22 @@ export async function verifySession(request, env) {
 
     const payload = JSON.parse(new TextDecoder().decode(decodeBase64url(body)));
     if (!payload?.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
-    if (String(payload.id) !== '17' || payload.route !== '17号线') return null;
+    if (String(payload.id) !== '17' || normalizeRoute(payload.route) !== '17号线') return null;
 
-    const driver = await redisGet(env, DRIVER_KEY);
-    if (!driver || String(driver.id) !== '17') return null;
-    if (String(driver.name || '') !== String(payload.name || '')) return null;
-    if (Number(driver.sessionVersion || 1) !== Number(payload.sessionVersion || 1)) return null;
+    // Session 本身由 SESSION_SECRET 签名，Redis 司机资料仅作为补充信息。
+    // 不再因为 Redis 中旧资料格式、sessionVersion 或用户名历史变化而把刚登录成功的用户踢回登录页。
+    let driver = null;
+    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+      try { driver = await redisGet(env, DRIVER_KEY); } catch (_) { driver = null; }
+    }
 
-    return { id: '17', name: String(driver.name || ''), route: '17号线', vehicle: String(driver.vehicle || '渝DK7692'), sessionVersion: Number(driver.sessionVersion || 1) };
+    return {
+      id: '17',
+      name: String(payload.name || driver?.name || driver?.username || ''),
+      route: '17号线',
+      vehicle: String(payload.vehicle || driver?.vehicle || '渝DK7692'),
+      sessionVersion: Number(payload.sessionVersion || 1)
+    };
   } catch {
     return null;
   }
