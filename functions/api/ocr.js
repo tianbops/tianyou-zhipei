@@ -12,13 +12,19 @@ const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。
 完整读取图片中实际可见的文字，从图片顶部开始按照视觉顺序一直读取到图片底部。
 门店名称中的每一个汉字、英文字母、数字、业务编号都很重要。
 
+【双图复核】
+如果收到两张图片，它们是同一视觉区域的“原图”和“增强清晰版”，不是两份不同订单。
+必须逐字符对照两张图：原图负责确认真实版面和字符位置，增强图辅助辨认小字、笔画和相似汉字。
+只有两张图都支持的视觉信息才提高置信度；不能因为增强图产生了一个“看起来合理”的字，就凭常识替换原图。
+
 【识别流程】
 1. 先观察整张图片的版面结构，再逐行读取。
 2. 对配送链区域逐行复读：第一遍读取整行，第二遍专门检查容易混淆的单字、字母、数字。
-3. 对每一个门店名称，优先依据图片字形本身，不根据常识自动改成“更合理”的词。
-4. 如果一个字符看不清，只保留能够从图像确认的部分，不要凭上下文补写。
-5. 如果同一文字因为截图重叠实际出现两次，只输出一次；只有图片明确存在两条真实重复订单时才输出两次。
-6. 如果图片底部还有内容，即使内容较小，也必须继续读取，不能因为已经识别到很多门店就提前结束。
+3. 每个门店名称都进行一次字符级复核，特别检查：相似汉字、偏旁缺失、漏字、连续重复字、英文/数字混入中文。
+4. 对每一行的结尾再次检查，区分“完整结束”和“图片边缘截断”；如果图片确实截断，不要凭常识补齐。
+5. 如果一个字符看不清，只保留能够从图像确认的部分，不要凭上下文补写。
+6. 如果同一文字因为截图重叠实际出现两次，只输出一次；只有图片明确存在两条真实重复订单时才输出两次。
+7. 如果图片底部还有内容，即使内容较小，也必须继续读取，不能因为已经识别到很多门店就提前结束。
 
 【必须保留】
 - 中文原文
@@ -43,7 +49,8 @@ const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。
 不要把“总数量266”解释成266家门店。
 不要使用线路基准库、常见公司名称、同音字、相似字作为纠错依据。
 不要把OCR结果改写成标准门店名称。
-不要删除看起来奇怪的字符；例如类似“海gl”的视觉结果，如果图片确实如此，应忠实保留。
+不要删除看起来奇怪的字符；如果图片确实出现英文、乱码样式或异常字符，应忠实保留。
+不要为了让公司名称“完整”而自行补写缺失文字。
 不要输出Markdown、解释、摘要或“识别结果：”前缀。
 
 【最终复核】
@@ -58,12 +65,14 @@ export async function onRequest({request,env}){
   try{
     const body=await request.json();
     const image=String(body?.image||'').trim();
-    if(!image)return json({success:false,error:'缺少运单图片'},400);
+    const variants=Array.isArray(body?.images)?body.images.map(v=>String(v||'').trim()).filter(Boolean):[];
+    const images=variants.length?[...variants]:image?[image]:[];
+    if(!images.length)return json({success:false,error:'缺少运单图片'},400);
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
     const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
 
-    const parsed=await runVisionOCR(env.AI,image);
+    const parsed=await runVisionOCR(env.AI,images);
     const rawText=cleanRawText(parsed.rawText||'');
     if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片文字提取失败：模型没有读取到运单图片内容，请重新上传清晰、完整的运单图片'},422);
 
@@ -82,22 +91,18 @@ export async function onRequest({request,env}){
   }
 }
 
-async function runVisionOCR(AI,image){
-  const payload=decodeImageBase64(image);
-  if(!payload.length)throw new Error('图片数据无效或无法解码');
-  const base64=bytesToBase64(payload);
-  const imageDataUrl=toImageDataUrl(image);
+async function runVisionOCR(AI,images){
+  const payloads=images.map(decodeImageBase64);
+  if(payloads.some(v=>!v.length))throw new Error('图片数据无效或无法解码');
+  const imageDataUrls=images.map(toImageDataUrl);
+  const base64=bytesToBase64(payloads[0]);
 
   try{
+    const content=[{type:'text',text:OCR_PROMPT}];
+    for(const url of imageDataUrls)content.push({type:'image_url',image_url:{url}});
     const result=await AI.run(OCR_MODEL,{
       image:base64,
-      messages:[{
-        role:'user',
-        content:[
-          {type:'text',text:OCR_PROMPT},
-          {type:'image_url',image_url:{url:imageDataUrl}}
-        ]
-      }],
+      messages:[{role:'user',content}],
       max_completion_tokens:OCR_MAX_TOKENS,
       temperature:0,
       chat_template_kwargs:{enable_thinking:false}
@@ -109,7 +114,7 @@ async function runVisionOCR(AI,image){
     console.warn('Primary OCR failed:',first?.message||first);
     try{
       const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{
-        image:Array.from(payload),
+        image:Array.from(payloads[0]),
         prompt:OCR_PROMPT,
         max_tokens:OCR_MAX_TOKENS,
         temperature:0
@@ -128,41 +133,22 @@ function extractMeta(rawText){
   const date=s.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
   const vehicle=s.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
   const weight=s.match(/(?:总重量|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
-  return{
-    date:date?date[1]:'',
-    vehicle:vehicle?vehicle[1]:'',
-    totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',
-    rawText:s
-  };
+  return{date:date?date[1]:'',vehicle:vehicle?vehicle[1]:'',totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',rawText:s};
 }
 
 function extractAIText(r){
   if(typeof r==='string')return r;
   if(!r||typeof r!=='object')return '';
-  return String(
-    r.response??r.text??r.description??r.content??
-    r.result?.response??r.result?.text??r.result?.description??r.result?.content??
-    r.choices?.[0]?.message?.content??''
-  );
+  return String(r.response??r.text??r.description??r.content??r.result?.response??r.result?.text??r.result?.description??r.result?.content??r.choices?.[0]?.message?.content??'');
 }
-
 function hasUsableOCR(v){const s=cleanRawText(v);return !!s&&!isPlaceholderText(s)}
-
 function isPlaceholderText(v){
   const s=cleanRawText(v).replace(/[“”\"'`]/g,'').replace(/\s+/g,'');
   if(!s)return true;
   const bad=['这里放整张图片的完整文字','这里放整张图片的完整原始文字','请提供您需要识别的图片','请上传您需要识别的图片','请上传需要识别的图片','请提供图片','请上传图片','图片无法读取','请重新上传图片'];
   return bad.some(v=>s===v||s.includes(v));
 }
-
-function cleanRawText(v){
-  return String(v??'')
-    .replace(/\r\n/g,'\n')
-    .replace(/\r/g,'\n')
-    .replace(/\u0000/g,'')
-    .trim();
-}
-
+function cleanRawText(v){return String(v??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\u0000/g,'').trim()}
 function decodeImageBase64(input){
   let v=String(input||'').trim();
   const comma=v.indexOf(',');
@@ -173,20 +159,17 @@ function decodeImageBase64(input){
   for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);
   return a;
 }
-
 function bytesToBase64(bytes){
   let binary='';
   const chunk=0x8000;
   for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
   return btoa(binary);
 }
-
 function toImageDataUrl(input){
   const v=String(input||'').trim();
   if(/^data:image\/[a-z0-9.+-]+;base64,/i.test(v))return v;
   return `data:image/jpeg;base64,${v.replace(/\s/g,'')}`;
 }
-
 function normalizeWeight(v){
   if(v===null||v===undefined||v==='')return '';
   const s=String(v).trim(),m=s.match(/[\d]+(?:\.\d+)?/);
@@ -194,7 +177,6 @@ function normalizeWeight(v){
   const n=Number(m[0]);
   return /吨|\bt\b/i.test(s)?`${(n*1000).toFixed(3).replace(/\.000$/,'')}kg`:`${n}kg`;
 }
-
 function normalizeVehicle(v){return String(v||'').replace(/[\s>]+$/,'').trim()}
 function normalizeDate(v){
   const s=String(v||'').replace(/[年月]/g,'-').replace(/日/g,'').replace(/[/.]/g,'-');
@@ -205,9 +187,4 @@ function normalizeRoute(v){
   const s=String(v||'').trim(),m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
   return m?`${String(parseInt(m[1]||m[2],10)).padStart(2,'0')}号线`:s;
 }
-function json(data,status=200){
-  return new Response(JSON.stringify(data),{
-    status,
-    headers:{'Content-Type':'application/json;charset=UTF-8','Cache-Control':'no-store'}
-  });
-}
+function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json;charset=UTF-8','Cache-Control':'no-store'}})}
