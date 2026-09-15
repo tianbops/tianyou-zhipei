@@ -37,10 +37,12 @@ export async function onRequest({ request, env }) {
           code: String(store?.code || index + 1).padStart(2, '0'),
           routeOrder: index + 1
         }));
-        const value = { route, stores, updatedAt: new Date().toISOString() };
+        const updatedAt = new Date().toISOString();
+        const value = { route, stores, updatedAt };
         const saved = await redisSet(env, key, value);
         if (!saved.ok) return json({ error: '线路基准数据库保存失败' }, 500);
-        return json({ success: true, route, storeCount: stores.length, source: 'server' });
+        // PUT 直接返回刚保存的完整数据，前端无需再次 GET，减少一次 Upstash 往返。
+        return json({ success: true, route, stores, storeCount: stores.length, source: 'server', updatedAt });
       } finally {
         await releaseLock(env, lockKey, lockValue).catch(() => {});
       }
