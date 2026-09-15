@@ -21,48 +21,35 @@
   function isPlaceholderOCR(text){const s=String(text||'').replace(/[“”\"'`]/g,'').replace(/\s+/g,'');return !s||s==='这里放整张图片的完整文字'||s==='这里放整张图片的完整原始文字'||s.includes('这里放整张图片的完整原始文字')}
   function extractLocalMeta(text){const s=String(text||''),d=s.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/),v=s.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i),w=s.match(/总重量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i),c=s.match(/总数量\s*[:：]?\s*(\d+)/);return{date:d?d[1]:'',vehicle:v?v[1]:'',totalWeight:w?`${w[1]}${w[2]||'kg'}`:'',rawOrderCount:c?Number(c[1]):0}}
   async function parseOrderText(text){const route=currentRoute();if(!route)throw Error('未指定配送线路');const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,route}),credentials:'same-origin',cache:'no-store'});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)throw Error(data.error||`解析接口错误（${response.status}）`);return data.data}
-
   async function imageToDataURLs(file){
     if(!file||!file.type.startsWith('image/'))throw Error('请选择有效的运单图片');
     const sourceURL=URL.createObjectURL(file);
     try{
       const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('图片读取失败'));img.src=sourceURL});
-      const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
-      const maxWidth=2000;
-      const scale=Math.min(1,maxWidth/width);
-      const w=Math.max(1,Math.round(width*scale)),h=Math.max(1,Math.round(height*scale));
-      const makeTile=(top,bottom)=>{
-        const canvas=document.createElement('canvas');canvas.width=w;canvas.height=Math.max(1,Math.round((bottom-top)*scale));
-        const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw Error('无法准备图片处理环境');
-        ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-        ctx.drawImage(image,0,top,w/scale,Math.max(1,bottom-top),0,0,w,canvas.height);
-        return canvas.toDataURL('image/jpeg',0.9);
-      };
-      // 长运单分成3块并行OCR，扩大文字在模型视野中的比例；普通图片只识别一次。
-      if(h>w*1.45){
-        const overlap=Math.round(height*0.08),part=height/3;
-        return [makeTile(0,Math.min(height,part+overlap)),makeTile(Math.max(0,part-overlap),Math.min(height,part*2+overlap)),makeTile(Math.max(0,part*2-overlap),height)];
-      }
-      return [makeTile(0,height)];
+      const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height,maxWidth=2000,scale=Math.min(1,maxWidth/width),w=Math.max(1,Math.round(width*scale)),h=Math.max(1,Math.round(height*scale));
+      const makeTile=(top,bottom)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=Math.max(1,Math.round((bottom-top)*scale));const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw Error('无法准备图片处理环境');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,top,w/scale,Math.max(1,bottom-top),0,0,w,canvas.height);return canvas.toDataURL('image/jpeg',0.9)};
+      if(h>w*1.45){const overlap=Math.round(height*0.08),part=height/3;return[makeTile(0,Math.min(height,part+overlap)),makeTile(Math.max(0,part-overlap),Math.min(height,part*2+overlap)),makeTile(Math.max(0,part*2-overlap),height)]}
+      return[makeTile(0,height)];
     }finally{URL.revokeObjectURL(sourceURL)}
   }
-
   async function callOCR(file){
-    const images=await imageToDataURLs(file);
-    const response=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images,route:currentRoute()}),credentials:'same-origin',cache:'no-store'});
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok||!data.success)throw Error(data.error||`OCR接口错误 ${response.status}`);
-    return data.data;
+    const images=await imageToDataURLs(file),texts=[],metas=[];
+    // 每一块单独请求，避免多个base64图片同时提交导致请求体过大或AI输入失败。
+    for(let i=0;i<images.length;i++){
+      const response=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:images[i],route:currentRoute()}),credentials:'same-origin',cache:'no-store'});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||!data.success)throw Error(data.error||`第${i+1}部分OCR失败（${response.status}）`);
+      const text=String(data.data?.rawText||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim();
+      if(text&&!isPlaceholderOCR(text))texts.push(text);
+      metas.push(data.data||{});
+    }
+    if(!texts.length)throw Error('OCR没有返回有效文字，请重新拍摄清晰、完整的运单图片');
+    return{rawText:dedupeOCRText(texts),route:metas[0]?.route||currentRoute(),date:metas.map(v=>v.date).find(Boolean)||'',vehicle:metas.map(v=>v.vehicle).find(Boolean)||'',totalWeight:metas.map(v=>v.totalWeight).find(Boolean)||''};
   }
-
+  function dedupeOCRText(blocks){const out=[];for(const block of blocks){for(const line of String(block).split('\n').map(v=>v.trim()).filter(Boolean)){const last=out[out.length-1],x=line.replace(/\s+/g,''),y=String(last||'').replace(/\s+/g,'');if(last&&(x===y||(x.length>=8&&y.length>=8&&(x.includes(y)||y.includes(x)))))continue;out.push(line)}}return out.join('\n')}
   window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.toggle('active');if(overlay.classList.contains('active'))$('manualOrderInput')?.focus()};window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};window.goToRouteEdit=()=>{window.location.href='pages/route_edit.html'};window.goToOrderDetail=()=>{const r=currentRoute();window.location.href=`pages/order_detail.html${r?`?route=${encodeURIComponent(r)}`:''}`};window.goToHistory=()=>{window.location.href='pages/history.html'};window.logout=()=>Auth.logout();window.clearManualInput=()=>{if($('manualOrderInput')){$('manualOrderInput').value='';$('manualOrderInput').setAttribute('placeholder','上传图片后，这里显示识别文字。请核对后再开始解析。\n也可直接粘贴运单文字。')}if($('charCount'))$('charCount').textContent='0';parsedOrders=[];pendingMeta={};renderStatus('idle');renderTags([]);window.renderReviewStores?.([])};window.loadExampleData=()=>{const names=baseStores.slice(0,3).map(storeName).filter(Boolean);setOCRText(names.length?names.join('\n'):'江北胡汪洋经销商\n中景隆贸易\n江北重庆兴农');pendingMeta={};renderStatus('idle')};window.pasteFromClipboard=async()=>{try{const text=await navigator.clipboard.readText();setOCRText(text);pendingMeta=extractLocalMeta(text)}catch(_){toast('无法读取剪贴板，请手动粘贴','warning')}};
   window.parseManualInput=async()=>{try{const text=$('manualOrderInput')?.value||'';if(!text.trim())return toast('请先输入或识别运单文字','warning');renderStatus('loading',0,'正在提取门店并与基准库比对...');const data=await parseOrderText(text);parsedOrders=Array.isArray(data.stores)?data.stores:[];pendingMeta={date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:data.rawOrderCount||pendingMeta.rawOrderCount||0,matchedCount:data.matchedCount,newStoreCount:data.newStoreCount,recognizedCount:data.recognizedCount,source:'web-confirm'};renderTags(parsedOrders);window.onOrderParsed?.(data);renderStatus(parsedOrders.length?'success':'error',parsedOrders.length,parsedOrders.length?`解析完成：${parsedOrders.length} 家门店${data.newStoreCount?`，新增 ${data.newStoreCount} 家`:''}`:'没有识别到有效门店');if(data.warning)toast(data.warning,'warning');return parsedOrders}catch(e){parsedOrders=[];window.onOrderParsed?.({stores:[]});renderStatus('error',0,e.message);toast(e.message||'解析失败','warning');error(e.message||'解析失败');return[]}};
   window.triggerUpload=type=>{let input=$('homeUploadInput');if(!input){input=document.createElement('input');input.id='homeUploadInput';input.type='file';input.accept=type==='album'?'image/*':'image/*,.txt,.csv';input.style.display='none';document.body.appendChild(input);input.addEventListener('change',handleUploadFile)}input.value='';input.click()};
   async function handleUploadFile(event){const file=event.target.files?.[0];if(!file)return;renderStatus('loading',0,'正在识别图片文字...');try{if(file.type.startsWith('image/')){toast('正在识别运单图片，请稍候...');const data=await callOCR(file);const rawText=String(data?.rawText??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim();if(isPlaceholderOCR(rawText))throw Error('OCR没有返回有效文字，请重新拍摄清晰、完整的运单图片');const ok=setOCRText(rawText);if(!ok)throw Error('OCR文字写入输入框失败');pendingMeta={route:data.route||currentRoute(),date:data.date||'',vehicle:data.vehicle||'',totalWeight:data.totalWeight||'',rawOrderCount:0,source:'ai-ocr'};parsedOrders=[];window.onOrderParsed?.({stores:[]});renderTags([]);renderStatus('success',0,'OCR完成：请核对文字，再开始解析');toast('文字提取完成，请先核对');$('manualOrderInput')?.focus();return}if(file.type.startsWith('text/')||/\.csv$/i.test(file.name)){const text=await file.text();setOCRText(text);pendingMeta=extractLocalMeta(text);renderStatus('idle',0,'文字已载入，请点击“开始解析”');return}throw Error('暂不支持该文件类型')}catch(e){renderStatus('error',0,e.message||'识别失败');toast(e.message||'运单识别失败','warning');error(e.message||'识别失败')}}
-  document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');if(!(await Auth.checkAuth()))return;
-      await Promise.all([loadBaseStores(),loadServerToday()]);
-      updateSummary();
-      $('manualOrderInput')?.addEventListener('input',function(){if($('charCount'))$('charCount').textContent=String(this.value.length);parsedOrders=[];window.renderReviewStores?.([])});
-      document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})
-    }catch(e){console.error(e);error(e.message||'首页初始化失败')}});
+  document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');if(!(await Auth.checkAuth()))return;await Promise.all([loadBaseStores(),loadServerToday()]);updateSummary();$('manualOrderInput')?.addEventListener('input',function(){if($('charCount'))$('charCount').textContent=String(this.value.length);parsedOrders=[];window.renderReviewStores?.([])});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error(e);error(e.message||'首页初始化失败')}});
 })();
