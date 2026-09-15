@@ -1,10 +1,27 @@
 // 天友智配One - 运单截图 OCR
 // 第一阶段：图片 -> 可核对的运单文字。
-// OCR阶段不解析门店、不排序、不保存订单；仅对已知门店OCR错字做基准名称纠正。
+// OCR阶段只负责忠实读取图片，不做门店纠错、不排序、不保存订单。
+// 门店身份纠正与基准库匹配统一放到 /api/parse，避免硬编码记忆OCR错字。
 import { authRequired } from './_auth.js';
 
 const OCR_MODEL='@cf/google/gemma-4-26b-a4b-it';
 const OCR_MAX_TOKENS=4096;
+const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。这不是聊天问答，也不是摘要任务。
+
+必须直接读取附带的运单图片本身，并尽可能忠实地转录图片中实际可见的文字。
+
+严格要求：
+1. 从图片顶部开始，按视觉阅读顺序逐行读取，直到图片底部；不要只读取局部。
+2. 保留图片中的中文、数字、英文字母、日期、车牌号、重量、体积、订单字段、业务编号以及箭头。
+3. 门店配送链中的“->”“→”“＞”“》”“➜”“➤”“⇒”都要原样保留；不要删除箭头。
+4. 保留原始换行。一个门店如果因为屏幕换行被拆成两行，仍然逐字抄录，不要擅自改写成另一家门店。
+5. 对中文相似字必须以图片字形为准：不要根据常识、记忆、上下文或基准门店名称擅自纠正。
+6. Q、JM、A等门店业务编号必须尽量完整保留。
+7. “总数量”是订单商品数量，不是门店数量；不要把它改写成门店数。
+8. 不要总结，不要解释，不要补充图片里没有的内容。
+9. 不要输出“请提供图片”“无法读取图片”“这里放文字”等模板回复。
+10. 如果某个字符确实看不清，保留你能确认的字符，不要凭空猜测整个门店名称。
+11. 只输出OCR转录结果，不要使用Markdown代码块，不要加“识别结果：”之类的前缀。`;
 
 export async function onRequest({request,env}){
   if(request.method!=='POST')return json({success:false,error:'Method not allowed'},405);
@@ -15,54 +32,32 @@ export async function onRequest({request,env}){
     const image=String(body?.image||'').trim();
     if(!image)return json({success:false,error:'缺少运单图片'},400);
     if(!env.AI||typeof env.AI.run!=='function')return json({success:false,error:'Cloudflare Workers AI 未绑定'},500);
-
-    const parsed=await runVisionOCR(env.AI,image);
     const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
-    const rawText=normalizeKnownStoreOCR(cleanRawText(parsed.rawText||''));
+    const parsed=await runVisionOCR(env.AI,image);
+    const rawText=cleanRawText(parsed.rawText||'');
     if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片文字提取失败：模型没有读取到运单图片内容，请重新上传清晰、完整的运单图片'},422);
-
     return json({success:true,data:{route,date:normalizeDate(parsed.date),vehicle:normalizeVehicle(parsed.vehicle),totalWeight:normalizeWeight(parsed.totalWeight),rawOrderCount:0,rawText,message:'图片文字提取完成，请先检查OCR原文。'}});
   }catch(e){
     console.error('OCR error',e);
-    return json({success:false,error:e?.message||'运单图片处理失败'},500)
+    return json({success:false,error:e?.message||'运单图片处理失败'},500);
   }
 }
 
 async function runVisionOCR(AI,image){
   const payload=decodeImageBase64(image);
   if(!payload.length)throw new Error('图片数据无效或无法解码');
-
-  const prompt='你现在执行的是运单图片OCR，不是聊天。你必须读取下面附带的图片本身。逐字抄录图片中所有可见文字，按从上到下、从左到右输出。保留中文、数字、字母、日期、车牌、重量、订单号、箭头和换行。不要猜测，不要总结，不要解释，不要回答“请提供图片”，不要复述任务说明。只输出图片中实际看到的文字。';
   const base64=bytesToBase64(payload);
   const imageDataUrl=toImageDataUrl(image);
-
   try{
-    const result=await AI.run(OCR_MODEL,{
-      image:base64,
-      messages:[{
-        role:'user',
-        content:[
-          {type:'text',text:prompt},
-          {type:'image_url',image_url:{url:imageDataUrl}}
-        ]
-      }],
-      max_completion_tokens:OCR_MAX_TOKENS,
-      temperature:0,
-      chat_template_kwargs:{enable_thinking:false}
-    });
+    const result=await AI.run(OCR_MODEL,{image:base64,messages:[{role:'user',content:[{type:'text',text:OCR_PROMPT},{type:'image_url',image_url:{url:imageDataUrl}}]}],max_completion_tokens:OCR_MAX_TOKENS,temperature:0,chat_template_kwargs:{enable_thinking:false}});
     const text=cleanRawText(extractAIText(result));
     if(hasUsableOCR(text))return extractMeta(text);
     throw new Error('主OCR模型没有读取到运单文字');
   }catch(first){
     console.warn('Primary OCR failed:',first?.message||first);
     try{
-      const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{
-        image:Array.from(payload),
-        prompt,
-        max_tokens:OCR_MAX_TOKENS,
-        temperature:0
-      });
+      const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{image:Array.from(payload),prompt:OCR_PROMPT,max_tokens:OCR_MAX_TOKENS,temperature:0});
       const text=cleanRawText(extractAIText(result));
       if(hasUsableOCR(text))return extractMeta(text);
     }catch(second){
@@ -73,53 +68,12 @@ async function runVisionOCR(AI,image){
 }
 
 function extractMeta(rawText){
-  const s=normalizeKnownStoreOCR(String(rawText||''));
+  const s=String(rawText||'');
   const date=s.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
   const vehicle=s.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
   const weight=s.match(/(?:总重量|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
   return{date:date?date[1]:'',vehicle:vehicle?vehicle[1]:'',totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',rawText:s};
 }
-
-function normalizeKnownStoreOCR(text){
-  let s=String(text||'');
-
-  // OCR可能把门店名称拆成多行、插入空格，或把相邻字符识别成近似字。
-  // 这里按“忽略空白后的连续文本”进行精确纠正，只针对已经确认的17号线基准门店。
-  const replacements=[
-    ['天友24h重庆海滨酒店管理有限公司','天友24h重庆海浚酒店管理有限公司'],
-    ['天友24h重庆海浸酒店管理有限公司','天友24h重庆海浚酒店管理有限公司'],
-    ['江北重庆彩鲜供应链发展有限公司','江北重庆彩食鲜供应链发展有限公司'],
-    ['江北沁园Q642绿地海外滩米拉公告店','江北沁园Q642绿地海外滩米拉公馆店'],
-    ['江北亿达鲜鲜府国际店','江北亿达鲜观府国际店'],
-    ['亿达鲜鲜府国际店','亿达鲜观府国际店']
-  ];
-
-  for(const [wrong,right] of replacements)s=replaceIgnoringWhitespace(s,wrong,right);
-  return s;
-}
-
-function replaceIgnoringWhitespace(text,wrong,replacement){
-  let output=String(text||'');
-  const target=String(wrong||'').replace(/\s+/g,'');
-  if(!target)return output;
-
-  while(true){
-    const positions=[];
-    let compact='';
-    for(let i=0;i<output.length;i++){
-      if(/\s/.test(output[i]))continue;
-      positions.push(i);
-      compact+=output[i];
-    }
-    const index=compact.indexOf(target);
-    if(index<0)break;
-    const first=positions[index];
-    const last=positions[index+target.length-1];
-    output=output.slice(0,first)+replacement+output.slice(last+1);
-  }
-  return output;
-}
-
 function extractAIText(r){
   if(typeof r==='string')return r;
   if(!r||typeof r!=='object')return '';
@@ -129,17 +83,7 @@ function hasUsableOCR(v){const s=cleanRawText(v);return !!s&&!isPlaceholderText(
 function isPlaceholderText(v){
   const s=cleanRawText(v).replace(/[“”\"'`]/g,'').replace(/\s+/g,'');
   if(!s)return true;
-  const bad=[
-    '这里放整张图片的完整文字',
-    '这里放整张图片的完整原始文字',
-    '请提供您需要识别的图片',
-    '请上传您需要识别的图片',
-    '请上传需要识别的图片',
-    '请提供图片',
-    '请上传图片',
-    '图片无法读取',
-    '请重新上传图片'
-  ];
+  const bad=['这里放整张图片的完整文字','这里放整张图片的完整原始文字','请提供您需要识别的图片','请上传您需要识别的图片','请上传需要识别的图片','请提供图片','请上传图片','图片无法读取','请重新上传图片'];
   return bad.some(v=>s===v||s.includes(v));
 }
 function cleanRawText(v){return String(v??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\u0000/g,'').trim()}
