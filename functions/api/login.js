@@ -1,11 +1,10 @@
 // functions/api/login.js
-// 当前测试版本：仅支持17号线司机登录。
+// 17号线司机登录：用户名和密码由 Cloudflare Variables / Secrets 控制。
 import { createSession, sessionCookie } from './_auth.js';
 import { hashPassword, verifyPassword, isPasswordHash } from './_password.js';
 
 const REDIS_KEY = 'admin_users';
 const TEST_ROUTE = '17号线';
-const TEST_ROUTE_HASH = 'pbkdf2-sha256$310000$VFkxN1Rlc3RTYWx0MjAyNiE=$2lucRjE0g4HUgM0WswyvwwGAZQOQi6kMezfOBotXlRY=';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -18,67 +17,76 @@ export async function onRequest(context) {
     return json({ success: false, error: 'Redis 未配置，登录服务暂不可用' }, 500);
   }
 
+  // 登录凭据只从 Cloudflare 环境变量/密钥读取，不再使用代码中的测试密码。
+  const configuredUsername = String(env.DRIVER_USERNAME || '').trim();
+  const configuredPassword = String(env.DRIVER_PASSWORD || '');
+
+  if (!configuredUsername || !configuredPassword) {
+    return json({ success: false, error: '登录密钥未配置，请检查 DRIVER_USERNAME / DRIVER_PASSWORD' }, 500);
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
+    const username = String(body.username || body.account || '').trim();
     const password = String(body.password || '');
-    const route = normalizeRoute(body.account || '');
 
+    if (!username) {
+      return json({ success: false, error: '用户名不能为空' }, 400);
+    }
     if (!password) {
       return json({ success: false, error: '密码不能为空' }, 400);
     }
 
-    if (route !== TEST_ROUTE) {
-      return json({ success: false, error: '当前系统仅开放17号线' }, 401);
+    if (username !== configuredUsername || password !== configuredPassword) {
+      return json({ success: false, error: '用户名或密码错误' }, 401);
     }
 
     let users = await readUsers(env);
-    let user = users.find(u => u && u.role !== 'admin' && normalizeRoute(u.route) === TEST_ROUTE);
+    let user = users.find(u =>
+      u &&
+      u.role !== 'admin' &&
+      normalizeRoute(u.route) === TEST_ROUTE &&
+      String(u.username || '').trim() === configuredUsername
+    );
 
-    let valid = false;
-    if (user?.passwordHash && isPasswordHash(user.passwordHash)) {
-      valid = await verifyPassword(password, user.passwordHash);
-    }
-    if (!valid && user?.password !== undefined) {
-      valid = String(user.password) === password;
-    }
-    if (!valid && user?.initialPassword) {
-      valid = String(user.initialPassword) === password;
-    }
-    if (!valid) {
-      const configured = String(env.DEFAULT_DRIVER_PASSWORD || env.DEFAULT_UNIFIED_PASSWORD || '');
-      if (configured && configured === password) valid = true;
-    }
-    if (!valid) {
-      valid = await verifyPassword(password, TEST_ROUTE_HASH);
-    }
-
-    if (!valid) {
-      return json({ success: false, error: '密码错误' }, 401);
-    }
-
-    // 账号不存在或旧版本账号结构异常时，自动恢复17号线测试账号。
-    if (!user || !isPasswordHash(user.passwordHash)) {
-      const next = {
-        id: 17,
-        name: TEST_ROUTE,
-        route: TEST_ROUTE,
-        role: 'driver',
-        passwordHash: TEST_ROUTE_HASH,
-        sessionVersion: Number(user?.sessionVersion || 1) + 1,
-        createdAt: user?.createdAt || new Date().toISOString()
-      };
-      users = users.filter(u =>
-        String(u?.id) !== '17' && normalizeRoute(u?.route || '') !== TEST_ROUTE
+    // 兼容旧版17号线司机账号：如果用户名字段尚未建立，则按17号线司机账号接管。
+    if (!user) {
+      user = users.find(u =>
+        u && u.role !== 'admin' && normalizeRoute(u.route) === TEST_ROUTE
       );
-      users.push(next);
-      user = next;
-      await saveUsers(env, users);
     }
+
+    const passwordHash = await hashPassword(configuredPassword);
+
+    // 登录凭据以 Cloudflare 为准；Redis 只保存用于 Session 校验的用户资料。
+    const next = {
+      id: user?.id || 17,
+      username: configuredUsername,
+      name: configuredUsername,
+      route: TEST_ROUTE,
+      vehicle: '渝DK7692',
+      role: 'driver',
+      passwordHash,
+      sessionVersion: Number(user?.sessionVersion || 1),
+      createdAt: user?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const oldIndex = users.findIndex(u => String(u?.id) === String(next.id));
+    if (oldIndex >= 0) {
+      users[oldIndex] = { ...users[oldIndex], ...next };
+    } else {
+      users.push(next);
+    }
+    user = next;
+    await saveUsers(env, users);
 
     const safeUser = {
       id: user.id,
-      name: TEST_ROUTE,
+      username: configuredUsername,
+      name: configuredUsername,
       route: TEST_ROUTE,
+      vehicle: '渝DK7692',
       role: 'driver'
     };
 
