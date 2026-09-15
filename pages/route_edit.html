@@ -33,15 +33,87 @@ function renumber(){stores.forEach((s,i)=>{s.code=String(i+1).padStart(2,'0');s.
 function openEdit(i){editIndex=i;batchMode=false;const s=stores[i]||{};$('dialogTitle').textContent='编辑门店';$('singleMode').style.display='block';$('batchMode').style.display='none';$('storeCode').value=s.code||'';$('storeName').value=s.name||'';$('storeNav').value=s.nav||'';$('storeDialog').style.display='flex'}
 function openAdd(){editIndex=-1;batchMode=true;$('dialogTitle').textContent='批量新增门店';$('singleMode').style.display='none';$('batchMode').style.display='block';$('batchInput').value='';$('storeDialog').style.display='flex'}
 function closeDialog(){$('storeDialog').style.display='none'}
-function parseBatch(text){const lines=String(text||'').replace(/\r/g,'').split('\n').map(x=>x.trim()).filter(Boolean),out=[];let cur=null;const push=()=>{if(cur?.name)out.push(cur);cur=null};for(let line of lines){if(/^导航\s*[:：]/i.test(line)){if(cur)cur.nav=line.replace(/^导航\s*[:：]\s*/i,'').trim();continue}if(/^备注\s*[:：]/i.test(line))continue;if(/^https?:\/\//i.test(line)){if(cur)cur.nav=line;continue}const m=line.match(/^\d+\s*[、.．)）\-]?\s*(.+)$/);if(m){push();cur={name:m[1].trim(),nav:''};continue}if(!cur)cur={name:line,nav:''};else cur.name+=' '+line}push();const seen=new Set();return out.filter(x=>{const k=x.name.replace(/\s+/g,'').toLowerCase();if(!k||seen.has(k))return false;seen.add(k);return true}).map(x=>({...x}))}
-$('dialogSave').onclick=()=>{if(batchMode){const p=parseBatch($('batchInput').value);if(!p.length)return alert('没有识别到有效门店');stores=stores.concat(p);renumber();closeDialog();render();return}const name=$('storeName').value.trim();if(!name)return alert('请输入门店名称');const item={code:$('storeCode').value.trim(),name,nav:$('storeNav').value.trim()};if(editIndex<0)stores.push(item);else stores[editIndex]=item;renumber();closeDialog();render()};
+
+// 批量导入统一解析：门店名称与导航链接彻底分离。
+// 支持：
+// 1. 门店名称\n• 导航：https://...
+// 2. 门店名称（• 导航：https://...）
+// 3. 门店名称（导航：https://...）
+// 4. 门店名称 导航：https://...
+// 5. 导航链接单独一行
+function parseBatch(text){
+  const lines=String(text||'').replace(/\r/g,'').split('\n').map(x=>x.trim()).filter(Boolean);
+  const out=[];
+  let cur=null;
+  const push=()=>{if(cur?.name){cur.name=cleanStoreName(cur.name);if(cur.name)out.push(cur)}cur=null};
+
+  for(let raw of lines){
+    let line=raw.trim();
+
+    // 先提取当前行中出现的导航链接，避免链接和“导航”文字进入门店名称。
+    const navMatch=line.match(/(?:[（(]\s*)?(?:[•·\-—]\s*)?(?:导航\s*[:：]?\s*)?(https?:\/\/[^\s）)]+)(?:\s*[）)])?/i);
+    if(navMatch){
+      if(!cur){
+        const before=line.slice(0,navMatch.index).trim();
+        if(before)cur={name:before,nav:''};
+      }
+      if(cur)cur.nav=navMatch[1].trim();
+      line=(line.slice(0,navMatch.index)+line.slice(navMatch.index+navMatch[0].length)).trim();
+      line=line.replace(/[（(]\s*[•·\-—]?\s*导航\s*[:：]?\s*[）)]/gi,'').trim();
+      if(!line)continue;
+    }
+
+    // 独立的“导航：...”行。
+    if(/^\s*(?:[•·\-—]\s*)?导航\s*[:：]\s*https?:\/\//i.test(line)){
+      const u=line.replace(/^\s*(?:[•·\-—]\s*)?导航\s*[:：]\s*/i,'').trim();
+      if(cur)cur.nav=u;
+      continue;
+    }
+
+    // 独立链接行。
+    if(/^https?:\/\//i.test(line)){
+      if(cur)cur.nav=line.trim();
+      continue;
+    }
+
+    // 备注不进入门店名称。
+    if(/^\s*(?:[•·\-—]\s*)?备注\s*[:：]/i.test(line))continue;
+
+    const m=line.match(/^\d+\s*[、.．)）\-]?\s*(.+)$/);
+    if(m){
+      push();
+      cur={name:m[1].trim(),nav:''};
+      // 再清理一次同一行中的括号导航。
+      const inline=cur.name.match(/(?:[（(]\s*)?(?:[•·\-—]\s*)?(?:导航\s*[:：]?\s*)(https?:\/\/[^\s）)]+)\s*[）)]?/i);
+      if(inline){cur.nav=inline[1].trim();cur.name=cur.name.replace(inline[0],'').trim();}
+      continue;
+    }
+
+    if(!cur)cur={name:line,nav:''};
+    else cur.name+=' '+line;
+  }
+  push();
+
+  const seen=new Set();
+  return out.filter(x=>{
+    const k=x.name.replace(/\s+/g,'').toLowerCase();
+    if(!k||seen.has(k))return false;
+    seen.add(k);return true;
+  }).map(x=>({...x,nav:/^https?:\/\//i.test(x.nav||'')?x.nav.trim():''}));
+}
+
+function cleanStoreName(name){
+  let s=String(name||'').trim();
+  // 删除残留的括号导航片段、导航标签和链接。
+  s=s.replace(/[（(]\s*(?:[•·\-—]\s*)?(?:导航\s*[:：]?\s*)?https?:\/\/[^\s）)]+\s*[）)]/gi,'');
+  s=s.replace(/(?:[•·\-—]\s*)?导航\s*[:：]?\s*https?:\/\/[^\s）)]+/gi,'');
+  s=s.replace(/\s{2,}/g,' ').trim();
+  return s.replace(/^[、.．)）\-\s]+|[、.．\-\s]+$/g,'').trim();
+}
+
+$('dialogSave').onclick=()=>{if(batchMode){const p=parseBatch($('batchInput').value);if(!p.length)return alert('没有识别到有效门店');stores=stores.concat(p);renumber();closeDialog();render();return}const name=cleanStoreName($('storeName').value.trim());if(!name)return alert('请输入门店名称');const item={code:$('storeCode').value.trim(),name,nav:/^https?:\/\//i.test($('storeNav').value.trim())?$('storeNav').value.trim():''};if(editIndex<0)stores.push(item);else stores[editIndex]=item;renumber();closeDialog();render()};
 $('dialogCancel').onclick=closeDialog;$('addBtn').onclick=openAdd;
-$('saveBtn').onclick=async()=>{if(!currentRoute)return alert('未识别线路');if(!stores.length)return alert('没有可保存的基准门店');const btn=$('saveBtn');btn.disabled=true;btn.textContent='更新中...';try{renumber();const r=await fetch('/api/routes?route='+encodeURIComponent(currentRoute),{method:'PUT',cache:'no-store',credentials:'same-origin',headers:apiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({stores})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'服务器保存失败（'+r.status+'）');
-  // PUT 已返回服务器刚刚保存的完整数据，不再额外 GET Redis。
-  if(Array.isArray(d.stores))stores=d.stores;else renumber();
-  render();
-  showStatus('✅ 基准数据已更新，当前客户总数：'+stores.length+' 家','ok');
-}catch(e){showStatus('❌ '+(e.message||'保存失败')+'；服务器数据未修改，请联网后重试','error')}finally{btn.disabled=false;btn.textContent='更新'}};
+$('saveBtn').onclick=async()=>{if(!currentRoute)return alert('未识别线路');if(!stores.length)return alert('没有可保存的基准门店');const btn=$('saveBtn');btn.disabled=true;btn.textContent='更新中...';try{renumber();const r=await fetch('/api/routes?route='+encodeURIComponent(currentRoute),{method:'PUT',cache:'no-store',credentials:'same-origin',headers:apiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({stores})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'服务器保存失败（'+r.status+'）');if(Array.isArray(d.stores))stores=d.stores;else renumber();render();showStatus('✅ 基准数据已更新，当前客户总数：'+stores.length+' 家','ok');}catch(e){showStatus('❌ '+(e.message||'保存失败')+'；服务器数据未修改，请联网后重试','error')}finally{btn.disabled=false;btn.textContent='更新'}};
 function goBack(){if(window.history.length>1){window.history.back();return}window.location.href='../home.html'}
 $('backBtn').onclick=goBack;$('cancelBtn').onclick=goBack;
 document.addEventListener('DOMContentLoaded',async()=>{if(!(await Auth.checkAuth()))return;await loadStores()});
