@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>历史查询</title>
-  <link rel="stylesheet" href="../css/order.css">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>历史查询</title><link rel="stylesheet" href="../css/order.css">
 </head>
 <body>
   <div class="app-container">
@@ -32,7 +30,7 @@ $('queryBtn')?.addEventListener('click',()=>loadHistory(selectedDate()));
 async function loadHistory(date){
   const box=$('historyList');box.innerHTML='<div class="empty-tip">⏳ 加载中...</div>';
   try{
-    const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:Auth.getAuthHeaders?Auth.getAuthHeaders():{}});
+    const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:Auth.getAuthHeaders?Auth.getAuthHeaders():{},credentials:'same-origin'});
     if(!r.ok) throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);
     const payload=await r.json();
     const records=Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);
@@ -45,7 +43,7 @@ function viewHistoryDetail(i){const item=historyData[i];if(!item?.orderBatchId){
 function formatWeight(v){if(v===null||v===undefined||v==='')return '0 kg';const s=String(v);if(/[a-zA-Z]/.test(s))return s;return `${s} kg`}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function goBack(){location.href='../home.html'}
-document.addEventListener('DOMContentLoaded',()=>{if(!window.Auth||!Auth.checkAuth())return;const [y,m,d]=today();fill(y,Number(m),Number(d));loadHistory(`${y}-${m}-${d}`)})
+document.addEventListener('DOMContentLoaded',async()=>{try{if(!(await Auth.checkAuth()))return;const [y,m,d]=today();fill(y,Number(m),Number(d));await loadHistory(`${y}-${m}-${d}`)}catch(e){console.error(e)}})
 </script>
 <style>
 .date-picker-title{text-align:center;color:#B8C2CC;font-size:15px;letter-spacing:2px;margin-bottom:10px}.date-picker{display:flex;gap:10px}.date-picker select{flex:1;height:50px;background:#05070A;color:#fff;border:0;border-radius:12px;font-size:16px;text-align:center}.query-btn,.history-btn{width:100%;height:48px;border:0;border-radius:14px;background:#2457A6;color:#fff;font-size:16px;font-weight:bold;cursor:pointer;margin-top:14px}.history-scroll{max-height:440px;overflow-y:auto}.empty-tip{text-align:center;padding:40px 20px;color:#7F8B98}.history-item{background:#05070A;border-radius:14px;padding:16px 18px;margin-bottom:12px;border:1px solid rgba(255,255,255,.05)}.history-date{font-size:16px;font-weight:bold;margin-bottom:8px;color:#FFB020}.info-row{display:flex;justify-content:space-between;align-items:center;min-height:34px;font-size:14px}.info-row span{color:#7F8B98}.info-row b{color:#fff;font-weight:500}.history-btn{height:40px;font-size:14px;margin-top:10px}
