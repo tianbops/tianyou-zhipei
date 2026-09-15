@@ -41,7 +41,6 @@ export async function onRequest({ request, env }) {
         const value = { route, stores, updatedAt };
         const saved = await redisSet(env, key, value);
         if (!saved.ok) return json({ error: '线路基准数据库保存失败' }, 500);
-        // PUT 直接返回刚保存的完整数据，前端无需再次 GET，减少一次 Upstash 往返。
         return json({ success: true, route, stores, storeCount: stores.length, source: 'server', updatedAt });
       } finally {
         await releaseLock(env, lockKey, lockValue).catch(() => {});
@@ -82,10 +81,14 @@ async function redisGet(env, key) {
 }
 
 async function redisSet(env, key, value) {
+  // Upstash /set 的请求体就是 Redis value。
+  // 旧版本这里进行了两次 JSON.stringify，导致 Redis 中保存了嵌套 JSON 字符串：
+  // 更新页面当次看起来正常，但重新登录 GET 后 stores 会被读成空数组。
+  // 现在只编码一次，保证保存后的数据重新登录仍可正常读取。
   const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(JSON.stringify(value)),
+    body: JSON.stringify(value),
     cache: 'no-store'
   });
   const data = await response.json().catch(() => ({}));
@@ -95,7 +98,16 @@ async function redisSet(env, key, value) {
 function parseRecord(value) {
   if (!value) return null;
   if (typeof value !== 'string') return value;
-  try { return JSON.parse(value); } catch { return null; }
+  try {
+    const first = JSON.parse(value);
+    // 兼容已经写入 Redis 的旧“双重 JSON”基准数据。
+    if (typeof first === 'string') {
+      try { return JSON.parse(first); } catch { return first; }
+    }
+    return first;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeRoute(value) {
