@@ -1,6 +1,6 @@
 // 天友智配One - 运单截图 OCR
-// 第一阶段：图片 -> 完整原始文字。
-// 不解析门店、不比对基准、不排序、不保存订单。
+// 第一阶段：图片 -> 可核对的运单文字。
+// OCR阶段不解析门店、不排序、不保存订单；仅对已知门店OCR错字做基准名称纠正。
 import { authRequired } from './_auth.js';
 
 const OCR_MODEL='@cf/google/gemma-4-26b-a4b-it';
@@ -19,7 +19,7 @@ export async function onRequest({request,env}){
     const parsed=await runVisionOCR(env.AI,image);
     const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
-    const rawText=cleanRawText(parsed.rawText||'');
+    const rawText=normalizeKnownStoreOCR(cleanRawText(parsed.rawText||''));
     if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片文字提取失败：模型没有读取到运单图片内容，请重新上传清晰、完整的运单图片'},422);
 
     return json({success:true,data:{route,date:normalizeDate(parsed.date),vehicle:normalizeVehicle(parsed.vehicle),totalWeight:normalizeWeight(parsed.totalWeight),rawOrderCount:0,rawText,message:'图片文字提取完成，请先检查OCR原文。'}});
@@ -33,12 +33,11 @@ async function runVisionOCR(AI,image){
   const payload=decodeImageBase64(image);
   if(!payload.length)throw new Error('图片数据无效或无法解码');
 
-  const prompt='你现在执行的是运单图片OCR，不是聊天。你必须读取下面附带的图片本身。逐字抄录图片中所有可见文字，按从上到下、从左到右输出。保留中文、数字、字母、日期、车牌、重量、订单号、箭头和换行。不要猜测，不要纠错，不要总结，不要解释，不要回答“请提供图片”，不要复述任务说明。只输出图片中实际看到的文字。';
+  const prompt='你现在执行的是运单图片OCR，不是聊天。你必须读取下面附带的图片本身。逐字抄录图片中所有可见文字，按从上到下、从左到右输出。保留中文、数字、字母、日期、车牌、重量、订单号、箭头和换行。不要猜测，不要总结，不要解释，不要回答“请提供图片”，不要复述任务说明。只输出图片中实际看到的文字。';
   const base64=bytesToBase64(payload);
   const imageDataUrl=toImageDataUrl(image);
 
   try{
-    // 使用Cloudflare官方ImageTextToText支持的多模态content格式，确保模型真正收到图片。
     const result=await AI.run(OCR_MODEL,{
       image:base64,
       messages:[{
@@ -74,11 +73,24 @@ async function runVisionOCR(AI,image){
 }
 
 function extractMeta(rawText){
-  const s=String(rawText||'');
+  const s=normalizeKnownStoreOCR(String(rawText||''));
   const date=s.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
   const vehicle=s.match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
   const weight=s.match(/(?:总重量|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
-  return{date:date?date[1]:'',vehicle:vehicle?vehicle[1]:'',totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',rawText};
+  return{date:date?date[1]:'',vehicle:vehicle?vehicle[1]:'',totalWeight:weight?`${weight[1]}${weight[2]||'kg'}`:'',rawText:s};
+}
+
+function normalizeKnownStoreOCR(text){
+  let s=String(text||'');
+  // 仅纠正已经确认属于17号线基准门店的OCR错字，避免泛化替换普通文字。
+  const fixes=[
+    [/天友24h重庆海滨酒店管理有限公司/g,'天友24h重庆海浚酒店管理有限公司'],
+    [/天友24h重庆海浸酒店管理有限公司/g,'天友24h重庆海浚酒店管理有限公司'],
+    [/江北重庆彩鲜供应链发展有限公司/g,'江北重庆彩食鲜供应链发展有限公司'],
+    [/江北沁园Q642绿地海外滩米拉公告店/g,'江北沁园Q642绿地海外滩米拉公馆店']
+  ];
+  for(const [pattern,replacement] of fixes)s=s.replace(pattern,replacement);
+  return s;
 }
 
 function extractAIText(r){
