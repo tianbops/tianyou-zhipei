@@ -1,6 +1,6 @@
 // 天友智配One - 运单文字解析
 // 流程：OCR原文 -> 多格式提取门店 -> 基准库匹配 -> 固定配送顺序。
-// 这里不要求OCR必须包含箭头；优先利用17号线基准库反查门店，避免“文字已识别但门店为0”。
+// 基准库是当前线路的唯一门店身份来源；OCR只负责提供候选文字。
 import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
@@ -24,11 +24,10 @@ export async function onRequest({ request, env }) {
     let parsed = parseDeterministic(text);
 
     // OCR没有箭头或换行结构不稳定时，直接从当前线路基准库反查门店。
-    // 这是主路径，不再依赖AI才能识别门店。
     const baseRecognized = extractStoresFromBase(text, base);
     parsed.stores = unique(parsed.stores.concat(baseRecognized));
 
-    // 只有确定性解析仍然无法取得有效门店时，才调用AI作为兜底。
+    // 只有确定性解析仍然无法取得有效门店时，才调用AI兜底。
     if (!parsed.stores.length && env.AI && typeof env.AI.run === 'function') {
       parsed = await parseOrderText(env.AI, text);
       parsed.stores = unique(parsed.stores.concat(baseRecognized));
@@ -86,7 +85,6 @@ function parseDeterministic(text) {
 
   const stores = [];
 
-  // 1. 箭头链：兼容 ->、-->
   if (/->/.test(body)) {
     body.split(/\s*(?:->|-->)\s*/)
       .map(cleanStoreName)
@@ -94,7 +92,6 @@ function parseDeterministic(text) {
       .forEach(item => stores.push(item));
   }
 
-  // 2. 换行/编号格式：OCR经常把箭头丢掉，因此逐行保留门店候选。
   body.split('\n')
     .map(cleanStoreName)
     .filter(isLikelyStore)
@@ -103,11 +100,8 @@ function parseDeterministic(text) {
   return { date, vehicle, totalWeight, rawOrderCount, stores: unique(stores) };
 }
 
-// 基准库反查是当前线路最可靠的门店识别方式：
-// OCR即使丢箭头、丢部分前缀、换行，也可以通过Q/JM/A业务编号或名称片段找到基准门店。
 function extractStoresFromBase(text, baseStores) {
-  const raw = String(text || '');
-  const compact = matchKey(raw);
+  const compact = matchKey(text);
   const result = [];
 
   for (const store of baseStores || []) {
@@ -127,7 +121,6 @@ function extractStoresFromBase(text, baseStores) {
       continue;
     }
 
-    // 长公司名可能被OCR截断，只用较稳定的尾部名称进行一次保守匹配。
     const stable = stableStoreKey(item.name);
     if (stable.length >= 7 && compact.includes(stable)) result.push(item.name);
   }
@@ -252,6 +245,9 @@ function normalizeAndSort(recognized, baseStores, originalText = '') {
   const review = [];
   const used = new Set();
 
+  // 同一门店可能在OCR中出现多次，而且每次字形错误不同。
+  // 匹配时先寻找“全基准库最佳身份”，而不是排除已经使用的基准项。
+  // 如果最佳身份已经使用，则将当前OCR候选视为重复，不再错误地分配给另一家门店。
   for (const raw of src) {
     const rk = matchKey(raw);
     const rawBusinessCode = extractBusinessCode(raw);
@@ -259,7 +255,8 @@ function normalizeAndSort(recognized, baseStores, originalText = '') {
 
     if (!exact && rawBusinessCode) exact = byBusinessCode.get(rawBusinessCode);
 
-    if (exact && !used.has(exact.index)) {
+    if (exact) {
+      if (used.has(exact.index)) continue;
       used.add(exact.index);
       matched.push(toMatched(exact, false, 1));
       continue;
@@ -268,12 +265,21 @@ function normalizeAndSort(recognized, baseStores, originalText = '') {
     let best = null;
     let bestScore = 0;
     for (const item of base) {
-      if (used.has(item.index)) continue;
       const score = similarity(rk, matchKey(item.name));
       if (score > bestScore) {
         bestScore = score;
         best = item;
       }
+    }
+
+    // 已经识别过的基准门店，允许作为“重复确认对象”参与最佳匹配。
+    // 这样OCR第二段“海滨/海浸”“谪品”等错误不会跑去匹配另一家未使用门店。
+    if (best && used.has(best.index)) {
+      const bestKey = matchKey(best.name);
+      const strongDuplicate =
+        (rawBusinessCode && extractBusinessCode(best.name) === rawBusinessCode) ||
+        (bestScore >= 0.78 && Math.min(rk.length, bestKey.length) >= 7);
+      if (strongDuplicate) continue;
     }
 
     if (best && bestScore >= 0.82) {
@@ -283,7 +289,16 @@ function normalizeAndSort(recognized, baseStores, originalText = '') {
     }
 
     if (best && bestScore >= 0.64 && Math.min(rk.length, matchKey(best.name).length) >= 5) {
-      review.push({ code: '', name: raw, nav: '', isNew: false, matched: false, needsReview: true, candidate: best.name, matchScore: Number(bestScore.toFixed(3)) });
+      review.push({
+        code: '',
+        name: raw,
+        nav: '',
+        isNew: false,
+        matched: false,
+        needsReview: true,
+        candidate: best.name,
+        matchScore: Number(bestScore.toFixed(3))
+      });
       continue;
     }
 
@@ -291,12 +306,12 @@ function normalizeAndSort(recognized, baseStores, originalText = '') {
   }
 
   // 如果候选行没有被识别，但OCR原文中直接出现基准门店名称，再补一次。
-  // 这样可以覆盖OCR把整条配送链压成一段文字的情况。
+  const originalKey = matchKey(originalText);
   for (const item of base) {
     if (used.has(item.index)) continue;
     const key = matchKey(item.name);
     const code = extractBusinessCode(item.name);
-    const hit = (key.length >= 8 && matchKey(originalText).includes(key)) || (code && matchKey(originalText).includes(matchKey(code)));
+    const hit = (key.length >= 8 && originalKey.includes(key)) || (code && originalKey.includes(matchKey(code)));
     if (hit) {
       used.add(item.index);
       matched.push(toMatched(item, true, 0.9));
@@ -357,7 +372,18 @@ function extractBusinessCode(value) {
 }
 
 function matchKey(value) {
-  return cleanStoreName(value).replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"'‘’·\-_/]/g, '').toLowerCase();
+  return cleanStoreName(value)
+    .replace(/Ⅱ/g, 'II')
+    .replace(/Ⅲ/g, 'III')
+    .replace(/Ⅳ/g, 'IV')
+    .replace(/Ⅴ/g, 'V')
+    .replace(/Ⅵ/g, 'VI')
+    .replace(/Ⅶ/g, 'VII')
+    .replace(/Ⅷ/g, 'VIII')
+    .replace(/Ⅸ/g, 'IX')
+    .replace(/Ⅹ/g, 'X')
+    .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '')
+    .toLowerCase();
 }
 
 function similarity(a, b) {
@@ -383,7 +409,11 @@ function similarity(a, b) {
 }
 
 function cleanStoreName(value) {
-  return String(value || '').replace(/^[\s\d]+[、.．)）-]+/, '').replace(/^承运订单[：:\s]*/, '').replace(/\s+/g, ' ').trim();
+  return String(value || '')
+    .replace(/^[\s\d]+[、.．)）-]+/, '')
+    .replace(/^承运订单[：:\s]*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function unique(values) {
