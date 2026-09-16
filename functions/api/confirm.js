@@ -29,6 +29,7 @@ export async function onRequest({ request, env }) {
     const canonical = canonicalizeOrders(body.orders, base);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date);
     const orders = sortOrders(canonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date)), base);
+    const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
 
     const todayData = {
       orderBatchId,
@@ -36,7 +37,7 @@ export async function onRequest({ request, env }) {
       route: ROUTE,
       vehicle: String(body.vehicle || '').trim() || '渝DK7692',
       orders,
-      totalWeight: normalizeWeight(body.totalWeight),
+      totalWeight,
       count: orders.length,
       matchedCount: orders.filter(item => item.matched).length,
       newStoreCount: orders.filter(item => item.isNew).length,
@@ -140,8 +141,6 @@ function key(value) { return String(value || '').trim().replace(/[\s\u3000（）
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
-// 总重量统一以“吨”保存并显示，保留1位小数，按四舍五入处理。
-// 例如：1.806213t -> 1.8t；1.85t -> 1.9t；1806.213kg -> 1.8t。
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
   const s = String(value).trim().replace(/,/g, '');
@@ -149,10 +148,21 @@ function normalizeWeight(value) {
   if (!m) return '';
   const n = Number(m[0]);
   if (!Number.isFinite(n)) return '';
-  const isTon = /吨|\bt\b/i.test(s);
-  const tons = isTon ? n : n / 1000;
-  if (!Number.isFinite(tons)) return '';
+  const tons = /吨|\bt\b/i.test(s) ? n : n / 1000;
   return `${(Math.round((tons + Number.EPSILON) * 10) / 10).toFixed(1)}t`;
+}
+
+function resolveTotalWeight(value, rawText) {
+  const normalized = normalizeWeight(value);
+  if (normalized && !isZeroWeight(normalized)) return normalized;
+  const source = String(rawText || '');
+  const match = source.match(/总重量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i);
+  return normalizeWeight(match ? `${match[1]}${match[2] || 'kg'}` : normalized);
+}
+
+function isZeroWeight(value) {
+  const match = String(value || '').match(/[\d]+(?:\.\d+)?/);
+  return !match || Number(match[0]) === 0;
 }
 
 function createBatchId(date) { return `${date}-17-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
