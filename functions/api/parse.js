@@ -1,6 +1,6 @@
 // 天友智配One - 今日运单解析
-// OCR原文 -> 提取今日实际门店 -> 与当前线路基准库匹配 -> 按基准顺序排序。
-// 注意：基准库只用于门店身份和固定配送顺序，不代表今天一定配送全部门店。
+// OCR原文 -> 提取今日实际门店 -> 与线路基准库匹配 -> 按基准顺序排序。
+// 基准库只负责门店身份、固定配送顺序、导航和备注，不代表今天配送全部门店。
 import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
@@ -22,25 +22,20 @@ export async function onRequest({ request, env }) {
 
     const base = await getBaseStores(env, route);
     const parsed = parseDeterministic(text);
-    const result = matchAndSortTodayStores(parsed.stores, base);
+    const result = matchTodayStores(parsed.stores, base);
 
     if (!result.stores.length) {
       return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
     }
 
-    const totalWeight = normalizeWeight(parsed.totalWeight);
-    const meta = {
-      route,
-      date: parsed.date || extractDate(text),
-      vehicle: parsed.vehicle || extractVehicle(text),
-      totalWeight,
-      rawOrderCount: parsed.rawOrderCount
-    };
-
     return json({
       success: true,
       data: {
-        ...meta,
+        route,
+        date: parsed.date,
+        vehicle: parsed.vehicle,
+        totalWeight: normalizeWeight(parsed.totalWeight),
+        rawOrderCount: parsed.rawOrderCount,
         stores: result.stores,
         storeCount: result.stores.length,
         matchedCount: result.matchedCount,
@@ -63,14 +58,12 @@ export async function onRequest({ request, env }) {
 function parseDeterministic(text) {
   const source = normalizeOcrText(text);
   const routeText = extractRouteText(source);
-  const stores = extractArrowStores(routeText);
-
   return {
     date: extractDate(source),
     vehicle: extractVehicle(source),
     totalWeight: extractWeight(source),
     rawOrderCount: extractRawOrderCount(source),
-    stores
+    stores: extractArrowStores(routeText)
   };
 }
 
@@ -86,20 +79,16 @@ function normalizeOcrText(value) {
 function extractRouteText(source) {
   const firstArrow = source.indexOf('->');
   if (firstArrow < 0) return '';
-
-  // 从第一家实际门店附近开始，一直保留到文本末尾。
-  // 不再使用“总数量/总重量”截断，因为这些字段位于今日门店链之前。
-  return source.slice(firstArrow > 0 ? findRouteStart(source, firstArrow) : firstArrow).trim();
+  const start = findRouteStart(source, firstArrow);
+  return source.slice(start).trim();
 }
 
 function findRouteStart(source, arrowIndex) {
   const before = source.slice(0, arrowIndex);
   const lines = before.split('\n');
-  const lastLine = lines[lines.length - 1] || '';
-  const candidate = cleanStoreName(lastLine);
-  if (isLikelyStore(candidate)) return source.lastIndexOf(lastLine, arrowIndex);
+  const lastLine = lines.at(-1) || '';
+  if (isLikelyStore(cleanStoreName(lastLine))) return source.lastIndexOf(lastLine, arrowIndex);
 
-  // OCR可能把第一家门店和上一行字段粘在一起，向前寻找常见门店关键词。
   const key = /(?:到家主城|江北|渝北|特渠部|天友加盟|天友24h|II类|Ⅱ类)/g;
   let match;
   let last = -1;
@@ -109,17 +98,18 @@ function findRouteStart(source, arrowIndex) {
 
 function extractArrowStores(routeText) {
   if (!routeText) return [];
-
-  const parts = routeText.split(/\s*(?:->|-->)\s*/);
   const stores = [];
 
-  for (const part of parts) {
-    // 箭头前后的换行只是OCR排版，不是门店分隔符。
-    const name = cleanStoreName(part.replace(/\n+/g, ''));
+  for (const part of routeText.split(/\s*(?:->|-->)\s*/)) {
+    const name = cleanStoreName(stripOrderMetadata(part.replace(/\n+/g, '')));
     if (isLikelyStore(name)) stores.push(name);
   }
 
   return unique(stores);
+}
+
+function stripOrderMetadata(value) {
+  return String(value || '').split(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?/)[0].trim();
 }
 
 async function getBaseStores(env, route) {
@@ -133,7 +123,7 @@ async function getBaseStores(env, route) {
 
   const data = await response.json().catch(() => ({}));
   let parsed = data?.result;
-  try { parsed = typeof parsed === 'string' ? JSON.parse(parsed) : parsed; } catch (_) { parsed = null; }
+  try { parsed = typeof parsed === 'string' ? JSON.parse(parsed) : parsed; } catch { parsed = null; }
 
   if (!Array.isArray(parsed?.stores) || !parsed.stores.length) {
     throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
@@ -141,54 +131,45 @@ async function getBaseStores(env, route) {
   return parsed.stores;
 }
 
-function matchAndSortTodayStores(recognized, baseStores) {
+function matchTodayStores(recognized, baseStores) {
   const base = baseStores.map(normalizeBase).filter(Boolean);
   const byName = new Map(base.map(item => [matchKey(item.name), item]));
   const byCode = new Map();
+
   for (const item of base) {
     const code = extractBusinessCode(item.name);
-    if (code) byCode.set(code, item);
+    if (code && !byCode.has(code)) byCode.set(code, item);
   }
 
   const matched = [];
   const review = [];
   const news = [];
   const used = new Set();
-  const seenReview = new Set();
-  const seenNew = new Set();
+  const seen = new Set();
 
   for (const raw of unique(recognized)) {
     const hit = findMatch(raw, base, byName, byCode, used);
+    const rawKey = matchKey(raw);
+    if (!rawKey || seen.has(rawKey)) continue;
+    seen.add(rawKey);
 
     if (hit.type === 'match') {
       used.add(hit.item.index);
       matched.push(toMatched(hit.item, hit.mode, hit.score));
-      continue;
-    }
-
-    if (hit.type === 'review') {
-      const key = matchKey(raw);
-      if (!seenReview.has(key)) {
-        seenReview.add(key);
-        review.push({
-          code: '',
-          name: raw,
-          nav: '',
-          note: '',
-          isNew: false,
-          matched: false,
-          needsReview: true,
-          candidate: hit.item.name,
-          candidates: hit.alternatives.map(x => x.name),
-          matchScore: Number(hit.score.toFixed(3))
-        });
-      }
-      continue;
-    }
-
-    const key = matchKey(raw);
-    if (!seenNew.has(key)) {
-      seenNew.add(key);
+    } else if (hit.type === 'review') {
+      review.push({
+        code: '',
+        name: raw,
+        nav: '',
+        note: '',
+        isNew: false,
+        matched: false,
+        needsReview: true,
+        candidate: hit.item.name,
+        candidates: hit.alternatives.map(item => item.name),
+        matchScore: Number(hit.score.toFixed(3))
+      });
+    } else {
       news.push({
         code: '',
         name: raw,
@@ -200,26 +181,14 @@ function matchAndSortTodayStores(recognized, baseStores) {
     }
   }
 
-  // 只有OCR明确出现的门店才进入今日运单。
-  // 这里绝不把未配送的基准门店补进来。
+  // 今日只保留OCR实际出现的门店；匹配门店按基准配送顺序，新增/待确认门店放最后。
   matched.sort((a, b) => a._i - b._i);
-
-  matched.forEach((item, index) => {
-    item.code = String(index + 1).padStart(2, '0');
-  });
-  review.forEach((item, index) => {
-    item.code = `R${String(index + 1).padStart(2, '0')}`;
-  });
-  news.forEach((item, index) => {
-    item.code = `N${String(index + 1).padStart(2, '0')}`;
-  });
+  matched.forEach((item, i) => { item.code = String(i + 1).padStart(2, '0'); });
+  review.forEach((item, i) => { item.code = `R${String(i + 1).padStart(2, '0')}`; });
+  news.forEach((item, i) => { item.code = `N${String(i + 1).padStart(2, '0')}`; });
 
   return {
-    stores: matched.concat(review, news).map(item => {
-      const out = { ...item };
-      delete out._i;
-      return out;
-    }),
+    stores: matched.concat(review, news).map(({ _i, ...item }) => item),
     matchedCount: matched.length,
     reviewCount: review.length,
     newStoreCount: news.length
@@ -228,17 +197,14 @@ function matchAndSortTodayStores(recognized, baseStores) {
 
 function findMatch(raw, base, byName, byCode, used) {
   const key = matchKey(raw);
-  if (!key) return { type: 'new', score: 0 };
+  if (!key) return { type: 'new' };
 
   const exact = byName.get(key);
-  if (exact) {
-    if (used.has(exact.index)) return { type: 'new', score: 0 };
-    return { type: 'match', item: exact, mode: 'exact', score: 1 };
-  }
+  if (exact && !used.has(exact.index)) return { type: 'match', item: exact, mode: 'exact', score: 1 };
 
-  const code = extractBusinessCode(raw);
-  if (code) {
-    const coded = byCode.get(code);
+  const businessCode = extractBusinessCode(raw);
+  if (businessCode) {
+    const coded = byCode.get(businessCode);
     if (coded && !used.has(coded.index)) {
       return { type: 'match', item: coded, mode: 'businessCode', score: 1 };
     }
@@ -254,25 +220,19 @@ function findMatch(raw, base, byName, byCode, used) {
 
   const second = scored[1];
   const margin = second ? best.score - second.score : best.score;
-
-  // 有业务编号但编号本身无法匹配时，不因为高相似度直接冒险认定。
-  const confidence = best.score >= 0.88 ||
+  const confident = best.score >= 0.88 ||
     (best.score >= 0.82 && margin >= 0.08) ||
     (best.score >= 0.76 && margin >= 0.14 && matchKey(best.item.name).length >= 12);
 
-  if (confidence) {
-    return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
-  }
-
+  if (confident) return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
   if (best.score >= 0.64) {
     return {
       type: 'review',
       item: best.item,
       score: best.score,
-      alternatives: scored.slice(0, 3).map(x => x.item)
+      alternatives: scored.slice(0, 3).map(entry => entry.item)
     };
   }
-
   return { type: 'new', score: best.score };
 }
 
@@ -286,25 +246,19 @@ function storeSimilarity(a, b) {
   const codeB = extractBusinessCode(b);
   if (codeA && codeA === codeB) return 1;
 
-  const stableA = stableStoreKey(a);
-  const stableB = stableStoreKey(b);
-  const tokenScore = tokenOverlap(stableA, stableB);
+  const tokenScore = tokenOverlap(stableStoreKey(a), stableStoreKey(b));
   const charScore = characterNgramSimilarity(ak, bk);
   const editScore = normalizedEditSimilarity(ak, bk);
   const containment = ak.includes(bk) || bk.includes(ak)
     ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length)
     : 0;
 
-  let score = editScore * 0.34 + charScore * 0.32 + tokenScore * 0.24 + containment * 0.10;
-
-  // 常见OCR差异：谊品鲜/谊品生鲜、Ⅱ/II、括号和空格已经在matchKey中归一化。
-  score = Math.min(1, score);
-  return score;
+  return Math.min(1, editScore * 0.34 + charScore * 0.32 + tokenScore * 0.24 + containment * 0.10);
 }
 
 function stableStoreKey(value) {
   return matchKey(value)
-    .replace(/^渝北|^江北|^特渠部|^天友加盟|^iic类天友生活|^ii类天友生活|^天友24h/, '')
+    .replace(/^(?:渝北|江北|特渠部|天友加盟|天友24h)/, '')
     .replace(/谊品鲜/g, '谊品生鲜');
 }
 
@@ -318,32 +272,26 @@ function tokenOverlap(a, b) {
 }
 
 function meaningfulTokens(value) {
-  const text = matchKey(value);
   const set = new Set();
-  for (const token of text.match(/[a-z]+|\d+|[\u4e00-\u9fff]+/g) || []) {
+  for (const token of matchKey(value).match(/[a-z]+|\d+|[\u4e00-\u9fff]+/g) || []) {
     if (token.length >= 2 || /\d/.test(token) || /[a-z]/i.test(token)) set.add(token);
   }
   return set;
 }
 
 function characterNgramSimilarity(a, b, n = 2) {
-  const aa = matchKey(a);
-  const bb = matchKey(b);
-  if (!aa || !bb) return 0;
-  const sa = ngramSet(aa, n);
-  const sb = ngramSet(bb, n);
-  if (!sa.size || !sb.size) return 0;
+  const aa = ngramSet(matchKey(a), n);
+  const bb = ngramSet(matchKey(b), n);
+  if (!aa.size || !bb.size) return 0;
   let common = 0;
-  for (const value of sa) if (sb.has(value)) common++;
-  return (2 * common) / (sa.size + sb.size);
+  for (const value of aa) if (bb.has(value)) common++;
+  return (2 * common) / (aa.size + bb.size);
 }
 
 function ngramSet(text, n) {
   const set = new Set();
-  if (text.length <= n) {
-    if (text) set.add(text);
-    return set;
-  }
+  if (!text) return set;
+  if (text.length <= n) return set.add(text);
   for (let i = 0; i <= text.length - n; i++) set.add(text.slice(i, i + n));
   return set;
 }
@@ -352,8 +300,7 @@ function normalizedEditSimilarity(a, b) {
   const x = matchKey(a);
   const y = matchKey(b);
   if (!x || !y) return 0;
-  const distance = editDistance(x, y);
-  return 1 - distance / Math.max(x.length, y.length);
+  return 1 - editDistance(x, y) / Math.max(x.length, y.length);
 }
 
 function editDistance(a, b) {
@@ -374,8 +321,8 @@ function toMatched(item, mode, score) {
   return {
     code: item.code,
     name: item.name,
-    nav: item.nav || '',
-    note: item.note || '',
+    nav: item.nav,
+    note: item.note,
     isNew: false,
     matched: true,
     matchType: mode,
@@ -386,13 +333,13 @@ function toMatched(item, mode, score) {
 
 function normalizeBase(store, index) {
   if (typeof store === 'string') {
-    return { name: cleanStoreName(store), code: String(index + 1).padStart(2, '0'), nav: '', note: '', index };
+    const name = cleanStoreName(store);
+    return name ? { name, code: String(index + 1).padStart(2, '0'), nav: '', note: '', index } : null;
   }
   if (!store) return null;
 
   const name = cleanStoreName(store.name || store.storeName || store.title || store.customerName || store['门店名称'] || '');
   if (!name) return null;
-
   return {
     name,
     code: String(store.code || index + 1).padStart(2, '0'),
@@ -403,8 +350,8 @@ function normalizeBase(store, index) {
 }
 
 function extractBusinessCode(value) {
-  const m = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])(JM\d{4,6}|Q\d{3,5}|A\d{4,6})(?:[^A-Z0-9]|$)/);
-  return m ? m[1] : '';
+  const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])(JM\d{4,6}|Q\d{3,5}|A\d{4,6})(?:[^A-Z0-9]|$)/);
+  return match ? match[1] : '';
 }
 
 function matchKey(value) {
@@ -420,6 +367,8 @@ function matchKey(value) {
     .replace(/Ⅹ/g, 'X')
     .replace(/（2026）$/g, '')
     .replace(/\(2026\)$/g, '')
+    .replace(/到家主城江北区加州客服中心/g, '到家主城江北区加州客户中心')
+    .replace(/江北亿达鲜半华府店/g, '江北亿达鲜半山华府店')
     .replace(/谊品鲜/g, '谊品生鲜')
     .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '')
     .toLowerCase();
@@ -451,33 +400,33 @@ function isLikelyStore(value) {
 }
 
 function extractDate(value) {
-  const m = String(value || '').match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
-  return m ? normalizeDate(m[1]) : '';
+  const match = String(value || '').match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
+  return match ? normalizeDate(match[1]) : '';
 }
 
 function extractVehicle(value) {
-  const m = String(value || '').match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
-  return m ? normalizeVehicle(m[1]) : '';
+  const match = String(value || '').match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
+  return match ? normalizeVehicle(match[1]) : '';
 }
 
 function extractWeight(value) {
-  const m = String(value || '').match(/总重量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
-  return m ? `${m[1]}${m[2] || 'kg'}` : '';
+  const match = String(value || '').match(/总重量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
+  return match ? `${match[1]}${match[2] || 'kg'}` : '';
 }
 
 function extractRawOrderCount(value) {
-  const m = String(value || '').match(/总数量\s*[:：]?\s*(\d+)/);
-  return m ? Number(m[1]) : 0;
+  const match = String(value || '').match(/总数量\s*[:：]?\s*(\d+)/);
+  return match ? Number(match[1]) : 0;
 }
 
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
   const text = String(value).trim().replace(/,/g, '');
-  const m = text.match(/[\d]+(?:\.\d+)?/);
-  if (!m) return '';
-  const n = Number(m[0]);
-  if (!Number.isFinite(n)) return '';
-  const tons = /吨|\bt\b/i.test(text) ? n : n / 1000;
+  const match = text.match(/[\d]+(?:\.\d+)?/);
+  if (!match) return '';
+  const number = Number(match[0]);
+  if (!Number.isFinite(number)) return '';
+  const tons = /吨|\bt\b/i.test(text) ? number : number / 1000;
   return `${(Math.round((tons + Number.EPSILON) * 10) / 10).toFixed(1)}t`;
 }
 
