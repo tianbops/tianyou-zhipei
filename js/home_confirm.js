@@ -6,19 +6,11 @@
   let parsedState=[];
   let metaState={};
   let syncing=false;
-
   const $=id=>document.getElementById(id);
   const toast=(msg,type='')=>window.homeToast?.(msg,type);
 
-  function esc(value){
-    return String(value??'').replace(/[&<>"']/g,char=>({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[char]));
-  }
-
-  function routeContext(){
-    return typeof Auth!=='undefined'&&Auth.getCurrentRoute?Auth.getCurrentRoute():'';
-  }
+  function esc(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
+  function routeContext(){return typeof Auth!=='undefined'&&Auth.getCurrentRoute?Auth.getCurrentRoute():'';}
 
   function ensurePanel(){
     if($('reviewPanel')) return $('reviewPanel');
@@ -36,22 +28,15 @@
     reviewState=(Array.isArray(items)?items:[]).filter(item=>item?.needsReview);
     const panel=ensurePanel();
     const list=$('reviewList');
-    if(!reviewState.length){
-      panel.style.display='none';
-      if(list) list.innerHTML='';
-      return;
-    }
-
+    if(!reviewState.length){panel.style.display='none';if(list)list.innerHTML='';return;}
     panel.style.display='block';
-    if($('reviewHint')) $('reviewHint').textContent=`发现 ${reviewState.length} 家疑似门店，请确认后再录入。`;
-    if(!list) return;
+    if($('reviewHint'))$('reviewHint').textContent=`发现 ${reviewState.length} 家疑似门店，请确认后再录入。`;
+    if(!list)return;
     list.innerHTML='';
-
     reviewState.forEach((item,index)=>{
       const row=document.createElement('div');
       row.style.cssText='padding:10px 0;border-top:1px solid rgba(255,255,255,.08)';
       row.innerHTML=`<div style="font-size:13px;margin-bottom:6px"><span style="color:#FFB020">${esc(item.code||`R${String(index+1).padStart(2,'0')}`)}</span>　识别：<b>${esc(item.name)}</b></div><div style="font-size:10px;color:#718092;margin-bottom:7px">匹配度 ${Math.round(Number(item.matchScore||0)*100)}%</div>`;
-
       const select=document.createElement('select');
       select.style.cssText='width:100%;height:40px;border-radius:10px;background:#10161D;color:#fff;border:1px solid rgba(255,255,255,.1);padding:0 10px;font-size:12px';
       select.innerHTML=`<option value="">请选择处理方式</option><option value="candidate">采用候选：${esc(item.candidate||'')}</option><option value="new">作为新增门店</option>`;
@@ -60,13 +45,10 @@
       row.appendChild(select);
       list.appendChild(row);
     });
-
     const button=document.createElement('button');
-    button.type='button';
-    button.textContent='✓ 应用确认';
+    button.type='button';button.textContent='✓ 应用确认';
     button.style.cssText='width:100%;height:40px;margin-top:10px;border:0;border-radius:11px;background:#2457A6;color:#fff;font-weight:600';
-    button.onclick=applyReview;
-    list.appendChild(button);
+    button.onclick=applyReview;list.appendChild(button);
   }
 
   function applyReview(){
@@ -74,166 +56,85 @@
     for(const item of reviewState){
       if(!item._choice){pending++;continue;}
       const target=parsedState.find(store=>store===item||store.code===item.code||store.name===item.name);
-      if(!target) continue;
-
+      if(!target)continue;
       if(item._choice==='new'){
-        target.needsReview=false;
-        target.candidate='';
-        target.matchType='new';
-        target.matched=false;
-        target.isNew=true;
-        target.matchScore=0;
+        target.needsReview=false;target.candidate='';target.matchType='new';target.matched=false;target.isNew=true;target.matchScore=0;
       }else{
-        target.name=item.candidate;
-        target.needsReview=false;
-        target.candidate='';
-        target.matchType='confirmed';
-        target.matched=true;
-        target.isNew=false;
-        target.matchScore=1;
+        target.name=item.candidate;target.needsReview=false;target.candidate='';target.matchType='confirmed';target.matched=true;target.isNew=false;target.matchScore=1;
       }
     }
-
-    if(pending){
-      toast(`还有 ${pending} 家门店未确认`,'warning');
-      return;
-    }
-
-    renderReview([]);
-    writeReviewText(parsedState);
-    toast('待确认门店已处理，请核对后确认录入');
+    if(pending){toast(`还有 ${pending} 家门店未确认`,'warning');return;}
+    renderReview([]);writeReviewText(parsedState);toast('待确认门店已处理，请核对后确认录入');
   }
 
   function writeReviewText(stores){
     const input=$('manualOrderInput');
-    if(!input) return;
-    const lines=[
-      '【今日订单信息】',
-      `日期：${metaState.date||'未识别'}`,
-      `线路：${metaState.route||routeContext()||'未识别'}`,
-      `车辆：${metaState.vehicle||'未识别'}`,
-      `门店数：${stores.length}家`,
-      `总重量：${metaState.totalWeight||'未识别'}`,
-      '',
-      '【门店列表】'
-    ];
-
-    stores.forEach((store,index)=>{
-      const mark=store?.isNew?'⚠️ 新增：':store?.needsReview?'⚠️ 待确认：':'';
-      lines.push(`${String(index+1).padStart(2,'0')}. ${mark}${String(store?.name||'').trim()}`);
-    });
-
-    syncing=true;
-    input.value=lines.join('\n');
-    if($('charCount')) $('charCount').textContent=String(input.value.length);
-    syncing=false;
+    if(!input)return;
+    const lines=['【今日订单信息】',`日期：${metaState.date||'未识别'}`,`线路：${metaState.route||routeContext()||'未识别'}`,`车辆：${metaState.vehicle||'未识别'}`,`门店数：${stores.length}家`,`总重量：${metaState.totalWeight||'未识别'}`,'','【门店列表】'];
+    stores.forEach((store,index)=>{const mark=store?.isNew?'⚠️ 新增：':store?.needsReview?'⚠️ 待确认：':'';lines.push(`${String(index+1).padStart(2,'0')}. ${mark}${String(store?.name||'').trim()}`);});
+    syncing=true;input.value=lines.join('\n');if($('charCount'))$('charCount').textContent=String(input.value.length);syncing=false;
   }
 
   function syncParsed(data){
     const d=data||{};
     parsedState=Array.isArray(d.stores)?d.stores.map(item=>({...item})):[];
-    metaState={
-      route:d.route||routeContext()||'',
-      date:d.date||'',
-      vehicle:d.vehicle||'',
-      totalWeight:d.totalWeight||'',
-      rawOrderCount:Number(d.rawOrderCount)||0,
-      recognizedCount:Number(d.recognizedCount)||parsedState.length,
-      source:d.source||'web-confirm'
-    };
+    metaState={route:d.route||routeContext()||'',date:d.date||'',vehicle:d.vehicle||'',totalWeight:normalizeWeight(d.totalWeight),rawOrderCount:Number(d.rawOrderCount)||0,recognizedCount:Number(d.recognizedCount)||parsedState.length,source:d.source||'web-confirm'};
     renderReview(parsedState);
+  }
+
+  function normalizeWeight(value){
+    const s=String(value??'').trim().replace(/,/g,'');
+    const match=s.match(/[\d]+(?:\.\d+)?/);
+    if(!match)return '';
+    const n=Number(match[0]);
+    if(!Number.isFinite(n))return '';
+    const tons=/吨|\bt\b/i.test(s)?n:n/1000;
+    return `${(Math.round((tons+Number.EPSILON)*10)/10).toFixed(1)}t`;
+  }
+
+  function weightFromText(text){
+    const match=String(text||'').match(/总重量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i);
+    return match?normalizeWeight(`${match[1]}${match[2]||'kg'}`):'';
   }
 
   window.onOrderParsed=syncParsed;
 
   async function reparseEditedText(){
-    const input=$('manualOrderInput');
-    const text=String(input?.value||'').trim();
-    if(!text) throw Error('请先输入或识别运单文字');
-
+    const text=String($('manualOrderInput')?.value||'').trim();
+    if(!text)throw Error('请先输入或识别运单文字');
     const route=routeContext();
-    if(!route) throw Error('未指定配送线路');
-
-    const response=await fetch('/api/parse',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      credentials:'same-origin',
-      cache:'no-store',
-      body:JSON.stringify({text,route})
-    });
+    if(!route)throw Error('未指定配送线路');
+    const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({text,route})});
     const data=await response.json().catch(()=>({}));
-    if(!response.ok||!data.success) throw Error(data.error||`重新解析失败（${response.status}）`);
-
-    syncParsed(data.data||{});
-    return data.data||{};
+    if(!response.ok||!data.success)throw Error(data.error||`重新解析失败（${response.status}）`);
+    syncParsed(data.data||{});return data.data||{};
   }
 
   async function confirm(){
+    const input=$('manualOrderInput');
     if(!parsedState.length){
-      const input=$('manualOrderInput');
-      if(!String(input?.value||'').trim()){
-        toast('请先点击“开始解析”','warning');
-        return;
-      }
-      try{
-        toast('正在应用人工修改...');
-        await reparseEditedText();
-      }catch(error){
-        toast(error.message||'人工修改重新解析失败','warning');
-        return;
-      }
+      if(!String(input?.value||'').trim()){toast('请先点击“开始解析”','warning');return;}
+      try{toast('正在应用人工修改...');await reparseEditedText();}catch(error){toast(error.message||'人工修改重新解析失败','warning');return;}
     }
-
     const pending=parsedState.filter(item=>item?.needsReview);
-    if(pending.length){
-      renderReview(pending);
-      toast(`请先确认 ${pending.length} 家疑似门店`,'warning');
-      return;
-    }
+    if(pending.length){renderReview(pending);toast(`请先确认 ${pending.length} 家疑似门店`,'warning');return;}
 
     const route=routeContext();
-    if(!route){
-      toast('未指定配送线路','warning');
-      return;
-    }
-
+    if(!route){toast('未指定配送线路','warning');return;}
     const button=$('confirmBtn');
     if(button){button.disabled=true;button.textContent='正在确认…';}
 
+    const currentText=String(input?.value||'');
+    const totalWeight=metaState.totalWeight||weightFromText(currentText);
     try{
-      const response=await fetch('/api/confirm',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        credentials:'same-origin',
-        cache:'no-store',
-        body:JSON.stringify({
-          orders:parsedState,
-          route,
-          date:metaState.date||'',
-          vehicle:metaState.vehicle||'',
-          totalWeight:metaState.totalWeight||'',
-          source:metaState.source||'web-confirm',
-          recognizedCount:Number(metaState.recognizedCount)||parsedState.length,
-          rawOrderCount:Number(metaState.rawOrderCount)||0
-        })
-      });
-
+      const response=await fetch('/api/confirm',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({orders:parsedState,route,date:metaState.date||'',vehicle:metaState.vehicle||'',totalWeight,rawText:currentText,source:metaState.source||'web-confirm',recognizedCount:Number(metaState.recognizedCount)||parsedState.length,rawOrderCount:Number(metaState.rawOrderCount)||0})});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok||!data.success){
-        if(data.code==='REVIEW_REQUIRED') renderReview(data.review||[]);
-        throw Error(data.error||`确认失败（${response.status}）`);
-      }
-
+      if(!response.ok||!data.success){if(data.code==='REVIEW_REQUIRED')renderReview(data.review||[]);throw Error(data.error||`确认失败（${response.status}）`);}
       toast(`已确认并录入 ${data.data?.count||parsedState.length} 家门店`);
       $('uploadOverlay')?.classList.remove('active');
-      setTimeout(()=>{
-        location.href=`pages/order_detail.html?route=${encodeURIComponent(route)}`;
-      },400);
-    }catch(error){
-      toast(error.message||'确认入库失败','warning');
-    }finally{
-      if(button){button.disabled=false;button.textContent='确认录入';}
-    }
+      setTimeout(()=>{location.href=`pages/order_detail.html?route=${encodeURIComponent(route)}`;},400);
+    }catch(error){toast(error.message||'确认入库失败','warning');}
+    finally{if(button){button.disabled=false;button.textContent='确认录入';}}
   }
 
   window.submitManualOrder=confirm;
@@ -242,16 +143,11 @@
 
   document.addEventListener('DOMContentLoaded',()=>{
     const input=$('manualOrderInput');
-    if(!input) return;
-
+    if(!input)return;
     input.addEventListener('input',()=>{
-      if(syncing) return;
-      if($('charCount')) $('charCount').textContent=String(input.value.length);
-      if(parsedState.length){
-        parsedState=[];
-        reviewState=[];
-        renderReview([]);
-      }
+      if(syncing)return;
+      if($('charCount'))$('charCount').textContent=String(input.value.length);
+      if(parsedState.length){parsedState=[];reviewState=[];renderReview([]);}
     });
   });
 })();
