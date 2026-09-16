@@ -5,6 +5,7 @@ import { authRequired } from './_auth.js';
 
 const OCR_MODEL='@cf/google/gemma-4-26b-a4b-it';
 const OCR_MAX_TOKENS=6144;
+const LINE_MAX_TOKENS=1536;
 const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。
 这不是摘要、问答或门店匹配任务，只进行高保真视觉转录。
 
@@ -15,30 +16,21 @@ const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。
 【双图复核】
 如果收到两张图片，它们是同一视觉区域的“原图”和“增强清晰版”，不是两份不同订单。
 必须逐字符对照两张图：原图负责确认真实版面和字符位置，增强图辅助辨认小字、笔画和相似汉字。
-只有两张图都支持的视觉信息才提高置信度；不能因为增强图产生了一个“看起来合理”的字，就凭常识替换原图。
+只有图像本身能够支持的信息才可以输出；不能因为常识、公司名称或线路知识补字。
 
 【识别流程】
 1. 先观察整张图片的版面结构，再逐行读取。
 2. 对配送链区域逐行复读：第一遍读取整行，第二遍专门检查容易混淆的单字、字母、数字。
-3. 每个门店名称都进行一次字符级复核，特别检查：相似汉字、偏旁缺失、漏字、连续重复字、英文/数字混入中文。
+3. 每个门店名称都进行字符级复核，特别检查：相似汉字、偏旁缺失、漏字、连续重复字、英文/数字混入中文。
 4. 对每一行的结尾再次检查，区分“完整结束”和“图片边缘截断”；如果图片确实截断，不要凭常识补齐。
 5. 如果一个字符看不清，只保留能够从图像确认的部分，不要凭上下文补写。
 6. 如果同一文字因为截图重叠实际出现两次，只输出一次；只有图片明确存在两条真实重复订单时才输出两次。
-7. 如果图片底部还有内容，即使内容较小，也必须继续读取，不能因为已经识别到很多门店就提前结束。
+7. 如果图片底部还有内容，即使内容较小，也必须继续读取，不能提前结束。
 
 【必须保留】
-- 中文原文
-- 英文字母
-- 数字
-- 日期
-- 车牌号
-- 额定载重
-- 额定体积
-- 主司机
-- 送货员
-- 总数量
-- 总重量及占比
-- 总体积及占比
+- 中文原文、英文字母、数字
+- 日期、车牌号、额定载重、额定体积、主司机、送货员
+- 总数量、总重量及占比、总体积及占比
 - Q、JM、A等业务编号
 - 门店配送链
 - 图片中的箭头：->、→、＞、》、➜、➤、⇒
@@ -49,14 +41,26 @@ const OCR_PROMPT=`你正在执行“天友智配One 运单截图 OCR”。
 不要把“总数量266”解释成266家门店。
 不要使用线路基准库、常见公司名称、同音字、相似字作为纠错依据。
 不要把OCR结果改写成标准门店名称。
-不要删除看起来奇怪的字符；如果图片确实出现英文、乱码样式或异常字符，应忠实保留。
+不要删除看起来奇怪的字符；如果图片确实出现异常字符，应忠实保留。
 不要为了让公司名称“完整”而自行补写缺失文字。
 不要输出Markdown、解释、摘要或“识别结果：”前缀。
 
 【最终复核】
 输出前再次从上到下检查一次图片底部，确认没有遗漏后半段配送链。
-再逐项复核日期、车牌、额定载重、额定体积、司机、送货员、总数量、总重量、总体积。
 只输出图片中能够视觉确认的原始文字。`;
+
+const LINE_PROMPT=`你正在执行“天友智配One OCR低置信行视觉复核”。
+图片是一行或一小段从运单截图中裁出的原始文字区域。
+只做视觉转录，不做摘要、不做门店匹配、不做业务纠错。
+
+要求：
+1. 从左到右读取图片中实际可见文字。
+2. 逐字符检查中文、英文字母、数字、Q/JM/A编号、括号和箭头。
+3. 原图与增强图属于同一视觉区域；增强图只辅助看清笔画，不能凭常识补字。
+4. 看不清的字符不要猜，不要用线路库或常见公司名称替换。
+5. 保留图片中实际出现的异常字符。
+6. 如果图片只显示一行的一部分，只输出可视觉确认的部分，不要自行补齐。
+7. 只输出这一小段图片中的原始文字，不要输出解释、Markdown、JSON或“识别结果：”。`;
 
 export async function onRequest({request,env}){
   if(request.method!=='POST')return json({success:false,error:'Method not allowed'},405);
@@ -72,18 +76,20 @@ export async function onRequest({request,env}){
     const route=normalizeRoute(session.route);
     if(!route)return json({success:false,error:'用户未绑定线路'},403);
 
-    const parsed=await runVisionOCR(env.AI,images);
+    const mode=body?.mode==='line'?'line':'full';
+    const parsed=await runVisionOCR(env.AI,images,mode);
     const rawText=cleanRawText(parsed.rawText||'');
     if(!rawText||isPlaceholderText(rawText))return json({success:false,error:'图片文字提取失败：模型没有读取到运单图片内容，请重新上传清晰、完整的运单图片'},422);
 
     return json({success:true,data:{
       route,
-      date:normalizeDate(parsed.date),
-      vehicle:normalizeVehicle(parsed.vehicle),
-      totalWeight:normalizeWeight(parsed.totalWeight),
+      date:mode==='line'?'':normalizeDate(parsed.date),
+      vehicle:mode==='line'?'':normalizeVehicle(parsed.vehicle),
+      totalWeight:mode==='line'?'':normalizeWeight(parsed.totalWeight),
       rawOrderCount:0,
       rawText,
-      message:'图片文字提取完成，请先检查OCR原文。'
+      mode,
+      message:mode==='line'?'低置信文字视觉复核完成。':'图片文字提取完成，请先检查OCR原文。'
     }});
   }catch(e){
     console.error('OCR error',e);
@@ -91,19 +97,21 @@ export async function onRequest({request,env}){
   }
 }
 
-async function runVisionOCR(AI,images){
+async function runVisionOCR(AI,images,mode='full'){
   const payloads=images.map(decodeImageBase64);
   if(payloads.some(v=>!v.length))throw new Error('图片数据无效或无法解码');
   const imageDataUrls=images.map(toImageDataUrl);
   const base64=bytesToBase64(payloads[0]);
+  const prompt=mode==='line'?LINE_PROMPT:OCR_PROMPT;
+  const maxTokens=mode==='line'?LINE_MAX_TOKENS:OCR_MAX_TOKENS;
 
   try{
-    const content=[{type:'text',text:OCR_PROMPT}];
+    const content=[{type:'text',text:prompt}];
     for(const url of imageDataUrls)content.push({type:'image_url',image_url:{url}});
     const result=await AI.run(OCR_MODEL,{
       image:base64,
       messages:[{role:'user',content}],
-      max_completion_tokens:OCR_MAX_TOKENS,
+      max_completion_tokens:maxTokens,
       temperature:0,
       chat_template_kwargs:{enable_thinking:false}
     });
@@ -115,8 +123,8 @@ async function runVisionOCR(AI,images){
     try{
       const result=await AI.run('@cf/llava-hf/llava-1.5-7b-hf',{
         image:Array.from(payloads[0]),
-        prompt:OCR_PROMPT,
-        max_tokens:OCR_MAX_TOKENS,
+        prompt,
+        max_tokens:maxTokens,
         temperature:0
       });
       const text=cleanRawText(extractAIText(result));
