@@ -1,16 +1,20 @@
 /* 天友智配One - 浏览器本地 PaddleOCR
  * 只负责：图片 → 原始文字。
  * 图片不上传服务器、不保存原图、不参与门店匹配。
+ *
+ * 重要：本文件故意使用普通 script 加载，OCR SDK 改为点击后动态加载。
+ * 这样即使 OCR 模型/CDN 尚未加载完成，“拍摄 / 相册 / 文件”也可以立即打开系统文件选择器。
  */
-import { PaddleOCR } from 'https://esm.unpkg.com/@paddleocr/paddleocr-js@0.4.2';
-
 (() => {
   'use strict';
 
   const MAX_SIDE = 2600;
   const JPEG_QUALITY = 0.92;
   const OCR_SCORE = 0.35;
+  const OCR_SDK_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
+
   let enginePromise = null;
+  let sdkPromise = null;
   let busy = false;
   const $ = (id) => document.getElementById(id);
 
@@ -50,9 +54,23 @@ import { PaddleOCR } from 'https://esm.unpkg.com/@paddleocr/paddleocr-js@0.4.2';
     ].some((item) => value === item || value.includes(item));
   }
 
+  async function loadSdk() {
+    if (sdkPromise) return sdkPromise;
+    setStatus('正在加载本地OCR组件…', 28);
+    sdkPromise = import(OCR_SDK_URL).then((module) => {
+      if (!module?.PaddleOCR) throw new Error('OCR组件加载失败，请检查网络连接后重试');
+      return module.PaddleOCR;
+    }).catch((error) => {
+      sdkPromise = null;
+      throw error;
+    });
+    return sdkPromise;
+  }
+
   async function loadEngine() {
     if (enginePromise) return enginePromise;
-    setStatus('正在加载中文OCR模型，首次使用需要一点时间…', 10);
+    const PaddleOCR = await loadSdk();
+    setStatus('正在加载中文OCR模型，首次使用需要一点时间…', 35);
 
     enginePromise = PaddleOCR.create({
       lang: 'ch',
@@ -152,7 +170,7 @@ import { PaddleOCR } from 'https://esm.unpkg.com/@paddleocr/paddleocr-js@0.4.2';
       const blob = await prepareImage(file);
       setStatus('正在启动本地 PaddleOCR…', 25);
       const ocr = await loadEngine();
-      setStatus('正在本地识别运单文字…', 45);
+      setStatus('正在本地识别运单文字…', 55);
 
       const [result] = await ocr.predict(blob, { textRecScoreThresh: OCR_SCORE });
       const text = resultToText(result);
@@ -168,25 +186,37 @@ import { PaddleOCR } from 'https://esm.unpkg.com/@paddleocr/paddleocr-js@0.4.2';
       setStatus(error?.message || 'OCR识别失败', 100, false, true);
       notify(error?.message || '运单图片识别失败');
       throw error;
-    } finally { busy = false; }
+    } finally {
+      busy = false;
+    }
   }
 
+  // 先把选择器入口暴露出来，不等待OCR SDK加载。
   window.callOCR = process;
-
   window.triggerUpload = function(type) {
     if (busy) return;
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    if (type === 'camera') input.capture = 'environment';
-    input.style.display = 'none';
-    input.onchange = () => {
+    if (type === 'camera') input.setAttribute('capture', 'environment');
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.top = '-9999px';
+    input.style.width = '1px';
+    input.style.height = '1px';
+    input.style.opacity = '0';
+
+    input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file) process(file).catch(() => {});
-    };
+      setTimeout(() => input.remove(), 1000);
+    }, { once: true });
+
     document.body.appendChild(input);
+
+    // 必须在用户点击事件的同步调用栈内执行 click，避免 Android 浏览器拦截文件选择器。
     input.click();
-    setTimeout(() => input.remove(), 2000);
   };
 
   window.triggerCameraUpload = () => window.triggerUpload('camera');
