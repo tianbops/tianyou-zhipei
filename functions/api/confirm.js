@@ -140,8 +140,8 @@ function key(value) { return String(value || '').trim().replace(/[\s\u3000（）
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
-// 统一内部重量单位为 kg：1.806213t / 1.806213吨 -> 1806.213kg。
-// 这样今日任务、详情页、历史记录不会出现同一运单一处显示 t、一处显示 kg 的情况。
+// 总重量统一以“吨”保存并显示，保留1位小数，按四舍五入处理。
+// 例如：1.806213t -> 1.8t；1.85t -> 1.9t；1806.213kg -> 1.8t。
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
   const s = String(value).trim().replace(/,/g, '');
@@ -150,8 +150,9 @@ function normalizeWeight(value) {
   const n = Number(m[0]);
   if (!Number.isFinite(n)) return '';
   const isTon = /吨|\bt\b/i.test(s);
-  const kg = isTon ? n * 1000 : n;
-  return `${Number(kg.toFixed(3))}kg`;
+  const tons = isTon ? n : n / 1000;
+  if (!Number.isFinite(tons)) return '';
+  return `${(Math.round((tons + Number.EPSILON) * 10) / 10).toFixed(1)}t`;
 }
 
 function createBatchId(date) { return `${date}-17-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
