@@ -1,5 +1,5 @@
 // 天友智配One - 服务器订单 API
-// 订单按「17号线 + 业务日期」独立存储，服务器保存前再次按基准库排序。
+// 订单按「17号线 + 业务日期」独立存储；今日订单只保存实际配送门店。
 import { authRequired } from './_auth.js';
 
 const ROUTE = '17号线';
@@ -30,7 +30,6 @@ async function saveOrder(request, env) {
   if (!(await acquireLock(env, lockKey, lockToken, 15))) return json({ error: '该线路正在保存订单，请稍后再试' }, 409);
 
   try {
-    // 正常确认流程会直接携带批次号和车辆，因此只有旧调用方未提供批次号时才读取旧订单。
     let existing = null;
     let orderBatchId = String(body.orderBatchId || '').trim();
     if (!orderBatchId || !String(body.vehicle || '').trim()) existing = await redisGet(env, key);
@@ -46,7 +45,7 @@ async function saveOrder(request, env) {
       route: ROUTE,
       vehicle: String(body.vehicle || '').trim() || sessionVehicle(existing),
       orders,
-      totalWeight: normalizeWeight(body.totalWeight),
+      totalWeight: normalizeWeight(body.totalWeight ?? body.weight),
       count: orders.length,
       matchedCount: orders.filter(x => x.matched).length,
       newStoreCount: orders.filter(x => x.isNew).length,
@@ -60,7 +59,6 @@ async function saveOrder(request, env) {
     await saveHistory(env, date, todayData);
     return json({ success: true, data: todayData });
   } finally {
-    // 使用 Redis EVAL 原子校验并释放锁，避免先 GET 再 DEL 的额外网络往返。
     await releaseLock(env, lockKey, lockToken).catch(() => {});
   }
 }
@@ -188,7 +186,16 @@ async function redisSet(env, key, value) {
 }
 
 function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[（）()【】\[\]]/g, '').toLowerCase(); }
-function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim(); const m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); return /吨|\bt\b/i.test(s) ? `${n}t` : `${n}kg`; }
+function normalizeWeight(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const s = String(value).trim().replace(/,/g, '');
+  const m = s.match(/[\d]+(?:\.\d+)?/);
+  if (!m) return '';
+  const n = Number(m[0]);
+  if (!Number.isFinite(n)) return '';
+  const tons = /吨|\bt\b/i.test(s) ? n : n / 1000;
+  return `${(Math.round((tons + Number.EPSILON) * 10) / 10).toFixed(1)}t`;
+}
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function createBatchId(date) { return `${date}-17-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
