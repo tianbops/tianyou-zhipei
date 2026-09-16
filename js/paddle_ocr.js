@@ -2,8 +2,8 @@
  * 只负责：图片 → 原始文字。
  * 图片不上传服务器、不保存原图、不参与门店匹配。
  *
- * 重要：本文件故意使用普通 script 加载，OCR SDK 改为点击后动态加载。
- * 这样即使 OCR 模型/CDN 尚未加载完成，“拍摄 / 相册 / 文件”也可以立即打开系统文件选择器。
+ * 注意：Cloudflare Pages 页面与 jsDelivr 的 Worker 属于不同源。
+ * 当前版本关闭 PaddleOCR Worker，避免浏览器阻止跨源 worker-entry 脚本。
  */
 (() => {
   'use strict';
@@ -75,7 +75,8 @@
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
-      worker: true,
+      // Cloudflare Pages 与 jsDelivr 不同源，关闭 Worker 避免跨源 Worker 被浏览器拦截。
+      worker: false,
       textDetectionBatchSize: 1,
       textRecognitionBatchSize: 6,
       ortOptions: {
@@ -191,7 +192,7 @@
     }
   }
 
-  // 先把选择器入口暴露出来，不等待OCR SDK加载。
+  // 选择器入口必须立即暴露，不能等待 OCR SDK。
   window.callOCR = process;
   window.triggerUpload = function(type) {
     if (busy) return;
@@ -214,8 +215,6 @@
     }, { once: true });
 
     document.body.appendChild(input);
-
-    // 必须在用户点击事件的同步调用栈内执行 click，避免 Android 浏览器拦截文件选择器。
     input.click();
   };
 
