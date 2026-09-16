@@ -11,7 +11,6 @@
 const $=id=>document.getElementById(id);
 const route=()=>window.Auth?.getCurrentRoute?.()||'';
 const PADDLE_SDK='https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
-const ORT_WASM='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
 const LOW_SCORE=.85;
 const MAX_VLM_REVIEW=6;
 let paddlePromise=null;
@@ -114,7 +113,7 @@ async function loadPaddleOCR(){
       worker:true,
       textDetectionBatchSize:2,
       textRecognitionBatchSize:6,
-      ortOptions:{backend:'wasm',wasmPaths:ORT_WASM,numThreads:2,simd:true}
+      ortOptions:{backend:'wasm',numThreads:window.crossOriginIsolated?2:1,simd:true}
     });
     paddleOCR=ocr;
     return ocr;
@@ -127,18 +126,12 @@ async function paddleRecognize(file){
   const resultList=await ocr.predict(file,{textRecScoreThresh:0});
   const result=resultList?.[0];
   if(!result?.items?.length)throw new Error('PaddleOCR未检测到文字');
-  const items=result.items.map((item,index)=>({
-    index,
-    text:String(item?.text||'').trim(),
-    score:Number(item?.score),
-    poly:Array.isArray(item?.poly)?item.poly:[],
-  })).filter(item=>item.text);
-  items.sort((a,b)=>readingOrder(a,b,result.image));
+  const items=result.items.map((item,index)=>({index,text:String(item?.text||'').trim(),score:Number(item?.score),poly:Array.isArray(item?.poly)?item.poly:[]})).filter(item=>item.text);
+  items.sort((a,b)=>readingOrder(a,b));
   return {items,metrics:result.metrics||{}};
 }
-function readingOrder(a,b,image){
-  const ay=minY(a.poly),by=minY(b.poly),ah=boxHeight(a.poly),bh=boxHeight(b.poly);
-  const threshold=Math.max(ah,bh)*.55;
+function readingOrder(a,b){
+  const ay=minY(a.poly),by=minY(b.poly),ah=boxHeight(a.poly),bh=boxHeight(b.poly),threshold=Math.max(ah,bh)*.55;
   if(Math.abs(ay-by)<=threshold)return minX(a.poly)-minX(b.poly);
   return ay-by;
 }
@@ -150,36 +143,31 @@ function isLowConfidence(item){return Number.isFinite(item.score)&&item.score<LO
 function itemLooksUseful(item){return /[\u4e00-\u9fffA-Za-z0-9]/.test(item.text)}
 
 async function cropLine(file,item){
-  const poly=item.poly;
-  if(!poly?.length) return null;
+  const poly=item.poly;if(!poly?.length)return null;
   const url=URL.createObjectURL(file);
   try{
     const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error('图片读取失败'));i.src=url;});
     const xs=poly.map(p=>Number(p?.[0]||0)),ys=poly.map(p=>Number(p?.[1]||0));
-    const padX=Math.max(18,Math.round((Math.max(...xs)-Math.min(...xs))*.04));
-    const padY=Math.max(16,Math.round((Math.max(...ys)-Math.min(...ys))*.55));
+    const padX=Math.max(18,Math.round((Math.max(...xs)-Math.min(...xs))*.04)),padY=Math.max(16,Math.round((Math.max(...ys)-Math.min(...ys))*.55));
     const sx=Math.max(0,Math.floor(Math.min(...xs)-padX)),sy=Math.max(0,Math.floor(Math.min(...ys)-padY));
     const ex=Math.min(img.naturalWidth,Math.ceil(Math.max(...xs)+padX)),ey=Math.min(img.naturalHeight,Math.ceil(Math.max(...ys)+padY));
     const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy),scale=Math.min(3,Math.max(2,1800/sw));
     const c=document.createElement('canvas');c.width=Math.round(sw*scale);c.height=Math.round(sh*scale);
-    const ctx=c.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
-    ctx.filter='grayscale(1) contrast(1.12) brightness(1.02)';ctx.drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);ctx.filter='none';
+    const ctx=c.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.filter='grayscale(1) contrast(1.12) brightness(1.02)';ctx.drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);ctx.filter='none';
     return c.toDataURL('image/jpeg',.96);
   }finally{URL.revokeObjectURL(url);}
 }
-
 async function reviewLowConfidenceLines(file,items){
   const targets=items.filter(isLowConfidence).filter(itemLooksUseful).slice(0,MAX_VLM_REVIEW);
   if(!targets.length)return new Map();
   const replacements=new Map();
-  for(let i=0;i<targets.length;i++){
+  for(const target of targets){
     try{
-      const crop=await cropLine(file,targets[i]);
-      if(!crop)continue;
+      const crop=await cropLine(file,target);if(!crop)continue;
       const enhanced=await enhancedVariant(crop);
       const data=await one([crop,enhanced],'line');
       const reviewed=extractSingleLine(data.rawText);
-      if(reviewed)replacements.set(targets[i].index,reviewed);
+      if(reviewed)replacements.set(target.index,reviewed);
     }catch(error){console.warn('低置信行视觉复核失败',error);}
   }
   return replacements;
@@ -189,9 +177,7 @@ function extractSingleLine(text){
   if(!s.length)return '';
   return s.find(v=>/[\u4e00-\u9fff]/.test(v)&&v.length>=2)||s[0];
 }
-function renderPaddleText(items,replacements){
-  return items.map(item=>replacements.get(item.index)||item.text).filter(Boolean).join('\n');
-}
+function renderPaddleText(items,replacements){return items.map(item=>replacements.get(item.index)||item.text).filter(Boolean).join('\n')}
 
 async function imageTiles(file){
   const url=URL.createObjectURL(file);
@@ -199,29 +185,25 @@ async function imageTiles(file){
     const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error('图片读取失败'));i.src=url;});
     const ow=img.naturalWidth,oh=img.naturalHeight;if(!ow||!oh)throw Error('图片尺寸无效');
     const scale=Math.min(1.8,3000/ow),w=Math.max(1,Math.round(ow*scale));
-    const make=(top,bottom)=>{const c=document.createElement('canvas');c.width=w;c.height=Math.max(1,Math.round((bottom-top)*scale));const ctx=c.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,top,ow,bottom-top,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.96);};
+    const make=(top,bottom)=>{const c=document.createElement('canvas');c.width=w;c.height=Math.max(1,Math.round((bottom-top)*scale));const ctx=c.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,top,ow,bottom-top,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.96)};
     const ratio=oh/ow;if(ratio<=1.5)return[make(0,oh)];
     const count=ratio>=3.4?4:3,overlap=oh*.10,step=oh/count,tiles=[];
     for(let i=0;i<count;i++){const top=Math.max(0,i*step-overlap/2),bottom=Math.min(oh,(i+1)*step+overlap/2);tiles.push(make(top,bottom));}
     return tiles;
-  }finally{URL.revokeObjectURL(url);}
+  }finally{URL.revokeObjectURL(url)}
 }
 async function enhancedVariant(dataUrl){
   const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error('增强图片读取失败'));i.src=dataUrl;});
   const scale=Math.min(1.35,3600/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
-  const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.filter='grayscale(1) contrast(1.16) brightness(1.02)';ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);ctx.filter='none';return c.toDataURL('image/jpeg',.97);
+  const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.filter='grayscale(1) contrast(1.16) brightness(1.02)';ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);ctx.filter='none';return c.toDataURL('image/jpeg',.97)
 }
 async function one(images,mode='full'){
   const r=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({images,route:route(),mode})});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok||!d.success)throw Error(d.error||`OCR请求失败(${r.status})`);
-  return d.data||{};
+  const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw Error(d.error||`OCR请求失败(${r.status})`);return d.data||{};
 }
-
 async function process(file){
   if(!file?.type?.startsWith('image/'))throw Error('请选择有效的运单图片');
   setStatus('正在启动本地中文OCR...',10);
-
   try{
     setStatus('正在本地检测文字区域...',22);
     const paddle=await paddleRecognize(file);
@@ -229,8 +211,7 @@ async function process(file){
     const replacements=await reviewLowConfidenceLines(file,paddle.items);
     const rawText=renderPaddleText(paddle.items,replacements);
     if(!rawText||placeholder(rawText))throw Error('本地OCR没有形成有效文字');
-    const input=$('manualOrderInput');
-    if(input){input.value=rawText;input.dispatchEvent(new Event('input',{bubbles:true}));input.scrollTop=0;}
+    const input=$('manualOrderInput');if(input){input.value=rawText;input.dispatchEvent(new Event('input',{bubbles:true}));input.scrollTop=0}
     if($('charCount'))$('charCount').textContent=String(rawText.length);
     setStatus('本地OCR完成，请核对原文。',100);if($('statusIcon'))$('statusIcon').textContent='✅';
     if($('statusCount'))$('statusCount').textContent=`本地PaddleOCR · ${paddle.items.length}行 · 低置信复核${replacements.size}行 · 尚未解析门店`;
@@ -240,34 +221,18 @@ async function process(file){
     console.warn('PaddleOCR本地识别不可用，启用VLM兜底：',localError?.message||localError);
     setStatus('本地OCR暂不可用，启用视觉OCR兜底...',20);
   }
-
-  const tiles=await imageTiles(file);setStatus(`正在进行视觉OCR兜底 ${tiles.length} 个区域...`,30);
-  const results=[];
-  for(let i=0;i<tiles.length;i++){
-    try{const enhanced=await enhancedVariant(tiles[i]);const data=await one([tiles[i],enhanced],'full');if(data.rawText&&!placeholder(data.rawText))results.push(data.rawText);}catch(e){console.warn(`OCR区域${i+1}失败`,e);}
-    setStatus(`正在复核第 ${i+1}/${tiles.length} 个区域...`,30+Math.round((i+1)/tiles.length*55));
-  }
+  const tiles=await imageTiles(file);setStatus(`正在进行视觉OCR兜底 ${tiles.length} 个区域...`,30);const results=[];
+  for(let i=0;i<tiles.length;i++){try{const enhanced=await enhancedVariant(tiles[i]);const data=await one([tiles[i],enhanced],'full');if(data.rawText&&!placeholder(data.rawText))results.push(data.rawText)}catch(e){console.warn(`OCR区域${i+1}失败`,e)}setStatus(`正在复核第 ${i+1}/${tiles.length} 个区域...`,30+Math.round((i+1)/tiles.length*55))}
   if(!results.length)throw Error('OCR没有返回有效文字，请重新拍摄清晰、完整的运单图片');
   const rawText=mergeOCRResults(results);if(!rawText)throw Error('OCR没有形成有效文字，请重新上传清晰、完整的运单图片');
-  const input=$('manualOrderInput');if(input){input.value=rawText;input.dispatchEvent(new Event('input',{bubbles:true}));input.scrollTop=0;}
+  const input=$('manualOrderInput');if(input){input.value=rawText;input.dispatchEvent(new Event('input',{bubbles:true}));input.scrollTop=0}
   if($('charCount'))$('charCount').textContent=String(rawText.length);
-  setStatus('视觉OCR完成，请核对原文。',100);if($('statusIcon'))$('statusIcon').textContent='✅';
-  if($('statusCount'))$('statusCount').textContent='视觉OCR兜底 · 尚未解析门店';
-  if(typeof window.homeToast==='function')window.homeToast('视觉OCR完成，请核对文字后再开始解析');
-  return{rawText,source:'vlm-fallback'};
+  setStatus('视觉OCR完成，请核对原文。',100);if($('statusIcon'))$('statusIcon').textContent='✅';if($('statusCount'))$('statusCount').textContent='视觉OCR兜底 · 尚未解析门店';if(typeof window.homeToast==='function')window.homeToast('视觉OCR完成，请核对文字后再开始解析');return{rawText,source:'vlm-fallback'};
 }
-
 async function selectFile(mode){
   let input=$('homeUploadInput');
-  if(!input){
-    input=document.createElement('input');input.id='homeUploadInput';input.type='file';input.hidden=true;document.body.appendChild(input);
-    input.addEventListener('change',async()=>{const file=input.files?.[0];input.value='';if(!file)return;try{await process(file);}catch(e){setStatus(e.message||'OCR失败',100);if($('statusIcon'))$('statusIcon').textContent='⚠️';showError(e.message||'OCR失败');}});
-  }
-  input.accept='image/*';
-  if(mode==='camera')input.setAttribute('capture','environment');else input.removeAttribute('capture');
-  input.click();
+  if(!input){input=document.createElement('input');input.id='homeUploadInput';input.type='file';input.hidden=true;document.body.appendChild(input);input.addEventListener('change',async()=>{const file=input.files?.[0];input.value='';if(!file)return;try{await process(file)}catch(e){setStatus(e.message||'OCR失败',100);if($('statusIcon'))$('statusIcon').textContent='⚠️';showError(e.message||'OCR失败')}})}
+  input.accept='image/*';if(mode==='camera')input.setAttribute('capture','environment');else input.removeAttribute('capture');input.click();
 }
-window.callOCR=async file=>process(file);
-window.triggerUpload=selectFile;
-window.triggerCameraUpload=()=>selectFile('camera');
+window.callOCR=async file=>process(file);window.triggerUpload=selectFile;window.triggerCameraUpload=()=>selectFile('camera');
 })();
