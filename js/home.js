@@ -1,7 +1,4 @@
-/* 天友智配One - 首页业务逻辑
- * 首页只负责：登录状态、线路/今日订单摘要、上传弹层、文字解析、确认前展示。
- * 图片OCR统一由 home_ocr_v2.js 负责，避免重复OCR、重复压缩和新旧上传逻辑并存。
- */
+/* 天友智配One - 首页业务逻辑 */
 (function(){
 'use strict';
 let baseStores=[],parsedOrders=[],serverToday=null,pendingMeta={},reviewMode=false;
@@ -27,7 +24,7 @@ window.goToRouteEdit=()=>{window.location.href='pages/route_edit.html'};
 window.goToOrderDetail=()=>{const route=currentRoute();window.location.href=`pages/order_detail.html${route?`?route=${encodeURIComponent(route)}`:''}`};
 window.goToHistory=()=>{window.location.href='pages/history.html'};
 window.logout=()=>Auth.logout();
-window.clearManualInput=()=>{const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传图片后，这里显示识别文字。请核对后再开始解析。\n也可直接粘贴运单文字。')}if($('charCount'))$('charCount').textContent='0';parsedOrders=[];pendingMeta={};reviewMode=false;renderStatus('idle');renderTags([]);window.renderReviewStores?.([])};
+window.clearManualInput=()=>{const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传图片后，这里显示识别文字。请核对后再开始解析，也可直接粘贴运单文字。')}if($('charCount'))$('charCount').textContent='0';parsedOrders=[];pendingMeta={};reviewMode=false;renderStatus('idle');renderTags([]);window.renderReviewStores?.([])};
 window.loadExampleData=()=>{const names=baseStores.slice(0,3).map(storeName).filter(Boolean);setOCRText(names.length?names.join('\n'):'江北胡汪洋经销商\n中景隆贸易\n江北重庆兴农');pendingMeta={};reviewMode=false;renderStatus('idle')};
 window.pasteFromClipboard=async()=>{try{const text=await navigator.clipboard.readText();setOCRText(text);pendingMeta={};reviewMode=false}catch(_){toast('无法读取剪贴板，请手动粘贴','warning')}};
 window.parseManualInput=async()=>{try{const text=$('manualOrderInput')?.value||'';if(!text.trim())return toast('请先输入或识别运单文字','warning');renderStatus('loading',0,'正在提取门店并与基准库比对...');const data=await parseOrderText(text);parsedOrders=Array.isArray(data.stores)?data.stores:[];pendingMeta={date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:data.rawOrderCount||0,matchedCount:data.matchedCount,newStoreCount:data.newStoreCount,recognizedCount:data.recognizedCount,source:'web-confirm'};renderTags(parsedOrders);window.onOrderParsed?.(data);setReviewText(data);renderStatus(parsedOrders.length?'success':'error',parsedOrders.length,parsedOrders.length?`解析完成：${parsedOrders.length} 家门店${data.newStoreCount?`，新增 ${data.newStoreCount} 家`:''}`:'没有识别到有效门店');if(data.warning)toast(data.warning,'warning');else toast('解析完成，请人工核对今日订单信息');return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});renderStatus('error',0,e.message);toast(e.message||'解析失败','warning');error(e.message||'解析失败');return[]}};
