@@ -39,13 +39,16 @@ async function saveOrder(request, env) {
     const base = await loadBaseData(env);
     orders = sortByRouteBase(orders, base);
 
+    const incomingWeight = normalizeWeight(body.totalWeight ?? body.weight);
+    const totalWeight = incomingWeight && !isZeroWeight(incomingWeight) ? incomingWeight : normalizeWeight(existing?.totalWeight);
+
     const todayData = {
       orderBatchId,
       date,
       route: ROUTE,
       vehicle: String(body.vehicle || '').trim() || sessionVehicle(existing),
       orders,
-      totalWeight: normalizeWeight(body.totalWeight ?? body.weight),
+      totalWeight,
       count: orders.length,
       matchedCount: orders.filter(x => x.matched).length,
       newStoreCount: orders.filter(x => x.isNew).length,
@@ -71,9 +74,7 @@ async function readOrder(request, env) {
   return json({ success: true, today: today && normalizeDate(today.date) === date ? today : null, history: Array.isArray(history) ? history : [] });
 }
 
-function sessionVehicle(existing) {
-  return String(existing?.vehicle || '渝DK7692');
-}
+function sessionVehicle(existing) { return String(existing?.vehicle || '渝DK7692'); }
 
 async function loadBaseData(env) {
   const raw = await redisGet(env, `route:${ROUTE}:base`);
@@ -88,8 +89,7 @@ async function loadBaseData(env) {
 function sortByRouteBase(orders, base) {
   if (!base.length) return orders.map((item, index) => ({ ...item, code: String(index + 1).padStart(2, '0') }));
   const orderMap = new Map(base.map((store, index) => [store.nameKey, Number(store.routeOrder) || index + 1]));
-  const matched = [];
-  const news = [];
+  const matched = [], news = [];
   for (const order of orders) {
     const routeOrder = orderMap.get(normalizeStoreName(order.name));
     if (routeOrder != null) matched.push({ ...order, routeOrder, matched: true, isNew: false });
@@ -140,16 +140,13 @@ async function saveHistory(env, date, todayData) {
     updatedAt: todayData.updatedAt
   };
   const index = list.findIndex(item => item?.orderBatchId === todayData.orderBatchId);
-  if (index >= 0) list[index] = record;
-  else list.push(record);
+  if (index >= 0) list[index] = record; else list.push(record);
   if (list.length > 90) list = list.slice(-90);
   await redisSet(env, key, list);
 }
 
 async function acquireLock(env, key, token, seconds) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, {
-    method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
-  });
+  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
   if (!response.ok) return false;
   const data = await response.json().catch(() => ({}));
   return data.result === 'OK';
@@ -157,12 +154,7 @@ async function acquireLock(env, key, token, seconds) {
 
 async function releaseLock(env, key, token) {
   const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
-  await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify([script, 1, key, token]),
-    cache: 'no-store'
-  });
+  await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, key, token]), cache: 'no-store' });
 }
 
 async function redisGet(env, key) {
@@ -174,12 +166,7 @@ async function redisGet(env, key) {
 }
 
 async function redisSet(env, key, value) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(JSON.stringify(value)),
-    cache: 'no-store'
-  });
+  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(JSON.stringify(value)), cache: 'no-store' });
   if (!response.ok) throw new Error('Redis保存失败');
   const data = await response.json().catch(() => ({}));
   if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认');
@@ -196,6 +183,7 @@ function normalizeWeight(value) {
   const tons = /吨|\bt\b/i.test(s) ? n : n / 1000;
   return `${(Math.round((tons + Number.EPSILON) * 10) / 10).toFixed(1)}t`;
 }
+function isZeroWeight(value) { const match = String(value || '').match(/[\d]+(?:\.\d+)?/); return !match || Number(match[0]) === 0; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function createBatchId(date) { return `${date}-17-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
