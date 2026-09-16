@@ -1,8 +1,10 @@
 // 天友智配One - 线路基准数据库 API
 // 当前版本仅服务17号线；基准库按线路独立保存于 Upstash。
+// 如果 Upstash 尚未初始化，则自动从项目内 data/base_data.json 初始化一次。
 import { authRequired } from './_auth.js';
 
 const LOCK_TTL_SECONDS = 15;
+const STATIC_BASE_PATH = '/data/base_data.json';
 
 export async function onRequest({ request, env }) {
   const url = new URL(request.url);
@@ -19,8 +21,29 @@ export async function onRequest({ request, env }) {
     if (request.method === 'GET') {
       const result = await redisGet(env, key);
       if (!result.ok) return json({ error: '线路基准数据库读取失败' }, 502);
-      const record = parseRecord(result.result);
-      return json({ route, stores: Array.isArray(record?.stores) ? record.stores : [], source: 'server', updatedAt: record?.updatedAt || null });
+
+      let record = parseRecord(result.result);
+
+      // Redis 没有基准库时，用仓库中的最新基准数据初始化。
+      // 初始化只在 Redis 为空时执行，不会覆盖管理员已经保存的线路修改。
+      if (!Array.isArray(record?.stores) || !record.stores.length) {
+        const seed = await loadStaticBase(request, route);
+        if (seed?.stores?.length) {
+          const stores = normalizeStores(seed.stores);
+          const updatedAt = seed.updatedAt || new Date().toISOString();
+          const value = { route, stores, updatedAt, source: 'data/base_data.json' };
+          const saved = await redisSet(env, key, value);
+          if (!saved.ok) return json({ error: '线路基准数据库初始化失败' }, 500);
+          record = value;
+        }
+      }
+
+      return json({
+        route,
+        stores: Array.isArray(record?.stores) ? record.stores : [],
+        source: record?.source || 'server',
+        updatedAt: record?.updatedAt || null
+      });
     }
 
     if (request.method === 'PUT') {
@@ -32,13 +55,9 @@ export async function onRequest({ request, env }) {
       if (!(await acquireLock(env, lockKey, lockValue, LOCK_TTL_SECONDS))) return json({ error: '该线路基准库正在被修改，请稍后重试' }, 409);
 
       try {
-        const stores = body.stores.map((store, index) => ({
-          ...store,
-          code: String(store?.code || index + 1).padStart(2, '0'),
-          routeOrder: index + 1
-        }));
+        const stores = normalizeStores(body.stores);
         const updatedAt = new Date().toISOString();
-        const value = { route, stores, updatedAt };
+        const value = { route, stores, updatedAt, source: 'route-editor' };
         const saved = await redisSet(env, key, value);
         if (!saved.ok) return json({ error: '线路基准数据库保存失败' }, 500);
         return json({ success: true, route, stores, storeCount: stores.length, source: 'server', updatedAt });
@@ -51,6 +70,32 @@ export async function onRequest({ request, env }) {
   } catch (error) {
     console.error('routes api error', error);
     return json({ error: '线路基准数据库服务异常' }, 503);
+  }
+}
+
+function normalizeStores(stores) {
+  return stores
+    .map((store, index) => ({
+      ...store,
+      code: String(store?.code || index + 1).padStart(2, '0'),
+      routeOrder: index + 1,
+      name: String(store?.name || '').trim(),
+      nav: String(store?.nav || '').trim(),
+      note: String(store?.note || '').trim()
+    }))
+    .filter(store => store.name);
+}
+
+async function loadStaticBase(request, route) {
+  try {
+    const response = await fetch(new URL(STATIC_BASE_PATH, request.url), { cache: 'no-store' });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (normalizeRoute(data?.line) !== route) return null;
+    return data;
+  } catch (error) {
+    console.error('static base load error', error);
+    return null;
   }
 }
 
@@ -81,10 +126,6 @@ async function redisGet(env, key) {
 }
 
 async function redisSet(env, key, value) {
-  // Upstash /set 的请求体就是 Redis value。
-  // 旧版本这里进行了两次 JSON.stringify，导致 Redis 中保存了嵌套 JSON 字符串：
-  // 更新页面当次看起来正常，但重新登录 GET 后 stores 会被读成空数组。
-  // 现在只编码一次，保证保存后的数据重新登录仍可正常读取。
   const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
@@ -100,7 +141,6 @@ function parseRecord(value) {
   if (typeof value !== 'string') return value;
   try {
     const first = JSON.parse(value);
-    // 兼容已经写入 Redis 的旧“双重 JSON”基准数据。
     if (typeof first === 'string') {
       try { return JSON.parse(first); } catch { return first; }
     }
