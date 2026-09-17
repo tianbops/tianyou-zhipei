@@ -1,6 +1,7 @@
 // 天友智配One - 历史查询 API
 // 历史数据按「线路 + 业务日期」独立存储；同一天允许多次配送。
 // 删除某条历史记录时，只删除与该记录完全相同的数据，不影响同日其它不同配送。
+// 如果删除的是中国时区当天的数据，同时清理 today_orders，确保首页与当日详情同步消失。
 import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
@@ -50,11 +51,32 @@ async function deleteHistoryRecord(env, key, route, date, batchId) {
   const signature = historySignature(target);
   if (!signature) return json({ success: false, error: '该历史记录数据无效，无法删除' }, 400);
 
+  // 1. 历史库：删除目标及所有完全相同的数据副本。
   const remaining = records.filter(item => historySignature(item) !== signature);
   const deleted = records.length - remaining.length;
   await redisCommand(env, ['SET', key, JSON.stringify(remaining)]);
 
-  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: Math.max(0, deleted - 1) });
+  // 2. 当日正式订单库：只有删除中国时区“今天”的记录时才同步清理。
+  //    同签名才删除，避免误删同一天其它不同配送批次。
+  let todayDeleted = false;
+  if (date === businessDate()) {
+    const todayKey = `today_orders:${route}:${date}`;
+    const today = await redisCommand(env, ['GET', todayKey]);
+    const parsedToday = parseRedisJson(today);
+    if (parsedToday && todayOrderSignature(parsedToday) === signature) {
+      await redisCommand(env, ['DEL', todayKey]);
+      todayDeleted = true;
+    }
+  }
+
+  return json({
+    success: true,
+    deleted,
+    date,
+    orderBatchId: batchId,
+    removedSameData: Math.max(0, deleted - 1),
+    todayDeleted
+  });
 }
 
 function dedupeHistory(input) {
@@ -89,6 +111,28 @@ function historySignature(record) {
   return JSON.stringify({ route, date, vehicle, weight, stores });
 }
 
+// today_orders 使用与历史库一致的核心字段生成签名。
+// 历史库较老的数据可能没有单店重量，因此这里同时兼容无 weight 的情况。
+function todayOrderSignature(record) {
+  const route = String(record?.route || '').trim();
+  const date = normalizeDate(record?.date);
+  const vehicle = String(record?.vehicle || '').trim().toLowerCase();
+  const weight = normalizeWeight(record?.totalWeight ?? record?.weight);
+  const orders = Array.isArray(record?.orders) ? record.orders : [];
+  if (!date && !orders.length && !weight) return '';
+  const stores = orders.map(item => ({
+    name: normalizeStoreName(item?.name || item?.storeName || item?.shopName || item?.['门店名称']),
+    weight: normalizeNumber(item?.weight)
+  })).filter(item => item.name).sort((a, b) => `${a.name}|${a.weight}`.localeCompare(`${b.name}|${b.weight}`));
+  return JSON.stringify({ route, date, vehicle, weight, stores });
+}
+
+function parseRedisJson(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return null; }
+}
+
 function normalizeStoreName(value) {
   return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]{}]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase();
 }
@@ -107,5 +151,6 @@ async function redisCommand(env, command) {
   if (!response.ok) throw new Error(`Redis HTTP ${response.status}`);
   const data = await response.json().catch(() => ({})); return data.result;
 }
+function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
