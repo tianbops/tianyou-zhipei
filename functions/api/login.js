@@ -1,11 +1,10 @@
-// 天友智配One - 17号线司机登录
+// 天友智配One - 司机登录
 // 登录凭据只从 Cloudflare Variables / Secrets 读取。
-// Redis 仅保存用于会话校验的司机资料，不保存密码。
+// Redis 保存用户资料，不保存密码。
 import { createSession, sessionCookie } from './_auth.js';
 
 const DRIVER_KEY = 'driver:17';
 const ROUTE = '17号线';
-const DEFAULT_VEHICLE = '渝DK7692';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -26,11 +25,11 @@ export async function onRequest({ request, env }) {
 
     const existing = await readDriver(env);
     const driver = {
-      id: '17',
+      id: String(existing?.id || '17'),
       username: configuredUsername,
-      name: configuredUsername,
+      name: String(existing?.name || configuredUsername),
       route: ROUTE,
-      vehicle: String(existing?.vehicle || DEFAULT_VEHICLE),
+      vehicle: String(existing?.vehicle || ''),
       sessionVersion: Number(existing?.sessionVersion || 1),
       createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
