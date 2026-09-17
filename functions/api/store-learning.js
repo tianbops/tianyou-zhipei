@@ -1,6 +1,6 @@
-// 天友智配One - 每条线路独立的门店学习库
+// 天友智配One - 用户独立门店学习库
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
-// 学习数据写入 Upstash Redis，绑定当前登录线路，因此换设备登录后仍可复用。
+// 学习数据按用户ID+线路写入 Upstash Redis，任何账号之间互不共享。
 import { authRequired } from './_auth.js';
 
 const MAX_ALIASES = 1000;
@@ -10,17 +10,18 @@ const LOCK_SECONDS = 10;
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
   const session = await authRequired(request, env);
-  if (!session?.route) return json({ success: false, error: '登录已失效或无权限' }, 401);
+  if (!session?.route || !session?.id) return json({ success: false, error: '登录已失效或权限信息不完整' }, 401);
   try {
     const body = await request.json().catch(() => ({}));
     const route = normalizeRoute(session.route);
-    if (!route) return json({ success: false, error: '用户未绑定线路' }, 403);
+    const userId = normalizeUserId(session.id);
+    if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '学习数据库不可用' }, 500);
 
     const input = Array.isArray(body.items) ? body.items : [body];
-    const items = input.slice(0, MAX_BATCH).map(normalizeInput).filter(item => item.rawName && item.baseName);
-    if (!items.length) return json({ success: false, error: '缺少待学习门店信息' }, 400);
     if (input.length > MAX_BATCH) return json({ success: false, error: `单次最多学习 ${MAX_BATCH} 家门店` }, 400);
+    const items = input.map(normalizeInput).filter(item => item.rawName && item.baseName);
+    if (!items.length) return json({ success: false, error: '缺少待学习门店信息' }, 400);
 
     const base = await getBaseStores(env, route);
     const validated = [];
@@ -30,13 +31,14 @@ export async function onRequest({ request, env }) {
       validated.push({ ...item, target });
     }
 
-    const key = `route:${route}:learning`;
-    const lockKey = `lock:learning:${route}`;
+    const key = learningKey(userId, route);
+    const lockKey = `lock:learning:${encodeKey(userId)}:${encodeKey(route)}`;
     const lockToken = createLockToken();
-    if (!(await acquireLock(env, lockKey, lockToken, LOCK_SECONDS))) return json({ success: false, error: '当前线路学习库正在更新，请稍后再试' }, 409);
+    if (!(await acquireLock(env, lockKey, lockToken, LOCK_SECONDS))) return json({ success: false, error: '当前用户学习库正在更新，请稍后再试' }, 409);
     try {
-      const learning = await getLearning(env, key);
-      learning.version = 3;
+      const learning = await getLearning(env, key, userId, route);
+      learning.version = 4;
+      learning.userId = userId;
       learning.route = route;
       learning.aliases = learning.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
       const now = new Date().toISOString();
@@ -66,7 +68,7 @@ export async function onRequest({ request, env }) {
       pruneAliases(learning.aliases, MAX_ALIASES);
       learning.updatedAt = now;
       await redisSet(env, key, learning);
-      return json({ success: true, data: { route, learned: true, learnedCount, aliasCount: Object.keys(learning.aliases).length, items: learned } });
+      return json({ success: true, data: { route, userId, learned: true, learnedCount, aliasCount: Object.keys(learning.aliases).length, items: learned } });
     } finally {
       await releaseLock(env, lockKey, lockToken).catch(() => {});
     }
@@ -78,11 +80,7 @@ export async function onRequest({ request, env }) {
 
 function normalizeInput(item) {
   const value = item && typeof item === 'object' ? item : {};
-  return {
-    rawName: clean(value.rawName),
-    baseName: clean(value.baseName),
-    baseCode: cleanCode(value.baseCode)
-  };
+  return { rawName: clean(value.rawName), baseName: clean(value.baseName), baseCode: cleanCode(value.baseCode) };
 }
 
 function resolveTarget(base, item) {
@@ -101,12 +99,18 @@ async function getBaseStores(env, route) {
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
-async function getLearning(env, key) {
+async function getLearning(env, key, userId, route) {
   const data = await redisGet(env, key);
-  if (!data || typeof data !== 'object') return { version: 3, aliases: {} };
-  data.aliases = data.aliases && typeof data.aliases === 'object' ? data.aliases : {};
-  return data;
+  if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
+  return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
+
+function learningKey(userId, route) {
+  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
+}
+
+function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
+function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 
 function pruneAliases(aliases, limit) {
   const entries = Object.entries(aliases);
@@ -152,12 +156,7 @@ function normalizeBase(store, index) {
 }
 
 function clean(value) { return String(value || '').replace(/^\s*[\d０-９]+[、.．)）-]+/, '').replace(/\s+/g, ' ').trim(); }
-
-function cleanCode(value) {
-  const text = String(value || '').trim();
-  const match = text.match(/\d+/);
-  return match ? String(Number(match[0])).padStart(2, '0') : text;
-}
+function cleanCode(value) { const text = String(value || '').trim(), match = text.match(/\d+/); return match ? String(Number(match[0])).padStart(2, '0') : text; }
 
 function matchKey(value) {
   const romanMap = { 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V', 'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X' };
@@ -165,8 +164,7 @@ function matchKey(value) {
 }
 
 function normalizeRoute(value) {
-  const text = String(value || '').trim();
-  const match = text.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
+  const text = String(value || '').trim(), match = text.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
   return match ? `${String(parseInt(match[1] || match[2], 10)).padStart(2, '0')}号线` : text;
 }
 
