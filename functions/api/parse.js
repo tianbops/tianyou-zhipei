@@ -6,7 +6,6 @@ import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
-
   const session = await authRequired(request, env);
   if (!session) return json({ success: false, error: '登录已失效或无权限' }, 401);
 
@@ -36,7 +35,6 @@ export async function onRequest({ request, env }) {
         date: parsed.date,
         vehicle: parsed.vehicle,
         totalWeight: normalizeWeight(parsed.totalWeight),
-        rawOrderCount: parsed.rawOrderCount,
         stores: result.stores,
         storeCount: result.stores.length,
         uniqueStoreCount: result.uniqueStoreCount,
@@ -62,13 +60,11 @@ export async function onRequest({ request, env }) {
 
 function parseDeterministic(text) {
   const source = normalizeOcrText(text);
-  const routeText = extractRouteText(source);
-  const stores = extractArrowStores(routeText);
+  const stores = extractArrowStores(extractRouteText(source));
   return {
     date: extractDate(source),
     vehicle: extractVehicle(source),
     totalWeight: extractWeight(source),
-    rawOrderCount: stores.length,
     stores
   };
 }
@@ -92,8 +88,8 @@ function extractRouteText(source) {
 function findRouteStart(source, arrowIndex) {
   const before = source.slice(0, arrowIndex);
   const lines = before.split('\n');
-  const lastLine = lines.at(-1) || '';
-  if (isLikelyStore(cleanStoreName(lastLine))) return source.lastIndexOf(lastLine, arrowIndex);
+  const lastLine = cleanStoreName(lines.at(-1) || '');
+  if (isLikelyStore(lastLine)) return source.lastIndexOf(lines.at(-1), arrowIndex);
 
   const key = /(?:到家主城|江北|渝北|特渠部|天友加盟|天友24h|II类|Ⅱ类)/g;
   let match;
@@ -106,7 +102,7 @@ function extractArrowStores(routeText) {
   if (!routeText) return [];
   const stores = [];
   for (const part of routeText.split(/\s*(?:->|-->)\s*/)) {
-    const name = cleanStoreName(stripOrderMetadata(part.replace(/\n+/g, '')));
+    const name = cleanStoreName(stripOrderMetadata(part.replace(/\n+/g, ' ')));
     if (isLikelyStore(name)) stores.push(name);
   }
   return stores;
@@ -128,7 +124,6 @@ async function getBaseStores(env, route) {
   const data = await response.json().catch(() => ({}));
   let parsed = data?.result;
   try { parsed = typeof parsed === 'string' ? JSON.parse(parsed) : parsed; } catch { parsed = null; }
-
   if (!Array.isArray(parsed?.stores) || !parsed.stores.length) {
     throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
   }
@@ -155,14 +150,18 @@ function matchTodayStores(recognized, baseStores) {
   let duplicateCount = 0;
 
   for (const raw of recognized) {
-    const direct = findDirectMatch(raw, base, byName, byCode);
+    const duplicate = findCanonicalDuplicate(raw, matched, canonicalByBaseIndex);
+    if (duplicate) {
+      mergeDuplicate(duplicate, raw);
+      duplicateCount += 1;
+      continue;
+    }
 
+    const direct = findDirectMatch(raw, base, byName, byCode);
     if (direct && used.has(direct.item.index)) {
       const canonical = canonicalByBaseIndex.get(direct.item.index);
       if (canonical) {
-        canonical.duplicateCount = Number(canonical.duplicateCount || 0) + 1;
-        canonical.rawNames = Array.isArray(canonical.rawNames) ? canonical.rawNames : [canonical.name];
-        if (!canonical.rawNames.includes(raw)) canonical.rawNames.push(raw);
+        mergeDuplicate(canonical, raw);
         duplicateCount += 1;
         continue;
       }
@@ -203,6 +202,34 @@ function matchTodayStores(recognized, baseStores) {
     duplicateCount,
     uniqueStoreCount: stores.length
   };
+}
+
+function findCanonicalDuplicate(raw, matched, canonicalByBaseIndex) {
+  const rawKey = matchKey(raw);
+  const rawCode = extractBusinessCode(raw);
+  if (!rawKey && !rawCode) return null;
+
+  for (const item of matched) {
+    const canonical = canonicalByBaseIndex.get(item._i);
+    if (!canonical) continue;
+    const canonicalCode = extractBusinessCode(canonical.name);
+    if (rawCode && canonicalCode && rawCode === canonicalCode) return canonical;
+    const canonicalKey = matchKey(canonical.name);
+    if (rawKey && canonicalKey === rawKey) return canonical;
+    if (rawKey && canonicalKey && storeSimilarity(raw, canonical.name) >= 0.91) return canonical;
+    if (Array.isArray(canonical.rawNames)) {
+      for (const previous of canonical.rawNames) {
+        if (matchKey(previous) === rawKey || (rawKey && storeSimilarity(raw, previous) >= 0.94)) return canonical;
+      }
+    }
+  }
+  return null;
+}
+
+function mergeDuplicate(canonical, raw) {
+  canonical.duplicateCount = Number(canonical.duplicateCount || 0) + 1;
+  canonical.rawNames = Array.isArray(canonical.rawNames) ? canonical.rawNames : [canonical.name];
+  if (!canonical.rawNames.includes(raw)) canonical.rawNames.push(raw);
 }
 
 function findDirectMatch(raw, base, byName, byCode) {
@@ -326,7 +353,7 @@ function normalizeBase(store, index) {
   };
 }
 function extractBusinessCode(value) {
-  const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])(JM\d{4,6}|Q\d{3,5}|A\d{4,6})(?:[^A-Z0-9]|$)/);
+  const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])((?:JM\d{4,6}|Q\d{3,5}|A\d{4,6}))(?:[^A-Z0-9]|$)/);
   return match ? match[1] : '';
 }
 function matchKey(value) {
@@ -335,7 +362,8 @@ function matchKey(value) {
     .replace(/Ⅵ/g, 'VI').replace(/Ⅶ/g, 'VII').replace(/Ⅷ/g, 'VIII').replace(/Ⅸ/g, 'IX').replace(/Ⅹ/g, 'X')
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
     .replace(/江北亿达鲜半华府店/g, '江北亿达鲜半山华府店')
-    .replace(/谊品鲜/g, '谊品生鲜');
+    .replace(/谊品鲜/g, '谊品生鲜')
+    .replace(/沁园餐饮管理有限公司/g, '沁园餐饮管理有限公司');
 
   if (text.includes('到家主城') && text.includes('江北区加州')) {
     text = text.replace(/客服中心|客户中心/g, '服务中心');
