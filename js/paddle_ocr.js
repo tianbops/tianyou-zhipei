@@ -75,7 +75,6 @@
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
-      // Cloudflare Pages 与 jsDelivr 不同源，关闭 Worker 避免跨源 Worker 被浏览器拦截。
       worker: false,
       textDetectionBatchSize: 1,
       textRecognitionBatchSize: 6,
@@ -180,7 +179,6 @@
       putText(text);
       const count = Array.isArray(result?.items) ? result.items.length : 0;
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
-      window.homeToast?.('运单文字已在本机完成识别，请核对后再开始解析');
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     } catch (error) {
       console.error('[PaddleOCR]', error);
@@ -192,7 +190,6 @@
     }
   }
 
-  // 选择器入口必须立即暴露，不能等待 OCR SDK。
   window.callOCR = process;
   window.triggerUpload = function(type) {
     if (busy) return;
