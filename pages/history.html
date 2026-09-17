@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#05070A">
   <title>历史查询</title>
   <link rel="stylesheet" href="../css/order.css">
   <link rel="stylesheet" href="../css/history.css">
@@ -43,6 +44,7 @@
   </div>
 
 <script src="../js/auth.js"></script>
+<script src="../js/navigation.js"></script>
 <script>
 'use strict';
 let selected='';
@@ -62,7 +64,7 @@ async function requestHistory(date){const r=await fetch(`/api/history?date=${enc
 async function loadHistoryDates(){const box=$('historyList');box.innerHTML='<div class="empty-tip">⏳ 正在读取历史日期...</div>';try{const dates=Array.from({length:31},(_,i)=>dateFromOffset(i));const results=await Promise.all(dates.map(async date=>{try{const records=await requestHistory(date);return records.length?date:null}catch(error){if(error.message.includes('登录已失效'))throw error;return null}}));renderDates(results.filter(Boolean))}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip">🌐 ${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}}
 function renderDates(dates){const box=$('historyList');if(!dates.length){box.innerHTML='<div class="empty-tip">📭 暂无配送记录</div>';return}box.innerHTML='';dates.sort((a,b)=>b.localeCompare(a)).forEach(date=>{const card=document.createElement('div');card.className='history-date-item';card.innerHTML=`<div class="history-head"><div class="history-date">${escapeHtml(date)}</div><button class="history-view" type="button">查看记录 →</button></div>`;card.querySelector('.history-view').addEventListener('click',()=>openDateHistory(date));box.appendChild(card)})}
 async function openDateHistory(date){const box=$('historyList');box.innerHTML='<div class="empty-tip">⏳ 正在打开记录...</div>';try{const records=await requestHistory(date);if(!records.length){box.innerHTML=`<div class="empty-tip">📭 ${escapeHtml(date)} 暂无配送记录</div>`;return}const item=records[0];if(!item?.orderBatchId){box.innerHTML='<div class="empty-tip">该日期记录缺少运单批次，无法打开详情</div>';return}window.location.href=`order_detail.html?mode=history&date=${encodeURIComponent(date)}&orderBatchId=${encodeURIComponent(item.orderBatchId)}`}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip">🌐 ${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}}
-function goBack(){closeDatePicker();location.href='../home.html'}
+function goBack(){closeDatePicker();if(window.Nav)Nav.goBack('../home.html');else location.href='../home.html'}
 $('datePickerBtn')?.addEventListener('click',openDatePicker);$('cancelDate')?.addEventListener('click',closeDatePicker);$('confirmDate')?.addEventListener('click',confirmDate);$('dateModal')?.addEventListener('click',e=>{if(e.target===$('dateModal'))closeDatePicker()});
 ['yearWheel','monthWheel','dayWheel'].forEach(id=>$(id)?.addEventListener('scroll',()=>{const box=$(id);clearTimeout(box._timer);box._timer=setTimeout(()=>{const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=wheelValue('dayWheel');if(id==='yearWheel'||id==='monthWheel')buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day')},90)}));
 document.addEventListener('DOMContentLoaded',async()=>{try{closeDatePicker();if(!(await Auth.checkAuth()))return;await loadHistoryDates()}catch(e){console.error(e)}});
