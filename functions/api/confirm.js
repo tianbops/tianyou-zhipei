@@ -79,33 +79,11 @@ function canonicalizeOrders(input, base) {
     const parserNew = raw.isNew === true || raw.newStore === true;
     const hit = byName.get(key(name)) || byCode.get(String(raw.code || ''));
 
-    // 解析接口已经完成基准库匹配时，确认入库必须保留这个结果。
-    // 旧版本这里再次要求“完全相同名称”，会把解析器已经匹配成功的门店全部重新判成新增。
     if (parserMatched) {
-      return {
-        ...raw,
-        name: hit?.name || name,
-        code: hit?.code || raw.code || '',
-        nav: hit?.nav || raw.nav || '',
-        note: hit?.note || raw.note || '',
-        matched: true,
-        isNew: false,
-        needsReview: false,
-        candidate: '',
-        matchType: raw.matchType || 'confirmed',
-        matchScore: Number(raw.matchScore) || 1,
-        _baseIndex: hit?.index
-      };
+      return { ...raw, name: hit?.name || name, code: hit?.code || raw.code || '', nav: hit?.nav || raw.nav || '', note: hit?.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: raw.matchType || 'confirmed', matchScore: Number(raw.matchScore) || 1, _baseIndex: hit?.index };
     }
-
-    if (parserNew) {
-      return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: undefined };
-    }
-
-    if (hit) {
-      return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
-    }
-
+    if (parserNew) return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: undefined };
+    if (hit) return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
     return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: undefined };
   });
 }
@@ -121,14 +99,9 @@ function dedupeCanonical(items) {
   }
   return output;
 }
-
 function countDuplicates(items) {
-  const seen = new Set();
-  let count = 0;
-  for (const item of items) {
-    const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`;
-    if (seen.has(identity)) count += 1; else seen.add(identity);
-  }
+  const seen = new Set(); let count = 0;
+  for (const item of items) { const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)`; if (seen.has(identity)) count += 1; else seen.add(identity); }
   return count;
 }
 
@@ -156,10 +129,18 @@ async function saveHistory(env, route, date, today) {
   const old = await redisGet(env, keyName);
   let list = Array.isArray(old) ? old : [];
   const record = { orderBatchId: today.orderBatchId, date, route, vehicle: today.vehicle, count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: today.reviewCount || 0, duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, source: today.source, updatedAt: today.updatedAt };
-  const index = list.findIndex(item => item?.orderBatchId === today.orderBatchId);
-  if (index >= 0) list[index] = record; else list.push(record);
-  if (list.length > 90) list = list.slice(-90);
+  const signature = historySignature(record);
+  const index = list.findIndex(item => historySignature(item) === signature);
+  if (index >= 0) list[index] = record;
+  else list.push(record);
+  list.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
+  if (list.length > 90) list = list.slice(0, 90);
   await redisSet(env, keyName, list);
+}
+
+function historySignature(record) {
+  const stores = Array.isArray(record?.orders) ? record.orders.map(item => key(item?.name)).filter(Boolean).sort() : [];
+  return JSON.stringify({ route: String(record?.route || ''), date: String(record?.date || ''), vehicle: String(record?.vehicle || ''), weight: normalizeWeight(record?.totalWeight ?? record?.weight), stores });
 }
 
 async function readAfterWrite(env, keyName, batchId, count) { for (let attempt = 0; attempt < 3; attempt += 1) { const saved = await redisGet(env, keyName); if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count && normalizeWeight(saved.totalWeight)) return saved; if (attempt < 2) await wait(150 * (attempt + 1)); } return null; }
