@@ -4,6 +4,7 @@
 const ROUTE='17号线';
 const $=id=>document.getElementById(id);
 let currentData={orders:[],weight:'',orderBatchId:'',date:'',vehicle:'',route:ROUTE};
+let historyMode=false;
 function currentDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
 function clean(v){return String(v||'').replace(/[\u3000]/g,' ').replace(/^\s*[\d０-９]+[、.．)）\s-]*/u,'').replace(/\s+/g,' ').trim()}
 function key(v){return clean(v).replace(/[\s，,。；;：:（）()【】\[\]<>《》“”"'‘’·-]/g,'').replace(/（临时）|\(临时\)|（20\d{2}）|\(20\d{2}\)/g,'').replace(/谊品鲜/g,'谊品生鲜').toLowerCase()}
@@ -11,28 +12,64 @@ function baseName(x){return clean(x?.name||x?.storeName||x?.shopName||x?.title||
 function normalizeWeight(v){
   if(v===null||v===undefined||v==='')return '';
   const s=String(v).trim().replace(/,/g,'');
-  const m=s.match(/[0-9]+(?:\.\d+)?/);
-  if(!m)return '';
-  const n=Number(m[0]);
-  if(!Number.isFinite(n)||n<0)return '';
+  const m=s.match(/[0-9]+(?:\.\d+)?/);if(!m)return '';
+  const n=Number(m[0]);if(!Number.isFinite(n)||n<0)return '';
   const tons=/吨|\bt\b/i.test(s)?n:/kg|千克|公斤/i.test(s)?n/1000:n>=1000?n/1000:n;
   if(!Number.isFinite(tons))return '';
   const fixed=Math.round((tons+Number.EPSILON)*1e6)/1e6;
   return `${fixed.toFixed(6).replace(/0+$/,'').replace(/\.$/,'')}t`;
 }
-function normalize(raw){if(!Array.isArray(raw))return[];return raw.map((x,i)=>typeof x==='string'?{code:String(i+1).padStart(2,'0'),name:clean(x),nav:'',weight:0,isNew:false}:{code:String(x?.code||x?.index||i+1).padStart(2,'0'),name:clean(x?.name||x?.storeName||x?.shopName||x?.门店名称),nav:String(x?.nav||x?.navigation||x?.url||x?.amap||''),weight:x?.weight,isNew:Boolean(x?.isNew||x?.newStore),status:x?.status||'待配送',orderBatchId:x?.orderBatchId||''}).filter(x=>x.name)}
-function sortOrders(raw,base){const src=normalize(raw),bs=(Array.isArray(base)?base:[]).map((x,i)=>({name:baseName(x),idx:i,baseCode:String(x?.code||i+1).padStart(2,'0'),nav:String(x?.nav||x?.navigation||x?.url||x?.amap||'')}));if(!bs.length)return src.map((x,i)=>({...x,displayCode:String(i+1).padStart(2,'0')}));const matched=[],news=[];src.forEach(o=>{const hit=bs.find(b=>key(o.name)===key(b.name));if(hit)matched.push({...o,baseCode:hit.baseCode,name:hit.name||o.name,nav:hit.nav||o.nav,isNew:false,_base:hit.idx});else news.push({...o,isNew:true});matched.sort((a,b)=>a._base-b._base);matched.forEach((x,i)=>x.displayCode=String(i+1).padStart(2,'0'));news.forEach((x,i)=>x.displayCode=`N${String(i+1).padStart(2,'0')}`);return matched.concat(news).map(x=>{const y={...x};delete y._base;return y})}
+function normalize(raw){if(!Array.isArray(raw))return[];return raw.map((x,i)=>typeof x==='string'?{code:String(i+1).padStart(2,'0'),name:clean(x),nav:'',weight:0,isNew:false}:{code:String(x?.code||x?.index||i+1).padStart(2,'0'),displayCode:x?.displayCode||'',name:clean(x?.name||x?.storeName||x?.shopName||x?.门店名称),nav:String(x?.nav||x?.navigation||x?.url||x?.amap||''),weight:x?.weight,isNew:Boolean(x?.isNew||x?.newStore),matched:x?.matched===true,status:x?.status||'待配送',orderBatchId:x?.orderBatchId||''}).filter(x=>x.name)}
+function sortOrders(raw,base){
+  const src=normalize(raw),bs=(Array.isArray(base)?base:[]).map((x,i)=>({name:baseName(x),idx:i,baseCode:String(x?.code||i+1).padStart(2,'0'),nav:String(x?.nav||x?.navigation||x?.url||x?.amap||'')}));
+  if(!bs.length)return src.map((x,i)=>({...x,displayCode:x.displayCode||String(i+1).padStart(2,'0')}));
+  const matched=[],news=[],used=new Set();
+  src.forEach(o=>{
+    const hit=bs.find(b=>!used.has(b.idx)&&key(o.name)===key(b.name));
+    if(hit){used.add(hit.idx);matched.push({...o,baseCode:hit.baseCode,name:hit.name||o.name,nav:hit.nav||o.nav,isNew:false,_base:hit.idx});}
+    else news.push({...o,isNew:true});
+  });
+  matched.sort((a,b)=>a._base-b._base);
+  matched.forEach((x,i)=>x.displayCode=String(i+1).padStart(2,'0'));
+  news.forEach((x,i)=>x.displayCode=`N${String(i+1).padStart(2,'0')}`);
+  return matched.concat(news).map(x=>{const y={...x};delete y._base;return y});
+}
+function preserveSavedOrder(raw){return normalize(raw).map((x,i)=>({...x,displayCode:x.displayCode||x.code||String(i+1).padStart(2,'0')}))}
 function authHeaders(){return Auth.getAuthHeaders?Auth.getAuthHeaders():{}}
 async function getBase(){const r=await fetch(`/api/routes?route=${encodeURIComponent(ROUTE)}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw Error(`基准数据读取失败（${r.status}）`);const d=await r.json(),a=Array.isArray(d)?d:(d?.stores||d?.data||[]);if(!Array.isArray(a))throw Error('基准数据库格式错误');return a}
-async function getOrder(date,historyMode,batch){if(historyMode){if(!batch)throw Error('历史记录缺少运单批次');const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw Error(`历史数据服务不可用（${r.status}）`);const payload=await r.json(),records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);return records.find(x=>x?.orderBatchId===batch)||null}const query=new URLSearchParams({date,route:ROUTE});if(batch)query.set('orderBatchId',batch);const r=await fetch(`/api/orders?${query}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw Error(`当日订单服务不可用（${r.status}）`);const d=await r.json();return d?.today||null}
-async function load(){const p=new URLSearchParams(location.search),historyMode=p.get('mode')==='history',date=p.get('date')||currentDate(),batch=p.get('orderBatchId')||p.get('batch')||'';const [t,b]=await Promise.all([getOrder(date,historyMode,batch),getBase()]);if(!t||!Array.isArray(t.orders))return{orders:[],weight:'',orderBatchId:t?.orderBatchId||batch,date:t?.date||date,vehicle:t?.vehicle||'',route:ROUTE};return{orders:sortOrders(t.orders,b),weight:normalizeWeight(t.totalWeight??t.weight??t.goodsWeight??''),orderBatchId:t.orderBatchId||batch,date:t.date||date,vehicle:t.vehicle||'',route:ROUTE}}
-function render(a,w){const n=a.length,nn=a.filter(x=>x.isNew).length;if($('storeCount'))$('storeCount').textContent=nn?`⚠️ 新${nn}家、总${n}家`:`${n}家`;if($('totalWeight'))$('totalWeight').textContent=normalizeWeight(w)||'0.0t';const box=$('routeList');if(!box)return;box.innerHTML='';if(!a.length){box.innerHTML='<div class="empty-tip"><span class="icon">📭</span>暂无配送数据</div>';return}a.forEach((s,i)=>{const row=document.createElement('div');row.className='store-item';const idx=document.createElement('span');idx.className='store-index';idx.textContent=`${s.displayCode||String(i+1).padStart(2,'0')}、`;const name=document.createElement('span');name.className='store-name';name.textContent=s.isNew?`⚠️ 新增 ${s.name}`:s.name;const nav=document.createElement('button');nav.className='nav-btn';nav.type='button';nav.textContent='导航';nav.onclick=()=>s.nav?location.href=s.nav:alert('该门店暂无导航地址');row.append(idx,name,nav);box.appendChild(row)})}
+async function getOrder(date,isHistory,batch){
+  if(isHistory){
+    if(!batch)throw Error('历史记录缺少运单批次');
+    const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+    if(!r.ok)throw Error(`历史数据服务不可用（${r.status}）`);
+    const payload=await r.json(),records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
+    return records.find(x=>x?.orderBatchId===batch)||null;
+  }
+  const query=new URLSearchParams({date,route:ROUTE});if(batch)query.set('orderBatchId',batch);
+  const r=await fetch(`/api/orders?${query}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw Error(`当日订单服务不可用（${r.status}）`);
+  const d=await r.json();return d?.today||null;
+}
+async function load(){
+  const p=new URLSearchParams(location.search);historyMode=p.get('mode')==='history';const date=p.get('date')||currentDate(),batch=p.get('orderBatchId')||p.get('batch')||'';
+  const t=await getOrder(date,historyMode,batch);const b=historyMode?null:await getBase();
+  if(!t||!Array.isArray(t.orders))return{orders:[],weight:'',orderBatchId:t?.orderBatchId||batch,date:t?.date||date,vehicle:t?.vehicle||'',route:ROUTE,uniqueStoreCount:0,rawOrderCount:0};
+  const orders=historyMode?preserveSavedOrder(t.orders):sortOrders(t.orders,b);
+  return{orders,weight:normalizeWeight(t.totalWeight??t.weight??t.goodsWeight??''),orderBatchId:t.orderBatchId||batch,date:t.date||date,vehicle:t.vehicle||'',route:ROUTE,uniqueStoreCount:Number(t.uniqueStoreCount)||orders.length,rawOrderCount:Number(t.rawOrderCount)||Number(t.recognizedCount)||orders.length};
+}
+function render(a,w){
+  const n=Number(currentData.uniqueStoreCount)||a.length,nn=a.filter(x=>x.isNew).length,raw=Number(currentData.rawOrderCount)||n;
+  if($('storeCount'))$('storeCount').textContent=nn?`⚠️ 新${nn}家、总${n}家`:raw>n?`${n}家（${raw}条原始记录）`:`${n}家`;
+  if($('totalWeight'))$('totalWeight').textContent=normalizeWeight(w)||'0t';
+  const box=$('routeList');if(!box)return;box.innerHTML='';
+  if(!a.length){box.innerHTML='<div class="empty-tip"><span class="icon">📭</span>暂无配送数据</div>';return}
+  a.forEach((s,i)=>{const row=document.createElement('div');row.className='store-item';const idx=document.createElement('span');idx.className='store-index';idx.textContent=`${s.displayCode||String(i+1).padStart(2,'0')}、`;const name=document.createElement('span');name.className='store-name';name.textContent=s.isNew?`⚠️ 新增 ${s.name}`:s.name;const nav=document.createElement('button');nav.className='nav-btn';nav.type='button';nav.textContent='导航';nav.onclick=()=>s.nav?location.href=s.nav:alert('该门店暂无导航地址');row.append(idx,name,nav);box.appendChild(row)})
+}
 function header(){if($('routeName'))$('routeName').textContent=ROUTE;if($('menuRoute'))$('menuRoute').textContent=ROUTE;if($('todayDate'))$('todayDate').textContent=currentData.date||currentDate();if($('vehicleText'))$('vehicleText').textContent=currentData.vehicle||'未设置';if($('newVehicle'))$('newVehicle').value=currentData.vehicle||''}
 window.toggleMenu=()=>{const m=$('menuPanel');if(m)m.style.display=m.style.display==='block'?'none':'block'};
-window.openVehicle=()=>{$('vehicleDialog')&&($('vehicleDialog').style.display='flex');$('menuPanel')&&($('menuPanel').style.display='none')};
+window.openVehicle=()=>{if(historyMode)return alert('历史运单不能更换车辆');if($('vehicleDialog'))$('vehicleDialog').style.display='flex';if($('menuPanel'))$('menuPanel').style.display='none'};
 window.closeVehicle=()=>{$('vehicleDialog')&&($('vehicleDialog').style.display='none')};
-window.saveVehicle=async()=>{const v=$('newVehicle')?.value.trim();if(!v)return alert('请输入车辆号码');if(!currentData.orderBatchId)return alert('当前没有服务器订单批次，不能修改车辆');try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},credentials:'same-origin',body:JSON.stringify({route:ROUTE,date:currentData.date,vehicle:v,totalWeight:currentData.weight,orders:currentData.orders,orderBatchId:currentData.orderBatchId,source:'order-detail'})});if(!r.ok)throw Error(`保存失败（${r.status}）`);const d=await r.json();if(!d.success)throw Error(d.error||'保存失败');currentData.vehicle=v;currentData.weight=normalizeWeight(d.data?.totalWeight??currentData.weight);header();render(currentData.orders,currentData.weight);alert('车辆已同步到服务器');closeVehicle()}catch(e){alert(`保存失败：${e.message}`)}};
-window.shareOrder=async()=>{const a=currentData.orders,n=a.filter(x=>x.isNew).length,t=a.length,text=`天友智配One\n${currentData.date}\n${ROUTE}\n🚚 ${currentData.vehicle||'未设置'}\n${n?`⚠️ 新${n}家、总${t}家`:`${t}家`}\n总重量 ${normalizeWeight(currentData.weight)||'0.0t'}`;try{if(navigator.share)await navigator.share({title:'配送记录',text});else{await navigator.clipboard?.writeText(text);alert('📋 已复制')}}catch(_) {}};
+window.saveVehicle=async()=>{if(historyMode)return alert('历史运单不能更换车辆');const v=$('newVehicle')?.value.trim();if(!v)return alert('请输入车辆号码');if(!currentData.orderBatchId)return alert('当前没有服务器订单批次，不能修改车辆');try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},credentials:'same-origin',body:JSON.stringify({route:ROUTE,date:currentData.date,vehicle:v,totalWeight:currentData.weight,orders:currentData.orders,orderBatchId:currentData.orderBatchId,source:'order-detail'})});if(!r.ok)throw Error(`保存失败（${r.status}）`);const d=await r.json();if(!d.success)throw Error(d.error||'保存失败');currentData.vehicle=v;currentData.weight=normalizeWeight(d.data?.totalWeight??currentData.weight);currentData.orders=normalize(d.data?.orders||currentData.orders);currentData.uniqueStoreCount=Number(d.data?.uniqueStoreCount)||currentData.orders.length;header();render(currentData.orders,currentData.weight);alert('车辆已同步到服务器');closeVehicle()}catch(e){alert(`保存失败：${e.message}`)}};
+window.shareOrder=async()=>{const a=currentData.orders,n=a.filter(x=>x.isNew).length,t=Number(currentData.uniqueStoreCount)||a.length,raw=Number(currentData.rawOrderCount)||t,text=`天友智配One\n${currentData.date}\n${ROUTE}\n🚚 ${currentData.vehicle||'未设置'}\n${n?`⚠️ 新${n}家、总${t}家`:raw>t?`${t}家（${raw}条原始记录）`:`${t}家`}\n总重量 ${normalizeWeight(currentData.weight)||'0t'}`;try{if(navigator.share)await navigator.share({title:'配送记录',text});else{await navigator.clipboard?.writeText(text);alert('📋 已复制')}}catch(_) {}};
 window.goBack=()=>location.href='../home.html';
 window.logout=()=>{if(confirm('确定退出登录吗？'))Auth.logout()};
 document.addEventListener('DOMContentLoaded',async()=>{try{if(!(await Auth.checkAuth()))return;currentData=await load();header();render(currentData.orders,currentData.weight)}catch(e){console.error(e);if($('routeList'))$('routeList').innerHTML=`<div class="empty-tip"><span class="icon">🌐</span>${e.message}<br><small>请联网后重试</small></div>`;if($('storeCount'))$('storeCount').textContent='—';if($('totalWeight'))$('totalWeight').textContent='—'}})
