@@ -140,8 +140,6 @@ window.Auth = {
   }
 };
 
-window.Authentication = window.Auth;
-
 // 全站统一返回。这里使用简单的 URL 解析，不使用容易造成语法错误的复杂正则。
 (function setupSmartBack() {
   function isAppPage(url) {
