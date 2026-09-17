@@ -9,7 +9,7 @@
 </head>
 <body>
 <main class="settings-page">
-<header class="settings-header"><button class="back-btn" type="button" onclick="goBack()" aria-label="返回">←</button><div class="header-title">账户设置</div><div class="header-placeholder" aria-hidden="true"></div></header>
+<header class="settings-header"><button class="back-btn" type="button" aria-label="返回">←</button><div class="header-title">账户设置</div><div class="header-placeholder" aria-hidden="true"></div></header>
 <section class="profile-hero"><div class="avatar" id="avatar">智</div><div class="profile-name" id="profileName">加载中…</div><div class="profile-account" id="profileAccount">账户信息读取中</div></section>
 <section class="group"><div class="group-title">配送设置</div><div class="settings-card"><button class="setting-row" type="button" onclick="openModal('deliveryModal')"><span class="row-icon">🚚</span><span class="row-main"><span class="row-title">配送资料</span><span class="row-sub" id="deliverySummary">线路与默认车辆</span></span><span class="row-arrow" aria-hidden="true">›</span></button></div></section>
 <section class="group"><div class="group-title">账号与安全</div><div class="settings-card"><button class="setting-row" type="button" onclick="openModal('usernameModal')"><span class="row-icon">👤</span><span class="row-main"><span class="row-title">更改账号</span><span class="row-sub" id="usernameSummary">登录账号</span></span><span class="row-arrow" aria-hidden="true">›</span></button><button class="setting-row" type="button" onclick="openModal('passwordModal')"><span class="row-icon">🔐</span><span class="row-main"><span class="row-title">修改密码</span><span class="row-sub">定期更新密码，保护账号安全</span></span><span class="row-arrow" aria-hidden="true">›</span></button></div></section>
@@ -22,8 +22,7 @@
 
 <div class="modal" id="passwordModal" onclick="backdropClose(event,'passwordModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="passwordTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="passwordTitle">修改密码</div><button class="close-btn" type="button" onclick="closeModal('passwordModal')" aria-label="关闭">×</button></div><div class="sheet-note">修改后立即生效，下次登录请使用新密码。</div><div class="field"><label class="field-label" for="currentPassword">当前密码</label><div class="input-wrap"><input id="currentPassword" type="password" autocomplete="current-password" placeholder="请输入当前密码"><button class="eye" type="button" onclick="togglePassword('currentPassword',this)" aria-label="显示或隐藏密码">◉</button></div></div><div class="field"><label class="field-label" for="newPassword">新密码</label><div class="input-wrap"><input id="newPassword" type="password" autocomplete="new-password" placeholder="6-72位字符"><button class="eye" type="button" onclick="togglePassword('newPassword',this)" aria-label="显示或隐藏密码">◉</button></div></div><div class="field"><label class="field-label" for="confirmPassword">确认新密码</label><div class="input-wrap"><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入新密码"><button class="eye" type="button" onclick="togglePassword('confirmPassword',this)" aria-label="显示或隐藏密码">◉</button></div></div><div id="passwordMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('passwordModal')">取消</button><button class="primary-btn" id="passwordButton" type="button" onclick="changePassword()">确认修改</button></div></section></div>
 
-<script src="js/auth.js"></script>
-<script src="js/navigation.js"></script>
+<script src="js/auth.js?v=20260917"></script>
 <script>
 'use strict';
 let currentUser=null;
@@ -31,7 +30,6 @@ function $(id){return document.getElementById(id)}
 function messageId(modalId){return modalId==='deliveryModal'?'profileMessage':modalId==='usernameModal'?'accountMessage':'passwordMessage'}
 function showMessage(id,message,type='error'){const el=$(id);el.textContent=message;el.className=`message ${type}`}
 function hideMessage(id){const el=$(id);el.textContent='';el.className='message'}
-function goBack(){document.querySelectorAll('.modal.show').forEach(modal=>modal.classList.remove('show'));document.body.style.overflow='';if(window.Nav)Nav.goBack('home.html');else location.href='home.html'}
 function openModal(id){const modal=$(id);if(!modal)return;document.querySelectorAll('.modal.show').forEach(item=>item.classList.remove('show'));modal.classList.add('show');document.body.style.overflow='hidden';setTimeout(()=>{const first=modal.querySelector('input:not([readonly])');if(first)first.focus()},80)}
 function closeModal(id){const modal=$(id);if(!modal)return;modal.classList.remove('show');document.body.style.overflow='';hideMessage(messageId(id))}
 function backdropClose(event,id){if(event.target===event.currentTarget)closeModal(id)}
