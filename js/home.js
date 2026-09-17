@@ -12,8 +12,27 @@ function currentRoute(){return Auth.getCurrentRoute()}
 async function loadServerOrder(date=''){const route=currentRoute();if(!route)throw Error('未指定配送线路');const params=new URLSearchParams();if(date)params.set('date',date);const query=params.toString();const response=await fetch(`/api/orders${query?`?${query}`:''}`,{cache:'no-store',credentials:'same-origin'});if(!response.ok)throw Error(response.status===401?'登录已失效，请重新登录':`当日订单读取失败（${response.status}）`);const data=await response.json();serverOrder=data?.today||null;return serverOrder}
 function parseWeight(value){if(value===null||value===undefined||value==='')return 0;const text=String(value).trim().replace(/,/g,'');const match=text.match(/[\d]+(?:\.\d+)?/);if(!match)return 0;const n=Number(match[0]);if(!Number.isFinite(n))return 0;const tons=/吨|\bt\b/i.test(text)?n:/kg|千克|公斤/i.test(text)?n/1000:n>=1000?n/1000:n;return Number.isFinite(tons)?tons:0}
 function formatWeight(value){const tons=parseWeight(value);if(!(tons>0))return '暂无数据';const precise=Math.round((tons+Number.EPSILON)*1000000)/1000000;return `${precise.toFixed(6).replace(/0+$/,'').replace(/\.$/,'')}t`}
-function setTaskCardVisible(visible){const card=$('taskCard');if(card)card.style.display=visible?'block':'none'}
-function updateSummary(){const hasToday=!!serverOrder&&Array.isArray(serverOrder.orders)&&serverOrder.orders.length>0;setTaskCardVisible(hasToday);if(!hasToday){if($('menuRoute'))$('menuRoute').textContent=currentRoute()||'未选择线路';if($('homeRoute'))$('homeRoute').textContent='';if($('storeCount'))$('storeCount').textContent='';if($('totalWeight'))$('totalWeight').textContent='';if($('statusDot'))$('statusDot').style.background='#5A6A7A';return}const orders=serverOrder.orders,count=Number(serverOrder.uniqueStoreCount||serverOrder.count)||orders.length,route=serverOrder.route||currentRoute()||'',vehicle=serverOrder.vehicle||'';if($('menuRoute'))$('menuRoute').textContent=route||'未选择线路';if($('homeRoute'))$('homeRoute').textContent=vehicle?`🚚 ${vehicle}`:`🚚 ${route}`;if($('storeCount'))$('storeCount').textContent=count?`${count}家`:'暂无当日订单';if($('totalWeight'))$('totalWeight').textContent=formatWeight(serverOrder.totalWeight);if($('statusDot'))$('statusDot').style.background=count?'#27AE60':'#5A6A7A'}
+function updateSummary(){
+  // 当天没有订单时：保留“当日任务”卡片，只清空门店数量和重量，不隐藏整张卡片。
+  const hasToday=!!serverOrder&&Array.isArray(serverOrder.orders)&&serverOrder.orders.length>0;
+  const route=serverOrder?.route||currentRoute()||'';
+  const vehicle=serverOrder?.vehicle||'';
+  if($('taskCard'))$('taskCard').style.display='block';
+  if($('menuRoute'))$('menuRoute').textContent=route||'未选择线路';
+  if(!hasToday){
+    if($('homeRoute'))$('homeRoute').textContent='';
+    if($('storeCount'))$('storeCount').textContent='';
+    if($('totalWeight'))$('totalWeight').textContent='';
+    if($('statusDot'))$('statusDot').style.background='#5A6A7A';
+    return;
+  }
+  const orders=serverOrder.orders;
+  const count=Number(serverOrder.uniqueStoreCount||serverOrder.count)||orders.length;
+  if($('homeRoute'))$('homeRoute').textContent=vehicle?`🚚 ${vehicle}`:`🚚 ${route}`;
+  if($('storeCount'))$('storeCount').textContent=count?`${count}家`:'暂无当日订单';
+  if($('totalWeight'))$('totalWeight').textContent=formatWeight(serverOrder.totalWeight);
+  if($('statusDot'))$('statusDot').style.background=count?'#27AE60':'#5A6A7A';
+}
 function renderStatus(status,count=0,message=''){const box=$('parseStatus');if(!box)return;box.classList.add('active');if($('statusIcon'))$('statusIcon').textContent=status==='success'?'✅':status==='error'?'⚠️':'⏳';if($('statusText'))$('statusText').textContent=message||(status==='success'?'处理完成':status==='error'?'处理失败':'正在处理...');if($('progressBar'))$('progressBar').style.width=status==='success'||status==='error'?'100%':'50%';if($('statusCount'))$('statusCount').textContent=count?`解析得到 ${count} 条原始门店记录`:''}
 function setOCRText(text){const input=$('manualOrderInput');if(!input)return false;const value=String(text??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');input.value=value;input.removeAttribute('placeholder');input.dispatchEvent(new Event('input',{bubbles:true}));if($('charCount'))$('charCount').textContent=String(value.length);input.scrollTop=0;return !!value.trim()}
 function setReviewText(data){const input=$('manualOrderInput');if(!input)return false;const stores=Array.isArray(data?.stores)?data.stores:[];const route=data?.route||currentRoute()||'';const date=data?.date||pendingMeta.date||currentDate();const vehicle=data?.vehicle||pendingMeta.vehicle||'';const totalWeight=data?.totalWeight||pendingMeta.totalWeight||'';const uniqueCount=Number(data?.uniqueStoreCount)||stores.length;const rawCount=Number(data?.recognizedCount)||Number(data?.rawOrderCount)||stores.length;const lines=[`【当日订单信息】`,`日期：${date}`,`线路：${route}`,`车辆：${vehicle||'未识别'}`,`原始门店记录：${rawCount}条`,`唯一门店：${uniqueCount}家`,`总重量：${totalWeight||'未识别'}`,'',`【门店列表】`];stores.forEach((item,index)=>{const prefix=String(index+1).padStart(2,'0');const mark=item?.isNew?'⚠️ 新增：':'';const review=item?.needsReview?'⚠️ 待确认：':'';lines.push(`${prefix}. ${mark||review}${storeName(item)}`)});const value=lines.join('\n');reviewMode=true;input.value=value;input.removeAttribute('placeholder');if($('charCount'))$('charCount').textContent=String(value.length);input.scrollTop=0;return true}
