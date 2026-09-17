@@ -41,7 +41,7 @@ async function saveOrder(request, env, session) {
     const totalWeight = incomingWeight && !isZeroWeight(incomingWeight) ? incomingWeight : normalizeWeight(existing?.totalWeight);
     const todayData = {
       orderBatchId, date, route: ROUTE,
-      vehicle: String(body.vehicle || '').trim() || session.vehicle || sessionVehicle(existing),
+      vehicle: String(body.vehicle || '').trim() || session.vehicle || String(existing?.vehicle || ''),
       orders, totalWeight,
       count: orders.length,
       uniqueStoreCount: orders.length,
@@ -182,13 +182,12 @@ async function releaseLock(env, key, token) { const script = "if redis.call('get
 async function redisGet(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis读取失败'); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
 async function redisSet(env, key, value) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(value), cache: 'no-store' }); if (!response.ok) throw new Error('Redis保存失败'); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
 async function readAfterWrite(env, key, batchId, count) { for (let attempt = 0; attempt < 3; attempt += 1) { const saved = await redisGet(env, key); if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count) return saved; if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1))); } return null; }
-function sessionVehicle(existing) { return String(existing?.vehicle || '渝DK7692'); }
 function normalizeStoreName(value) { let text = String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[【】\[\]]/g, '').toLowerCase(); text = text.replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/江北亿达鲜半华府店/g, '江北亿达鲜半山华府店'); return text; }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''); const m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`; }
 function isZeroWeight(value) { const match = String(value || '').match(/[\d]+(?:\.\d+)?/); return !match || Number(match[0]) === 0; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
-function createBatchId(date) { return `${date}-17-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
+function createBatchId(date) { return `${date}-${ROUTE.replace(/\D/g, '')}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
 function createLockToken() { return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.() || ''}`; }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
