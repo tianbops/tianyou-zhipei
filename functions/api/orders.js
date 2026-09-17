@@ -30,11 +30,10 @@ async function saveOrder(request, env, session) {
     const existing = await redisGet(env, key);
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
     const base = await loadBaseData(env, route);
-    const inputCount = body.orders.length;
     const normalized = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route)).filter(item => item.name);
-    const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || inputCount;
-    const duplicateCount = countDuplicateIdentities(normalized, base);
+    const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || normalized.length;
     const uniqueOrders = dedupeOrders(normalized, base);
+    const duplicateCount = Math.max(0, normalized.length - uniqueOrders.length);
     const orders = sortByRouteBase(uniqueOrders, base);
     const incomingWeight = normalizeWeight(body.totalWeight ?? body.weight);
     const totalWeight = incomingWeight && !isZeroWeight(incomingWeight) ? incomingWeight : normalizeWeight(existing?.totalWeight);
@@ -124,12 +123,14 @@ async function loadBaseData(env, route) {
 }
 
 function dedupeOrders(orders, base) {
-  const baseMap = new Map(base.map((store, index) => [store.nameKey, `b:${index}`]));
+  const baseByName = new Map(base.map((store, index) => [store.nameKey, `b:${index}`]));
+  const baseByCode = new Map(base.map((store, index) => [String(store.code || '').trim(), `b:${index}`]).filter(([code]) => code));
   const seen = new Set();
   const result = [];
   for (const order of orders) {
     const nameKey = normalizeStoreName(order.name);
-    const identity = baseMap.get(nameKey) || `n:${nameKey}`;
+    const codeKey = String(order.code || '').trim();
+    const identity = baseByName.get(nameKey) || baseByCode.get(codeKey) || `n:${nameKey}`;
     if (!nameKey || seen.has(identity)) continue;
     seen.add(identity);
     result.push(order);
@@ -137,25 +138,15 @@ function dedupeOrders(orders, base) {
   return result;
 }
 
-function countDuplicateIdentities(orders, base) {
-  const baseMap = new Map(base.map((store, index) => [store.nameKey, `b:${index}`]));
-  const seen = new Set();
-  let duplicates = 0;
-  for (const order of orders) {
-    const nameKey = normalizeStoreName(order.name);
-    const identity = baseMap.get(nameKey) || `n:${nameKey}`;
-    if (seen.has(identity)) duplicates += 1; else seen.add(identity);
-  }
-  return duplicates;
-}
-
 function sortByRouteBase(orders, base) {
   if (!base.length) return orders.map((item, index) => ({ ...item, code: String(index + 1).padStart(2, '0') }));
   const orderMap = new Map(base.map((store, index) => [store.nameKey, Number(store.routeOrder) || index + 1]));
+  const codeMap = new Map(base.map((store, index) => [String(store.code || '').trim(), Number(store.routeOrder) || index + 1]).filter(([code]) => code));
   const matched = [], news = [];
   for (const order of orders) {
-    const routeOrder = orderMap.get(normalizeStoreName(order.name));
-    if (routeOrder != null) matched.push({ ...order, routeOrder, matched: true, isNew: false });
+    const nameKey = normalizeStoreName(order.name);
+    const routeOrder = orderMap.get(nameKey) ?? codeMap.get(String(order.code || '').trim());
+    if (routeOrder != null && !order.isNew) matched.push({ ...order, routeOrder, matched: true, isNew: false });
     else news.push({ ...order, routeOrder: null, matched: false, isNew: true });
   }
   matched.sort((a, b) => a.routeOrder - b.routeOrder);
@@ -183,8 +174,8 @@ async function releaseLock(env, key, token) { const script = "if redis.call('get
 async function redisGet(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis读取失败'); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
 async function redisSet(env, key, value) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(value), cache: 'no-store' }); if (!response.ok) throw new Error('Redis保存失败'); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
 async function readAfterWrite(env, key, batchId, count) { for (let attempt = 0; attempt < 3; attempt += 1) { const saved = await redisGet(env, key); if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count) return saved; if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1))); } return null; }
-function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[【】\[\]]/g, '').toLowerCase().replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/江北亿达鲜半华府店/g, '江北亿达鲜半山华府店'); }
-function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''); const m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`; }
+function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[【】\[\]]/g, '').toLowerCase().replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/谊品鲜/g, '谊品生鲜'); }
+function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''); const m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/,'').replace(/\.$/,'') || '0'}t`; }
 function isZeroWeight(value) { const match = String(value || '').match(/[\d]+(?:\.\d+)?/); return !match || Number(match[0]) === 0; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
