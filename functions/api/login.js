@@ -1,46 +1,37 @@
-// 天友智配One - 司机登录
-// 登录凭据只从 Cloudflare Variables / Secrets 读取。
-// Redis 保存用户资料，不保存密码。
+// 天友智配One - 多用户登录
+// 用户资料与密码哈希均保存在 Upstash；每个用户绑定独立线路。
 import { createSession, sessionCookie } from './_auth.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: 'Redis 未配置，登录服务暂不可用' }, 500);
+  if (!redisReady(env)) return json({ success: false, error: '登录服务未配置，请检查 Upstash 配置' }, 500);
   if (!env.SESSION_SECRET) return json({ success: false, error: 'SESSION_SECRET 未配置，登录服务暂不可用' }, 500);
-
-  const configuredUsername = String(env.DRIVER_USERNAME || '').trim();
-  const configuredPassword = String(env.DRIVER_PASSWORD || '');
-  const configuredRoute = normalizeRoute(env.DRIVER_ROUTE);
-  if (!configuredUsername || !configuredPassword || !configuredRoute) return json({ success: false, error: '登录配置不完整，请检查 DRIVER_USERNAME / DRIVER_PASSWORD / DRIVER_ROUTE' }, 500);
 
   try {
     const body = await request.json().catch(() => ({}));
-    const username = String(body.username || body.account || '').trim();
+    const username = normalizeUsername(body.username || body.account);
     const password = String(body.password || '');
     if (!username) return json({ success: false, error: '用户名不能为空' }, 400);
     if (!password) return json({ success: false, error: '密码不能为空' }, 400);
-    if (username !== configuredUsername || password !== configuredPassword) return json({ success: false, error: '用户名或密码错误' }, 401);
 
-    const driverKey = `driver:${configuredRoute}`;
-    const existing = await readDriver(env, driverKey);
-    const driver = {
-      id: String(existing?.id || `route-${configuredRoute}`),
-      username: configuredUsername,
-      name: String(existing?.name || configuredUsername),
-      route: configuredRoute,
-      vehicle: String(existing?.vehicle || ''),
-      sessionVersion: Number(existing?.sessionVersion || 1),
-      createdAt: existing?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    const userId = await redisGet(env, `user:username:${encodeURIComponent(username)}`);
+    if (!userId) return json({ success: false, error: '用户名或密码错误' }, 401);
 
-    await writeDriver(env, driverKey, driver);
-    const token = await createSession(env, driver);
-    const safeUser = { id: driver.id, username: driver.username, name: driver.name, route: driver.route, vehicle: driver.vehicle };
+    const user = parseRecord(await redisGet(env, `user:${userId}`));
+    if (!user || user.status === 'disabled') return json({ success: false, error: '用户不存在或已停用' }, 401);
+    if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+      return json({ success: false, error: '用户名或密码错误' }, 401);
+    }
 
+    const safeUser = publicUser(user);
+    const token = await createSession(env, safeUser);
     return new Response(JSON.stringify({ success: true, user: safeUser }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Set-Cookie': sessionCookie(token) }
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Set-Cookie': sessionCookie(token)
+      }
     });
   } catch (error) {
     console.error('login error', error);
@@ -48,27 +39,73 @@ export async function onRequest({ request, env }) {
   }
 }
 
-async function readDriver(env, key) {
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function publicUser(user) {
+  return {
+    id: String(user.id),
+    username: String(user.username),
+    name: String(user.name || user.username),
+    route: normalizeRoute(user.route),
+    vehicle: String(user.vehicle || '')
+  };
+}
+
+async function verifyPassword(password, encoded) {
+  try {
+    const [salt, stored] = String(encoded).split(':');
+    if (!salt || !stored) return false;
+    const derived = await derivePassword(password, decodeBase64(salt));
+    return timingSafeEqual(derived, decodeBase64(stored));
+  } catch {
+    return false;
+  }
+}
+
+async function derivePassword(password, salt) {
+  const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' }, material, 256);
+  return new Uint8Array(bits);
+}
+
+function decodeBase64(value) {
+  const raw = atob(String(value || ''));
+  return Uint8Array.from(raw, char => char.charCodeAt(0));
+}
+
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+function parseRecord(value) {
+  if (!value) return null;
+  if (typeof value !== 'string') return value;
+  try {
+    const first = JSON.parse(value);
+    if (typeof first === 'string') return JSON.parse(first);
+    return first;
+  } catch {
+    return null;
+  }
+}
+
+async function redisGet(env, key) {
   const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
     headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
     cache: 'no-store'
   });
-  if (!response.ok) throw new Error('司机资料读取失败');
+  if (!response.ok) throw new Error('Redis 读取失败');
   const data = await response.json().catch(() => ({}));
-  if (!data.result) return null;
-  try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
+  return data.result || null;
 }
 
-async function writeDriver(env, key, driver) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(JSON.stringify(driver)),
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error('司机资料保存失败');
-  const data = await response.json().catch(() => ({}));
-  if (data.result !== undefined && data.result !== 'OK') throw new Error('司机资料保存未确认');
+function redisReady(env) {
+  return Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
 }
 
 function normalizeRoute(value) {
@@ -78,5 +115,8 @@ function normalizeRoute(value) {
 }
 
 function json(payload, status = 200) {
-  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+  });
 }
