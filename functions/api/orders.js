@@ -118,20 +118,26 @@ async function loadBaseData(env, route) {
   return stores.map((store, index) => ({
     ...store,
     routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1,
-    nameKey: normalizeStoreName(store?.name || store?.storeName || store?.shopName || store?.['门店名称'])
+    nameKey: normalizeStoreName(store?.name || store?.storeName || store?.shopName || store?.['门店名称']),
+    businessCode: extractBusinessCode(store?.name || store?.storeName || store?.shopName || store?.['门店名称'])
   })).filter(store => store.nameKey);
 }
 
 function dedupeOrders(orders, base) {
   const baseByName = new Map(base.map((store, index) => [store.nameKey, `b:${index}`]));
-  const baseByCode = new Map(base.map((store, index) => [String(store.code || '').trim(), `b:${index}`]).filter(([code]) => code));
+  const baseByBusinessCode = new Map(
+    base.filter(store => store.businessCode).map((store, index) => [store.businessCode, `b:${index}`])
+  );
   const seen = new Set();
   const result = [];
   for (const order of orders) {
     const nameKey = normalizeStoreName(order.name);
-    const codeKey = String(order.code || '').trim();
-    const identity = baseByName.get(nameKey) || baseByCode.get(codeKey) || `n:${nameKey}`;
-    if (!nameKey || seen.has(identity)) continue;
+    const businessCode = order.businessCode || extractBusinessCode(order.name);
+    if (!nameKey) continue;
+    const identity = baseByName.get(nameKey)
+      || (businessCode ? baseByBusinessCode.get(businessCode) : '')
+      || `n:${nameKey}`;
+    if (seen.has(identity)) continue;
     seen.add(identity);
     result.push(order);
   }
@@ -141,11 +147,14 @@ function dedupeOrders(orders, base) {
 function sortByRouteBase(orders, base) {
   if (!base.length) return orders.map((item, index) => ({ ...item, code: String(index + 1).padStart(2, '0') }));
   const orderMap = new Map(base.map((store, index) => [store.nameKey, Number(store.routeOrder) || index + 1]));
-  const codeMap = new Map(base.map((store, index) => [String(store.code || '').trim(), Number(store.routeOrder) || index + 1]).filter(([code]) => code));
+  const businessCodeMap = new Map(
+    base.filter(store => store.businessCode).map((store, index) => [store.businessCode, Number(store.routeOrder) || index + 1])
+  );
   const matched = [], news = [];
   for (const order of orders) {
     const nameKey = normalizeStoreName(order.name);
-    const routeOrder = orderMap.get(nameKey) ?? codeMap.get(String(order.code || '').trim());
+    const businessCode = order.businessCode || extractBusinessCode(order.name);
+    const routeOrder = orderMap.get(nameKey) ?? (businessCode ? businessCodeMap.get(businessCode) : undefined);
     if (routeOrder != null && !order.isNew) matched.push({ ...order, routeOrder, matched: true, isNew: false });
     else news.push({ ...order, routeOrder: null, matched: false, isNew: true });
   }
@@ -157,10 +166,12 @@ function sortByRouteBase(orders, base) {
 
 function normalizeOrder(item, index, batchId, date, route) {
   const value = typeof item === 'string' ? { name: item } : (item || {});
+  const name = String(value.name || value.storeName || value.shopName || value['门店名称'] || '').trim();
   return {
     id: String(value.id || `${batchId}-${index + 1}`), orderBatchId: batchId,
     code: String(value.code || index + 1).padStart(2, '0'),
-    name: String(value.name || value.storeName || value.shopName || value['门店名称'] || '').trim(),
+    businessCode: String(value.businessCode || extractBusinessCode(name)).trim().toUpperCase(),
+    name,
     nav: String(value.nav || value.navigation || value.url || value['导航'] || '').trim(),
     weight: Number(value.weight ?? value['重量'] ?? 0) || 0,
     note: String(value.note || value['备注'] || '').trim(),
@@ -169,6 +180,10 @@ function normalizeOrder(item, index, batchId, date, route) {
   };
 }
 
+function extractBusinessCode(value) {
+  const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])((?:JM\d{4,6}|Q\d{3,5}|A\d{4,6}))(?:[^A-Z0-9]|$)/);
+  return match ? match[1] : '';
+}
 async function acquireLock(env, key, token, seconds) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) return false; const data = await response.json().catch(() => ({})); return data.result === 'OK'; }
 async function releaseLock(env, key, token) { const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"; await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, key, token]), cache: 'no-store' }); }
 async function redisGet(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis读取失败'); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
