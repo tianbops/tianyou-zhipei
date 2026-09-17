@@ -13,15 +13,39 @@ export async function onRequest({ request, env }) {
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
     const pending = body.orders.filter(item => item?.needsReview === true || item?.matchType === 'review' || String(item?.candidate || '').trim());
     if (pending.length) return json({ success: false, code: 'REVIEW_REQUIRED', error: `仍有 ${pending.length} 家疑似门店未确认`, review: pending.map(item => ({ name: item?.name || '', candidate: item?.candidate || '', matchScore: Number(item?.matchScore) || 0 })) }, 409);
-    const date = normalizeDate(body.date) || businessDate(), base = await loadBase(env, route);
-    const inputCount = body.orders.length, canonical = canonicalizeOrders(body.orders, base);
+
+    const date = normalizeDate(body.date) || businessDate();
+    const noBase = body.baseDatabaseAvailable === false;
+    const base = noBase ? [] : await loadBase(env, route);
+    const inputCount = body.orders.length;
+    const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
     const duplicateCount = countDuplicates(canonical), uniqueCanonical = dedupeCanonical(canonical);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
-    const orders = sortOrders(uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route)), base);
+    const normalized = uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route));
+    const orders = noBase ? normalizeRawOrderList(normalized) : sortOrders(normalized, base);
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
     if (!totalWeight) return json({ success: false, code: 'WEIGHT_MISSING', error: '未识别到商品总量，请重新解析后再确认' }, 422);
     const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || inputCount;
-    const todayData = { orderBatchId, date, route, userId, vehicle: String(body.vehicle || '').trim() || session.vehicle || '', orders, totalWeight, count: orders.length, uniqueStoreCount: orders.length, matchedCount: orders.filter(item => item.matched).length, newStoreCount: orders.filter(item => item.isNew).length, reviewCount: 0, duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount), recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount, rawOrderCount, source: String(body.source || 'web-confirm'), updatedAt: new Date().toISOString() };
+    const todayData = {
+      orderBatchId,
+      date,
+      route,
+      userId,
+      vehicle: String(body.vehicle || '').trim() || session.vehicle || '',
+      orders,
+      totalWeight,
+      count: orders.length,
+      uniqueStoreCount: orders.length,
+      matchedCount: noBase ? 0 : orders.filter(item => item.matched).length,
+      newStoreCount: noBase ? 0 : orders.filter(item => item.isNew).length,
+      reviewCount: 0,
+      duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
+      recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount,
+      rawOrderCount,
+      baseDatabaseAvailable: !noBase,
+      source: String(body.source || 'web-confirm'),
+      updatedAt: new Date().toISOString()
+    };
     const todayKey = scopedKey(userId, route, `today:${date}`);
     const lockKey = scopedKey(userId, route, `lock:${date}`), token = createLockToken();
     if (!(await acquireLock(env, lockKey, token, 15))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试' }, 409);
@@ -29,7 +53,7 @@ export async function onRequest({ request, env }) {
       await redisSet(env, todayKey, todayData);
       const saved = await readAfterWrite(env, todayKey, orderBatchId, orders.length);
       if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
-      await learnConfirmedVariants(env, userId, route, body.orders, base);
+      if (!noBase) await learnConfirmedVariants(env, userId, route, body.orders, base);
       await saveHistory(env, userId, route, date, saved);
       await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt });
       return json({ success: true, data: saved });
@@ -44,6 +68,18 @@ async function loadBase(env, route) {
   const raw = await redisGet(env, `route:${route}:base`), stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${route}独立基准数据库`);
   return stores.map((store, index) => ({ name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(), code: String(store?.code || index + 1).padStart(2, '0'), nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(), note: String(store?.note || store?.['备注'] || '').trim(), routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1, index })).filter(store => store.name);
+}
+
+function canonicalizeRawOrders(input) {
+  return input.map(item => {
+    const raw = typeof item === 'string' ? { name: item } : (item || {});
+    const name = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
+    return { ...raw, name, code: '', nav: String(raw.nav || '').trim(), note: String(raw.note || '').trim(), matched: false, isNew: false, needsReview: false, candidate: '', candidates: [], matchType: 'raw-order', matchScore: 0, _baseIndex: null };
+  }).filter(item => item.name);
+}
+
+function normalizeRawOrderList(orders) {
+  return orders.map((item, index) => ({ ...item, code: String(index + 1).padStart(2, '0'), matched: false, isNew: false, matchType: 'raw-order' }));
 }
 
 function canonicalizeOrders(input, base) {
@@ -61,7 +97,7 @@ function canonicalizeOrders(input, base) {
 function dedupeCanonical(items) { const seen = new Set(), output = []; for (const item of items) { const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`; if (!identity || seen.has(identity)) continue; seen.add(identity); output.push(item); } return output; }
 function countDuplicates(items) { const seen = new Set(); let count = 0; for (const item of items) { const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`; if (seen.has(identity)) count++; else seen.add(identity); } return count; }
 function sortOrders(orders, base) { const rank = new Map(base.map((store, index) => [store.index, Number(store.routeOrder) || index + 1])), matched = [], news = []; for (const item of orders) { const routeOrder = item._baseIndex != null ? rank.get(item._baseIndex) : null; if (routeOrder == null && item.matched !== true) news.push({ ...item, isNew: true, matched: false }); else matched.push({ ...item, routeOrder: routeOrder ?? Number.MAX_SAFE_INTEGER, isNew: false, matched: true }); } matched.sort((a, b) => a.routeOrder - b.routeOrder); matched.forEach((item, index) => { item.code = String(index + 1).padStart(2, '0'); }); news.forEach((item, index) => { item.code = `N${String(index + 1).padStart(2, '0')}`; }); return matched.concat(news).map(({ routeOrder, _baseIndex, ...item }) => item); }
-function normalizeOrder(item, index, batchId, date, route) { return { id: String(item.id || `${batchId}-${index + 1}`), orderBatchId: batchId, code: String(item.code || index + 1).padStart(2, '0'), name: String(item.name || '').trim(), nav: String(item.nav || '').trim(), weight: Number(item.weight) || 0, note: String(item.note || '').trim(), matched: item.matched === true, isNew: item.isNew === true, status: String(item.status || '待配送'), route, date }; }
+function normalizeOrder(item, index, batchId, date, route) { return { id: String(item.id || `${batchId}-${index + 1}`), orderBatchId: batchId, code: String(item.code || index + 1).padStart(2, '0'), name: String(item.name || '').trim(), nav: String(item.nav || '').trim(), weight: Number(item.weight) || 0, note: String(item.note || '').trim(), matched: item.matched === true, isNew: item.isNew === true, status: String(item.status || '待配送'), route, date, matchType: String(item.matchType || '').trim() }; }
 
 async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
   const learningKey = scopedLearningKey(userId, route), lockKey = scopedLearningKey(userId, route, 'lock'), token = createLockToken();
@@ -76,8 +112,7 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
       const target = byName.get(key(rawName)) || byCode.get(cleanCode(raw.baseCode || raw.code));
       const baseName = String(raw.baseName || raw.canonicalName || target?.name || '').trim(); if (!baseName || key(rawName) === key(baseName)) continue;
       const targetStore = target || base.find(store => key(store.name) === key(baseName)); if (!targetStore) continue;
-      const aliasKey = key(rawName), previous = learning.aliases[aliasKey], examples = Array.isArray(previous?.rawExamples) ? previous.rawExamples.filter(Boolean) : [];
-      if (!examples.includes(rawName)) examples.push(rawName);
+      const aliasKey = key(rawName), previous = learning.aliases[aliasKey], examples = Array.isArray(previous?.rawExamples) ? previous.rawExamples.filter(Boolean) : []; if (!examples.includes(rawName)) examples.push(rawName);
       learning.aliases[aliasKey] = { baseKey: key(targetStore.name), baseCode: String(targetStore.code || ''), baseName: targetStore.name, count: Math.max(1, Number(previous?.count) || 0) + 1, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, rawExamples: examples.slice(-3) };
     }
     pruneAliases(learning.aliases, 1000); learning.updatedAt = now; await redisSet(env, learningKey, learning);
@@ -86,7 +121,7 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
 
 async function saveHistory(env, userId, route, date, today) {
   const keyName = scopedKey(userId, route, `history:${date}`), old = await redisGet(env, keyName), list = Array.isArray(old) ? old : [];
-  const record = { orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle, count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: 0, duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, source: today.source, updatedAt: today.updatedAt };
+  const record = { orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle, count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: 0, duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, baseDatabaseAvailable: today.baseDatabaseAvailable !== false, source: today.source, updatedAt: today.updatedAt };
   const signature = historySignature(record), index = list.findIndex(item => historySignature(item) === signature); if (index >= 0) list[index] = record; else list.push(record);
   list.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || ''))); await redisSet(env, keyName, list.slice(0, 90));
 }
