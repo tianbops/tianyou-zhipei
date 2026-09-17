@@ -1,6 +1,7 @@
 // 天友智配One - 前端认证
 // 服务器 Session 是唯一身份来源；浏览器不保存密码、Session Token 或线路身份。
-const Auth = {
+// 使用 window.Auth 直接注册全局对象，避免部分浏览器/缓存环境出现 “Auth is not defined”。
+window.Auth = {
   serverUser: null,
   authPromise: null,
 
@@ -148,8 +149,7 @@ const Auth = {
 };
 
 // 兼容旧页面调用，但身份仍只来自服务器 Session。
-window.Auth = Auth;
-window.Authentication = Auth;
+window.Authentication = window.Auth;
 
 // 全站统一返回：优先返回智配One内部上一页；直接打开或外部进入时回到首页。
 (function setupSmartBack() {
