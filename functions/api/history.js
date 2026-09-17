@@ -1,8 +1,9 @@
-// 天友智配One - 用户独立历史查询 API
-// 历史数据按用户ID+线路+日期独立存储，账号之间互不读取。
+// Zhipei One - 用户独立历史查询 API
+// 历史数据按用户ID+线路+日期独立存储；允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
 
 const HISTORY_DAYS = 31;
+const FUTURE_DAYS = 1;
 
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
@@ -16,9 +17,7 @@ export async function onRequest({ request, env }) {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
     await purgeExpiredHistory(env, userId, route);
     if (!isWithinRetention(date)) return json([]);
-    const key = scopedKey(userId, route, `history:${date}`);
-    const result = await redisGet(env, key);
-    let records = Array.isArray(result) ? result : [];
+    const key = scopedKey(userId, route, `history:${date}`), result = await redisGet(env, key), records = Array.isArray(result) ? result : [];
     const { records: cleaned, changed } = dedupeHistory(filterRetention(records));
     if (changed || cleaned.length !== records.length) await redisSet(env, key, cleaned);
     return json(cleaned);
@@ -32,8 +31,7 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
   if (!isWithinRetention(date)) return json({ success: true, deleted: 0, date, expired: true });
   const key = scopedKey(userId, route, `history:${date}`), records = await redisGet(env, key);
   if (!Array.isArray(records) || !records.length) return json({ success: true, deleted: 0, date });
-  const current = dedupeHistory(filterRetention(records)).records;
-  const target = batchId ? current.find(item => String(item?.orderBatchId || '') === batchId) : null;
+  const current = dedupeHistory(filterRetention(records)).records, target = batchId ? current.find(item => String(item?.orderBatchId || '') === batchId) : null;
   if (!target) return json({ success: false, error: '未找到要删除的历史记录' }, 404);
   const signature = historySignature(target);
   if (!signature) return json({ success: false, error: '该历史记录数据无效，无法删除' }, 400);
@@ -49,16 +47,13 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
 }
 
 async function purgeExpiredHistory(env, userId, route) {
-  const today = businessDate(), cutoff = addDays(today, -(HISTORY_DAYS - 1));
-  const keys = await scanKeys(env, scopedKey(userId, route, 'history:*'));
+  const today = businessDate(), cutoff = addDays(today, -(HISTORY_DAYS - 1)), futureCutoff = addDays(today, FUTURE_DAYS), keys = await scanKeys(env, scopedKey(userId, route, 'history:*'));
   if (!keys.length) return;
   const commands = [];
   for (const key of keys) {
-    const marker = ':history:';
-    const date = normalizeDate(String(key).split(marker).pop());
-    if (!date || date < cutoff || date > today) { commands.push(['DEL', key]); continue; }
-    const raw = await redisGet(env, key), records = Array.isArray(raw) ? raw : [];
-    const filtered = filterRetention(records), cleaned = dedupeHistory(filtered).records;
+    const date = normalizeDate(String(key).split(':history:').pop());
+    if (!date || date < cutoff || date > futureCutoff) { commands.push(['DEL', key]); continue; }
+    const raw = await redisGet(env, key), records = Array.isArray(raw) ? raw : [], filtered = filterRetention(records), cleaned = dedupeHistory(filtered).records;
     if (!cleaned.length) commands.push(['DEL', key]);
     else if (cleaned.length !== records.length) commands.push(['SET', key, JSON.stringify(cleaned)]);
   }
@@ -79,13 +74,17 @@ async function scanKeys(env, pattern) {
 }
 
 function filterRetention(records) { return records.filter(item => isWithinRetention(normalizeDate(item?.date))); }
-function isWithinRetention(date) { const normalized = normalizeDate(date); if (!normalized) return false; const today = businessDate(); const target = new Date(`${normalized}T00:00:00+08:00`), current = new Date(`${today}T00:00:00+08:00`); const diffDays = Math.floor((current - target) / 86400000); return diffDays >= 0 && diffDays < HISTORY_DAYS; }
+function isWithinRetention(date) {
+  const normalized = normalizeDate(date); if (!normalized) return false;
+  const today = businessDate(), target = new Date(`${normalized}T00:00:00+08:00`), current = new Date(`${today}T00:00:00+08:00`), diffDays = Math.floor((current - target) / 86400000);
+  return diffDays >= -FUTURE_DAYS && diffDays < HISTORY_DAYS;
+}
 function dedupeHistory(input) { const map = new Map(); let changed = false; for (const item of input) { if (!item || typeof item !== 'object') { changed = true; continue; } const signature = historySignature(item); if (!signature) { changed = true; continue; } const old = map.get(signature); if (!old) map.set(signature, item); else { changed = true; if (compareUpdatedAt(item, old) > 0) map.set(signature, item); } } const records = Array.from(map.values()).sort((a, b) => compareUpdatedAt(b, a)); if (records.length !== input.length) changed = true; return { records, changed }; }
-function historySignature(record) { const route = String(record?.route || '').trim(), date = normalizeDate(record?.date), vehicle = String(record?.vehicle || '').trim().toLowerCase(), weight = normalizeWeight(record?.totalWeight ?? record?.weight); const orders = Array.isArray(record?.orders) ? record.orders : []; if (!date && !orders.length && !weight) return ''; const stores = orders.map(item => ({ name: normalizeStoreName(item?.name || item?.storeName || item?.shopName || item?.['门店名称']), weight: normalizeNumber(item?.weight) })).filter(item => item.name).sort((a, b) => `${a.name}|${a.weight}`.localeCompare(`${b.name}|${b.weight}`)); return JSON.stringify({ route, date, vehicle, weight, stores }); }
+function historySignature(record) { const route = String(record?.route || '').trim(), date = normalizeDate(record?.date), vehicle = String(record?.vehicle || '').trim().toLowerCase(), weight = normalizeWeight(record?.totalWeight ?? record?.weight), orders = Array.isArray(record?.orders) ? record.orders : []; if (!date && !orders.length && !weight) return ''; const stores = orders.map(item => ({ name: normalizeStoreName(item?.name || item?.storeName || item?.shopName || item?.['门店名称']), weight: normalizeNumber(item?.weight) })).filter(item => item.name).sort((a, b) => `${a.name}|${a.weight}`.localeCompare(`${b.name}|${b.weight}`)); return JSON.stringify({ route, date, vehicle, weight, stores }); }
 function todayOrderSignature(record) { return historySignature(record); }
 function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase(); }
 function normalizeNumber(value) { const n = Number(value); return Number.isFinite(n) ? Math.round(n * 1000000) / 1000000 : 0; }
-function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n < 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`; }
+function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n < 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; return `${(Math.round((tons + Number.EPSILON) * 1000000) / 1000000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`; }
 function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0) - (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
