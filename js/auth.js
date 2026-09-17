@@ -40,10 +40,10 @@ const Auth = {
   async checkAuth() {
     const page = location.pathname.split('/').pop();
     if (['index.html', 'login.html', ''].includes(page)) return true;
-    if (this.serverUser) return this.serverUser.route === '17号线';
+    if (this.serverUser?.route) return true;
     if (this.authPromise) return this.authPromise;
     this.authPromise = this.getCurrentServerUser().then(user => {
-      if (!user || user.route !== '17号线') {
+      if (!user?.route) {
         location.href = location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
         return false;
       }
@@ -55,8 +55,8 @@ const Auth = {
     return this.authPromise;
   },
 
-  getCurrentRoute() { return '17号线'; },
-  getCurrentUser() { return '17号线'; },
+  getCurrentRoute() { return this.serverUser?.route || ''; },
+  getCurrentUser() { return this.serverUser?.name || this.serverUser?.username || ''; },
 
   async logout() {
     this.serverUser = null;
@@ -71,7 +71,7 @@ const Auth = {
     return match ? `${String(parseInt(match[1] || match[2], 10)).padStart(2, '0')}号线` : value;
   },
 
-  isValidRouteCode(value) { return this.formatRouteCode(value) === '17号线'; }
+  isValidRouteCode(value) { return Boolean(this.formatRouteCode(value)); }
 };
 
 window.Auth = Auth;
