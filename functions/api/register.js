@@ -65,8 +65,10 @@ export async function onRequest({ request, env }) {
 async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' }, material, 256);
-  return `${base64(salt)}:${base64(new Uint8Array(bits))}`;
+  // Cloudflare Workers 当前 Web Crypto 对 PBKDF2 的迭代上限为 100000。
+  const iterations = 100000;
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, material, 256);
+  return `pbkdf2-sha256$${iterations}$${base64(salt)}:${base64(new Uint8Array(bits))}`;
 }
 
 async function redisCommand(env, command) {
