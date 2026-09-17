@@ -1,5 +1,5 @@
 // 天友智配One - 运单确认入库 API
-// 解析结果与正式订单分离：只有用户确认后的数据才能进入今日订单。
+// 解析结果与正式订单分离：只有用户确认后的数据才能进入正式订单。
 import { authRequired } from './_auth.js';
 
 const ROUTE = '17号线';
@@ -16,7 +16,12 @@ export async function onRequest({ request, env }) {
 
     const pending = body.orders.filter(item => item?.needsReview === true || item?.matchType === 'review' || String(item?.candidate || '').trim());
     if (pending.length) {
-      return json({ success: false, code: 'REVIEW_REQUIRED', error: `仍有 ${pending.length} 家疑似门店未确认`, review: pending.map(item => ({ name: item?.name || '', candidate: item?.candidate || '', matchScore: Number(item?.matchScore) || 0 })) }, 409);
+      return json({
+        success: false,
+        code: 'REVIEW_REQUIRED',
+        error: `仍有 ${pending.length} 家疑似门店未确认`,
+        review: pending.map(item => ({ name: item?.name || '', candidate: item?.candidate || '', matchScore: Number(item?.matchScore) || 0 }))
+      }, 409);
     }
 
     const date = normalizeDate(body.date) || businessDate();
@@ -44,10 +49,8 @@ export async function onRequest({ request, env }) {
 
     const todayKey = `today_orders:${ROUTE}:${date}`;
     await redisSet(env, todayKey, todayData);
-    const saved = await redisGet(env, todayKey);
-    if (!saved || saved.orderBatchId !== orderBatchId || !Array.isArray(saved.orders) || saved.orders.length !== orders.length) {
-      throw new Error('订单已提交但服务器未确认保存成功，请重试');
-    }
+    const saved = await readAfterWrite(env, todayKey, orderBatchId, orders.length);
+    if (!saved) throw new Error('服务器写入后校验失败，请重试');
 
     await saveHistory(env, date, saved);
     return json({ success: true, data: saved });
@@ -61,7 +64,12 @@ async function loadBase(env) {
   const raw = await redisGet(env, `route:${ROUTE}:base`);
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${ROUTE}独立基准数据库`);
-  return stores.map((store, index) => ({ name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(), code: String(store?.code || index + 1).padStart(2, '0'), nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(), routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1 })).filter(store => store.name);
+  return stores.map((store, index) => ({
+    name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
+    code: String(store?.code || index + 1).padStart(2, '0'),
+    nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(),
+    routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1
+  })).filter(store => store.name);
 }
 
 function canonicalizeOrders(input, base) {
@@ -91,35 +99,81 @@ function sortOrders(orders, base) {
 }
 
 function normalizeOrder(item, index, batchId, date) {
-  return { id: String(item.id || `${batchId}-${index + 1}`), orderBatchId: batchId, code: String(item.code || index + 1).padStart(2, '0'), name: String(item.name || '').trim(), nav: String(item.nav || '').trim(), weight: Number(item.weight) || 0, note: String(item.note || '').trim(), matched: item.matched === true, isNew: item.isNew === true, status: String(item.status || '待配送'), route: ROUTE, date };
+  return {
+    id: String(item.id || `${batchId}-${index + 1}`),
+    orderBatchId: batchId,
+    code: String(item.code || index + 1).padStart(2, '0'),
+    name: String(item.name || '').trim(),
+    nav: String(item.nav || '').trim(),
+    weight: Number(item.weight) || 0,
+    note: String(item.note || '').trim(),
+    matched: item.matched === true,
+    isNew: item.isNew === true,
+    status: String(item.status || '待配送'),
+    route: ROUTE,
+    date
+  };
 }
 
 async function saveHistory(env, date, today) {
-  const key = `history:${ROUTE}:${date}`;
-  const old = await redisGet(env, key);
+  const keyName = `history:${ROUTE}:${date}`;
+  const old = await redisGet(env, keyName);
   let list = Array.isArray(old) ? old : [];
-  const record = { orderBatchId: today.orderBatchId, date, route: ROUTE, vehicle: today.vehicle, count: today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, source: today.source, updatedAt: today.updatedAt };
+  const record = {
+    orderBatchId: today.orderBatchId,
+    date,
+    route: ROUTE,
+    vehicle: today.vehicle,
+    count: today.count,
+    weight: today.totalWeight,
+    totalWeight: today.totalWeight,
+    orders: today.orders,
+    matchedCount: today.matchedCount,
+    newStoreCount: today.newStoreCount,
+    recognizedCount: today.recognizedCount,
+    rawOrderCount: today.rawOrderCount,
+    source: today.source,
+    updatedAt: today.updatedAt
+  };
   const index = list.findIndex(item => item?.orderBatchId === today.orderBatchId);
   if (index >= 0) list[index] = record; else list.push(record);
   if (list.length > 90) list = list.slice(-90);
-  await redisSet(env, key, list);
+  await redisSet(env, keyName, list);
 }
 
-async function redisGet(env, key) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
+async function readAfterWrite(env, keyName, batchId, count) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const saved = await redisGet(env, keyName);
+    if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count) return saved;
+    if (attempt < 2) await wait(150 * (attempt + 1));
+  }
+  return null;
+}
+
+async function redisGet(env, keyName) {
+  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(keyName)}`, {
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+    cache: 'no-store'
+  });
   if (!response.ok) throw new Error('Redis读取失败');
   const data = await response.json().catch(() => ({}));
-  if (!data.result) return null;
+  if (data.result === null || data.result === undefined || data.result === '') return null;
   try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
 }
 
-async function redisSet(env, key, value) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(JSON.stringify(value)), cache: 'no-store' });
+async function redisSet(env, keyName, value) {
+  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(keyName)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(value),
+    cache: 'no-store'
+  });
   if (!response.ok) throw new Error('Redis保存失败');
   const data = await response.json().catch(() => ({}));
   if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认');
 }
 
+function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function key(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]{}]/g, '').toLowerCase(); }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
