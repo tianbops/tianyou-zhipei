@@ -20,18 +20,28 @@ export async function onRequest({ request, env }) {
     const result = matchTodayStores(parsed.stores, base, learning);
     if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
 
+    const diagnostics = buildDiagnostics(result, parsed.stores.length);
     return json({
       success: true,
       data: {
-        route, date: parsed.date, vehicle: parsed.vehicle,
-        totalWeight: normalizeWeight(parsed.totalWeight), totalVolume: parsed.totalVolume,
-        rawOrderCount: parsed.rawOrderCount, stores: result.stores,
-        storeCount: result.stores.length, uniqueStoreCount: result.uniqueStoreCount,
-        matchedCount: result.matchedCount, newStoreCount: result.newStoreCount,
-        reviewCount: result.reviewCount, duplicateCount: result.duplicateCount,
-        learnedCount: result.learnedCount, recognizedCount: parsed.stores.length,
+        route,
+        date: parsed.date,
+        vehicle: parsed.vehicle,
+        totalWeight: normalizeWeight(parsed.totalWeight),
+        totalVolume: parsed.totalVolume,
+        rawOrderCount: parsed.rawOrderCount,
+        stores: result.stores,
+        storeCount: result.stores.length,
+        uniqueStoreCount: result.uniqueStoreCount,
+        matchedCount: result.matchedCount,
+        newStoreCount: result.newStoreCount,
+        reviewCount: result.reviewCount,
+        duplicateCount: result.duplicateCount,
+        learnedCount: result.learnedCount,
+        recognizedCount: parsed.stores.length,
         matchStats: result.matchStats,
-        warning: result.reviewCount ? `发现 ${result.reviewCount} 家门店需要确认` : result.newStoreCount ? `发现 ${result.newStoreCount} 家新增门店，请核对` : result.duplicateCount ? `识别到 ${result.duplicateCount} 条重复门店记录，已合并` : ''
+        diagnostics,
+        warning: diagnostics.length ? diagnostics[0] : ''
       }
     });
   } catch (error) {
@@ -40,9 +50,25 @@ export async function onRequest({ request, env }) {
   }
 }
 
+function buildDiagnostics(result, recognizedCount) {
+  const diagnostics = [];
+  if (result.reviewCount) diagnostics.push(`有 ${result.reviewCount} 家门店需要确认`);
+  if (result.newStoreCount) diagnostics.push(`有 ${result.newStoreCount} 家新增门店`);
+  if (result.duplicateCount) diagnostics.push(`发现 ${result.duplicateCount} 条重复门店记录，已合并`);
+  if (!diagnostics.length && recognizedCount > 0) diagnostics.push('解析完成，全部门店已匹配当前线路基准库');
+  return diagnostics;
+}
+
 function parseDeterministic(text) {
   const source = normalizeOcrText(text);
-  return { date: extractDate(source), vehicle: extractVehicle(source), totalWeight: extractWeight(source), totalVolume: extractVolume(source), rawOrderCount: extractRawOrderCount(source), stores: extractStores(source) };
+  return {
+    date: extractDate(source),
+    vehicle: extractVehicle(source),
+    totalWeight: extractWeight(source),
+    totalVolume: extractVolume(source),
+    rawOrderCount: extractRawOrderCount(source),
+    stores: extractStores(source)
+  };
 }
 
 function normalizeOcrText(value) {
