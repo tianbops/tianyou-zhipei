@@ -22,7 +22,6 @@ const Auth = {
     return this.serverUser;
   },
 
-  getSessionToken() { return ''; },
   getAuthHeaders(extra = {}) { return { ...extra }; },
 
   async getCurrentServerUser() {
@@ -71,7 +70,7 @@ const Auth = {
     return match ? `${String(parseInt(match[1] || match[2], 10)).padStart(2, '0')}号线` : value;
   },
 
-  isValidRouteCode(value) { return Boolean(this.formatRouteCode(value)); }
+  isValidRouteCode(value) { return /^\d+$/.test(String(value || '').trim()) || /^\d+号线$/.test(String(value || '').trim()); }
 };
 
 window.Auth = Auth;
