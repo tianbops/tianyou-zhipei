@@ -98,3 +98,37 @@ const Auth = {
   isValidRouteCode(value) { return /^\d+$/.test(String(value || '').trim()) || /^\d+号线$/.test(String(value || '').trim()); }
 };
 window.Auth = Auth;
+
+// 全站统一返回：优先返回智配One内部上一页；直接打开或外部进入时回到首页。
+(function setupSmartBack() {
+  function isAppPage(url) {
+    try {
+      const target = new URL(url, location.href);
+      if (target.origin !== location.origin) return false;
+      const path = target.pathname.replace(/\\/g, '/');
+      return !/(^|\\/)index\\.html$/.test(path);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function fallbackHome() {
+    return location.pathname.includes('/pages/') ? '../home.html' : 'home.html';
+  }
+
+  function smartBack(event) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const referrer = document.referrer;
+    if (referrer && isAppPage(referrer) && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = fallbackHome();
+  }
+
+  document.addEventListener('click', event => {
+    const button = event.target.closest?.('.back-btn');
+    if (button) smartBack(event);
+  }, true);
+})();
