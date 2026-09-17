@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+  <meta name="theme-color" content="#05070A">
+  <title>账户设置 · 智配One</title>
+  <link rel="stylesheet" href="css/login.css">
+  <style>
+    .setup-tip{margin:-4px 0 18px;text-align:center;color:#7F8B98;font-size:13px;line-height:1.6}
+    .save-btn{width:100%;height:50px;margin-top:18px;border:0;border-radius:14px;background:#2457A6;color:#fff;font-size:17px;font-weight:600;cursor:pointer}
+    .save-btn:disabled{opacity:.6;cursor:not-allowed}
+    .logout-link{display:block;width:100%;margin-top:14px;border:0;background:none;color:#7F8B98;font-size:13px;cursor:pointer}
+    .required{color:#E74C3C}
+  </style>
+</head>
+<body>
+  <main class="login-container">
+    <section class="logo-area">
+      <img src="assets/logo.png" alt="天友乳业" class="logo">
+      <div class="brand-sub">配送路线优化引擎</div>
+    </section>
+
+    <section class="login-card">
+      <h1 class="form-title" style="margin:0 0 8px;text-align:center;font-size:22px;font-weight:700">账户设置</h1>
+      <div class="setup-tip">首次进入请完成资料设置，之后可随时修改。</div>
+      <div class="input-box"><input id="name" type="text" placeholder="姓名" autocomplete="name" maxlength="40"></div>
+      <div class="input-box"><input id="route" type="text" inputmode="numeric" placeholder="线路，例如 17号线" autocomplete="off"></div>
+      <div class="input-box"><input id="vehicle" type="text" placeholder="默认车辆（可选）" autocomplete="off" maxlength="30"></div>
+      <button class="save-btn" id="saveButton" onclick="saveProfile()">保存并进入</button>
+      <button class="logout-link" onclick="Auth.logout()">退出登录</button>
+      <div id="error" style="color:#E74C3C;font-size:14px;text-align:center;margin-top:12px;display:none"></div>
+    </section>
+  </main>
+
+  <script src="js/auth.js"></script>
+  <script>
+    function showError(message){const el=document.getElementById('error');el.textContent=message;el.style.display='block'}
+    function hideError(){const el=document.getElementById('error');el.textContent='';el.style.display='none'}
+    async function init(){
+      try{
+        const user=await Auth.getProfile();
+        document.getElementById('name').value=user?.name||'';
+        document.getElementById('route').value=user?.route||'';
+        document.getElementById('vehicle').value=user?.vehicle||'';
+      }catch(error){
+        if(error.status===401){location.href='index.html';return;}
+        showError(error.message||'资料读取失败，请稍后重试');
+      }
+    }
+    async function saveProfile(){
+      const name=document.getElementById('name').value.trim();
+      const route=document.getElementById('route').value.trim();
+      const vehicle=document.getElementById('vehicle').value.trim();
+      const button=document.getElementById('saveButton');
+      hideError();
+      if(!name)return showError('请输入姓名');
+      if(!Auth.isValidRouteCode(route))return showError('请输入有效线路，例如 17号线');
+      button.disabled=true;button.textContent='保存中…';
+      try{await Auth.updateProfile({name,route,vehicle});location.href='home.html';}
+      catch(error){showError(error.message||'保存失败，请稍后重试');}
+      finally{button.disabled=false;button.textContent='保存并进入';}
+    }
+    init();
+  </script>
+</body>
+</html>
