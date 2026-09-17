@@ -1,15 +1,14 @@
 // 天友智配One - 运单确认入库 API
-// 只有用户确认后的数据才能进入正式订单；原始记录数与最终唯一门店数分开保存。
+// 只有用户确认后的数据才能进入正式订单；线路数据完全按服务器会话隔离。
 import { authRequired } from './_auth.js';
-
-const ROUTE = '17号线';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
-  const session = await authRequired(request, env, { route: ROUTE });
-  if (!session) return json({ success: false, error: '登录已失效或无权限' }, 401);
+  const session = await authRequired(request, env);
+  if (!session?.route) return json({ success: false, error: '登录已失效或无权限' }, 401);
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: 'Redis not configured' }, 500);
 
+  const route = session.route;
   try {
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
@@ -17,19 +16,19 @@ export async function onRequest({ request, env }) {
     if (pending.length) return json({ success: false, code: 'REVIEW_REQUIRED', error: `仍有 ${pending.length} 家疑似门店未确认`, review: pending.map(item => ({ name: item?.name || '', candidate: item?.candidate || '', matchScore: Number(item?.matchScore) || 0 })) }, 409);
 
     const date = normalizeDate(body.date) || businessDate();
-    const base = await loadBase(env);
+    const base = await loadBase(env, route);
     const inputCount = body.orders.length;
     const canonical = canonicalizeOrders(body.orders, base);
     const duplicateCount = countDuplicates(canonical);
-    const uniqueCanonical = dedupeCanonical(canonical, base);
-    const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date);
-    const orders = sortOrders(uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date)), base);
+    const uniqueCanonical = dedupeCanonical(canonical);
+    const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
+    const orders = sortOrders(uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route)), base);
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
     if (!totalWeight) return json({ success: false, code: 'WEIGHT_MISSING', error: '未识别到商品总量，请重新解析后再确认' }, 422);
 
     const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || inputCount;
     const todayData = {
-      orderBatchId, date, route: ROUTE,
+      orderBatchId, date, route,
       vehicle: String(body.vehicle || '').trim() || session.vehicle || '',
       orders, totalWeight,
       count: orders.length,
@@ -44,11 +43,11 @@ export async function onRequest({ request, env }) {
       updatedAt: new Date().toISOString()
     };
 
-    const todayKey = `today_orders:${ROUTE}:${date}`;
+    const todayKey = `today_orders:${route}:${date}`;
     await redisSet(env, todayKey, todayData);
     const saved = await readAfterWrite(env, todayKey, orderBatchId, orders.length);
     if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
-    await saveHistory(env, date, saved);
+    await saveHistory(env, route, date, saved);
     return json({ success: true, data: saved });
   } catch (error) {
     console.error('confirm api error', error);
@@ -56,10 +55,10 @@ export async function onRequest({ request, env }) {
   }
 }
 
-async function loadBase(env) {
-  const raw = await redisGet(env, `route:${ROUTE}:base`);
+async function loadBase(env, route) {
+  const raw = await redisGet(env, `route:${route}:base`);
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
-  if (!stores.length) throw new Error(`未找到${ROUTE}独立基准数据库`);
+  if (!stores.length) throw new Error(`未找到${route}独立基准数据库`);
   return stores.map((store, index) => ({
     name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
     code: String(store?.code || index + 1).padStart(2, '0'),
@@ -118,15 +117,15 @@ function sortOrders(orders, base) {
   return matched.concat(news).map(({ routeOrder, _baseIndex, ...item }) => item);
 }
 
-function normalizeOrder(item, index, batchId, date) {
-  return { id: String(item.id || `${batchId}-${index + 1}`), orderBatchId: batchId, code: String(item.code || index + 1).padStart(2, '0'), name: String(item.name || '').trim(), nav: String(item.nav || '').trim(), weight: Number(item.weight) || 0, note: String(item.note || '').trim(), matched: item.matched === true, isNew: item.isNew === true, status: String(item.status || '待配送'), route: ROUTE, date };
+function normalizeOrder(item, index, batchId, date, route) {
+  return { id: String(item.id || `${batchId}-${index + 1}`), orderBatchId: batchId, code: String(item.code || index + 1).padStart(2, '0'), name: String(item.name || '').trim(), nav: String(item.nav || '').trim(), weight: Number(item.weight) || 0, note: String(item.note || '').trim(), matched: item.matched === true, isNew: item.isNew === true, status: String(item.status || '待配送'), route, date };
 }
 
-async function saveHistory(env, date, today) {
-  const keyName = `history:${ROUTE}:${date}`;
+async function saveHistory(env, route, date, today) {
+  const keyName = `history:${route}:${date}`;
   const old = await redisGet(env, keyName);
   let list = Array.isArray(old) ? old : [];
-  const record = { orderBatchId: today.orderBatchId, date, route: ROUTE, vehicle: today.vehicle, count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: today.reviewCount || 0, duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, source: today.source, updatedAt: today.updatedAt };
+  const record = { orderBatchId: today.orderBatchId, date, route, vehicle: today.vehicle, count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: today.reviewCount || 0, duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, source: today.source, updatedAt: today.updatedAt };
   const index = list.findIndex(item => item?.orderBatchId === today.orderBatchId);
   if (index >= 0) list[index] = record; else list.push(record);
   if (list.length > 90) list = list.slice(-90);
@@ -143,5 +142,5 @@ function normalizeDate(value) { const s = String(value || '').trim().replace(/[�
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''); const m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`; }
 function resolveTotalWeight(value, rawText) { const direct = normalizeWeight(value); if (direct) return direct; const source = String(rawText || '').replace(/\s+/g, ' '); const match = source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/([\d]+(?:\.\d+)?)\s*(?:kg|千克|公斤|吨|t)\b/i); return match ? normalizeWeight(`${match[1]}${match[2] || ''}`) : ''; }
-function createBatchId(date) { return `${date}-${ROUTE.replace(/\D/g, '')}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
+function createBatchId(date, route) { return `${date}-${route.replace(/\D/g, '')}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json;charset=UTF-8', 'Cache-Control': 'no-store' } }); }
