@@ -18,12 +18,22 @@ const Auth = {
   },
 
   async register(payload) {
-    const response = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', credentials: 'same-origin', body: JSON.stringify(payload || {}) });
-    const data = await response.json().catch(() => ({}));
+    let response;
+    let data = {};
+    try {
+      response = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', credentials: 'same-origin', body: JSON.stringify(payload || {}) });
+      data = await response.json().catch(() => ({}));
+    } catch (networkError) {
+      const error = new Error(`注册请求失败：${networkError?.message || '网络异常'}`);
+      error.status = 0;
+      throw error;
+    }
     if (!response.ok || !data?.success) {
-      const error = new Error(data?.error || '注册失败');
+      const detail = String(data?.detail || '').trim();
+      const message = detail ? `${data?.error || '注册失败'}：${detail}` : (data?.error || `注册失败（HTTP ${response.status}）`);
+      const error = new Error(message);
       error.status = response.status;
-      error.detail = data?.detail || '';
+      error.detail = detail;
       throw error;
     }
     this.serverUser = data.user || null;
