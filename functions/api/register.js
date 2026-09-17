@@ -91,12 +91,14 @@ async function redisSetNx(env, key, value) {
 }
 
 async function redisSet(env, key, value) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
-    method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(value), cache: 'no-store'
+  const encodedValue = encodeURIComponent(JSON.stringify(value));
+  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodedValue}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+    cache: 'no-store'
   });
   const data = await response.json().catch(() => ({}));
-  return response.ok && (data.result === undefined || data.result === 'OK');
+  return response.ok && data.result === 'OK';
 }
 
 async function redisDelete(env, key) {
