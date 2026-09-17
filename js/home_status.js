@@ -34,8 +34,7 @@
       const toast = $('homeToast');
       if (!toast) return;
       const message = String(toast.textContent || '').trim();
-      const visible = toast.classList.contains('show');
-      if (visible && message) setError(message);
+      if (toast.classList.contains('show') && message) setError(message);
       toast.classList.remove('show');
     };
 
@@ -61,5 +60,6 @@
     observeStatus();
     observeToast();
     observePageError();
+    window.homeToast = (message) => setError(message);
   }, { once: true });
 })();
