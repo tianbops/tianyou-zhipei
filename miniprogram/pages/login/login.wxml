@@ -7,7 +7,9 @@
   <view class="card">
     <input class="input" value="{{username}}" placeholder="账号" bindinput="onUsername" />
     <input class="input" value="{{password}}" password placeholder="密码" bindinput="onPassword" />
-    <button class="button primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">登录</button>
+    <button class="button primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">账号登录</button>
+    <view class="divider"><text>或</text></view>
+    <button class="button wechat" loading="{{wxLoading}}" disabled="{{loading}}" bindtap="wechatLogin">微信登录</button>
     <view wx:if="{{error}}" class="error">{{error}}</view>
   </view>
 </view>
