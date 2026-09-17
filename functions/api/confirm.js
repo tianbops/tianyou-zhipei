@@ -1,39 +1,47 @@
 // 天友智配One - 用户独立运单确认入库 API
-// 正式订单、历史记录、学习数据均以当前登录用户为边界。
 import { authRequired } from './_auth.js';
+
+const REDIS_TIMEOUT_MS = 8000;
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
   const session = await authRequired(request, env);
   if (!session?.route || !session?.id) return json({ success: false, error: '登录已失效或权限信息不完整' }, 401);
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: 'Redis not configured' }, 500);
-  const route = normalizeRoute(session.route), userId = normalizeUserId(session.id);
+
+  const route = normalizeRoute(session.route);
+  const userId = normalizeUserId(session.id);
   try {
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
+
     const pending = body.orders.filter(item => item?.needsReview === true || item?.matchType === 'review' || String(item?.candidate || '').trim());
-    if (pending.length) return json({ success: false, code: 'REVIEW_REQUIRED', error: `仍有 ${pending.length} 家疑似门店未确认`, review: pending.map(item => ({ name: item?.name || '', candidate: item?.candidate || '', matchScore: Number(item?.matchScore) || 0 })) }, 409);
+    if (pending.length) return json({
+      success: false,
+      code: 'REVIEW_REQUIRED',
+      error: `仍有 ${pending.length} 家疑似门店未确认`,
+      review: pending.map(item => ({ name: item?.name || '', candidate: item?.candidate || '', matchScore: Number(item?.matchScore) || 0 }))
+    }, 409);
 
     const date = normalizeDate(body.date) || businessDate();
     const noBase = body.baseDatabaseAvailable === false;
     const base = noBase ? [] : await loadBase(env, route);
     const inputCount = body.orders.length;
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
-    const duplicateCount = countDuplicates(canonical), uniqueCanonical = dedupeCanonical(canonical);
+    const duplicateCount = countDuplicates(canonical);
+    const uniqueCanonical = dedupeCanonical(canonical);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
     const normalized = uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route));
     const orders = noBase ? normalizeRawOrderList(normalized) : sortOrders(normalized, base);
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
     if (!totalWeight) return json({ success: false, code: 'WEIGHT_MISSING', error: '未识别到商品总量，请重新解析后再确认' }, 422);
+
     const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || inputCount;
+    const now = new Date().toISOString();
     const todayData = {
-      orderBatchId,
-      date,
-      route,
-      userId,
+      orderBatchId, date, route, userId,
       vehicle: String(body.vehicle || '').trim() || session.vehicle || '',
-      orders,
-      totalWeight,
+      orders, totalWeight,
       count: orders.length,
       uniqueStoreCount: orders.length,
       matchedCount: noBase ? 0 : orders.filter(item => item.matched).length,
@@ -44,10 +52,12 @@ export async function onRequest({ request, env }) {
       rawOrderCount,
       baseDatabaseAvailable: !noBase,
       source: String(body.source || 'web-confirm'),
-      updatedAt: new Date().toISOString()
+      updatedAt: now
     };
+
     const todayKey = scopedKey(userId, route, `today:${date}`);
-    const lockKey = scopedKey(userId, route, `lock:${date}`), token = createLockToken();
+    const lockKey = scopedKey(userId, route, `lock:${date}`);
+    const token = createLockToken();
     if (!(await acquireLock(env, lockKey, token, 15))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试' }, 409);
     try {
       await redisSet(env, todayKey, todayData);
@@ -57,7 +67,9 @@ export async function onRequest({ request, env }) {
       await saveHistory(env, userId, route, date, saved);
       await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt });
       return json({ success: true, data: saved });
-    } finally { await releaseLock(env, lockKey, token).catch(() => {}); }
+    } finally {
+      await releaseLock(env, lockKey, token).catch(() => {});
+    }
   } catch (error) {
     console.error('confirm api error', error);
     return json({ success: false, error: error?.message || '确认入库失败' }, 503);
@@ -65,9 +77,17 @@ export async function onRequest({ request, env }) {
 }
 
 async function loadBase(env, route) {
-  const raw = await redisGet(env, `route:${route}:base`), stores = Array.isArray(raw?.stores) ? raw.stores : [];
+  const raw = await redisGet(env, `route:${route}:base`);
+  const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${route}独立基准数据库`);
-  return stores.map((store, index) => ({ name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(), code: String(store?.code || index + 1).padStart(2, '0'), nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(), note: String(store?.note || store?.['备注'] || '').trim(), routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1, index })).filter(store => store.name);
+  return stores.map((store, index) => ({
+    name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
+    code: String(store?.code || index + 1).padStart(2, '0'),
+    nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(),
+    note: String(store?.note || store?.['备注'] || '').trim(),
+    routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1,
+    index
+  })).filter(store => store.name);
 }
 
 function canonicalizeRawOrders(input) {
@@ -78,55 +98,146 @@ function canonicalizeRawOrders(input) {
   }).filter(item => item.name);
 }
 
+function canonicalizeOrders(input, base) {
+  const byName = new Map(base.map(store => [key(store.name), store]));
+  const byCode = new Map(base.map(store => [String(store.code), store]));
+  return input.map(item => {
+    const raw = typeof item === 'string' ? { name: item } : (item || {});
+    const name = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
+    const parserMatched = raw.matched === true && raw.isNew !== true && raw.needsReview !== true;
+    const parserNew = raw.isNew === true || raw.newStore === true;
+    const hit = byName.get(key(name)) || byCode.get(String(raw.baseCode || raw.code || ''));
+    if (parserMatched) return { ...raw, name: hit?.name || name, code: hit?.code || raw.code || '', nav: hit?.nav || raw.nav || '', note: hit?.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: raw.matchType || 'confirmed', matchScore: Number(raw.matchScore) || 1, _baseIndex: hit?.index };
+    if (parserNew) return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
+    if (hit) return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
+    return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
+  }).filter(item => item.name);
+}
+
+function dedupeCanonical(items) {
+  const seen = new Set();
+  const output = [];
+  for (const item of items) {
+    const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`;
+    if (!key(item.name) || seen.has(identity)) continue;
+    seen.add(identity);
+    output.push(item);
+  }
+  return output;
+}
+
+function countDuplicates(items) {
+  const seen = new Set();
+  let count = 0;
+  for (const item of items) {
+    const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`;
+    if (seen.has(identity)) count++;
+    else seen.add(identity);
+  }
+  return count;
+}
+
+function sortOrders(orders, base) {
+  const rank = new Map(base.map((store, index) => [store.index, Number(store.routeOrder) || index + 1]));
+  const matched = [];
+  const news = [];
+  for (const item of orders) {
+    const routeOrder = item._baseIndex != null ? rank.get(item._baseIndex) : null;
+    if (routeOrder == null && item.matched !== true) news.push({ ...item, isNew: true, matched: false });
+    else matched.push({ ...item, routeOrder: routeOrder ?? Number.MAX_SAFE_INTEGER, isNew: false, matched: true });
+  }
+  matched.sort((a, b) => a.routeOrder - b.routeOrder);
+  matched.forEach((item, index) => { item.code = String(index + 1).padStart(2, '0'); });
+  news.forEach((item, index) => { item.code = `N${String(index + 1).padStart(2, '0')}`; });
+  return matched.concat(news).map(({ routeOrder, _baseIndex, ...item }) => item);
+}
+
 function normalizeRawOrderList(orders) {
   return orders.map((item, index) => ({ ...item, code: String(index + 1).padStart(2, '0'), matched: false, isNew: false, matchType: 'raw-order' }));
 }
 
-function canonicalizeOrders(input, base) {
-  const byName = new Map(base.map(store => [key(store.name), store])), byCode = new Map(base.map(store => [String(store.code), store]));
-  return input.map(item => {
-    const raw = typeof item === 'string' ? { name: item } : (item || {}), name = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
-    const parserMatched = raw.matched === true && raw.isNew !== true && raw.needsReview !== true, parserNew = raw.isNew === true || raw.newStore === true, hit = byName.get(key(name)) || byCode.get(String(raw.baseCode || raw.code || ''));
-    if (parserMatched) return { ...raw, name: hit?.name || name, code: hit?.code || raw.code || '', nav: hit?.nav || raw.nav || '', note: hit?.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: raw.matchType || 'confirmed', matchScore: Number(raw.matchScore) || 1, _baseIndex: hit?.index };
-    if (parserNew) return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new' };
-    if (hit) return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
-    return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new' };
-  });
+function normalizeOrder(item, index, batchId, date, route) {
+  return {
+    id: String(item.id || `${batchId}-${index + 1}`),
+    orderBatchId: batchId,
+    code: String(item.code || index + 1).padStart(2, '0'),
+    name: String(item.name || '').trim(),
+    nav: String(item.nav || '').trim(),
+    weight: Number(item.weight) || 0,
+    note: String(item.note || '').trim(),
+    matched: item.matched === true,
+    isNew: item.isNew === true,
+    status: String(item.status || '待配送'),
+    route, date,
+    matchType: String(item.matchType || '').trim()
+  };
 }
 
-function dedupeCanonical(items) { const seen = new Set(), output = []; for (const item of items) { const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`; if (!identity || seen.has(identity)) continue; seen.add(identity); output.push(item); } return output; }
-function countDuplicates(items) { const seen = new Set(); let count = 0; for (const item of items) { const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`; if (seen.has(identity)) count++; else seen.add(identity); } return count; }
-function sortOrders(orders, base) { const rank = new Map(base.map((store, index) => [store.index, Number(store.routeOrder) || index + 1])), matched = [], news = []; for (const item of orders) { const routeOrder = item._baseIndex != null ? rank.get(item._baseIndex) : null; if (routeOrder == null && item.matched !== true) news.push({ ...item, isNew: true, matched: false }); else matched.push({ ...item, routeOrder: routeOrder ?? Number.MAX_SAFE_INTEGER, isNew: false, matched: true }); } matched.sort((a, b) => a.routeOrder - b.routeOrder); matched.forEach((item, index) => { item.code = String(index + 1).padStart(2, '0'); }); news.forEach((item, index) => { item.code = `N${String(index + 1).padStart(2, '0')}`; }); return matched.concat(news).map(({ routeOrder, _baseIndex, ...item }) => item); }
-function normalizeOrder(item, index, batchId, date, route) { return { id: String(item.id || `${batchId}-${index + 1}`), orderBatchId: batchId, code: String(item.code || index + 1).padStart(2, '0'), name: String(item.name || '').trim(), nav: String(item.nav || '').trim(), weight: Number(item.weight) || 0, note: String(item.note || '').trim(), matched: item.matched === true, isNew: item.isNew === true, status: String(item.status || '待配送'), route, date, matchType: String(item.matchType || '').trim() }; }
-
 async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
-  const learningKey = scopedLearningKey(userId, route), lockKey = scopedLearningKey(userId, route, 'lock'), token = createLockToken();
+  const learningKey = scopedLearningKey(userId, route);
+  const lockKey = scopedLearningKey(userId, route, 'lock');
+  const token = createLockToken();
   if (!(await acquireLock(env, lockKey, token, 10))) return;
   try {
-    const learning = await getLearning(env, learningKey); learning.version = 4; learning.userId = userId; learning.route = route; learning.aliases = learning.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
-    const byName = new Map(base.map(store => [key(store.name), store])), byCode = new Map(base.map(store => [String(store.code), store])), now = new Date().toISOString();
+    const learning = await getLearning(env, learningKey);
+    learning.version = 4;
+    learning.userId = userId;
+    learning.route = route;
+    learning.aliases = learning.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
+    const byName = new Map(base.map(store => [key(store.name), store]));
+    const byCode = new Map(base.map(store => [String(store.code), store]));
+    const now = new Date().toISOString();
     for (const rawItem of inputOrders) {
       const raw = typeof rawItem === 'string' ? { name: rawItem } : (rawItem || {});
       if (raw.isNew === true || raw.newStore === true || raw.needsReview === true || raw.matchType === 'review') continue;
-      const rawName = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim(); if (!rawName) continue;
+      const rawName = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
+      if (!rawName) continue;
       const target = byName.get(key(rawName)) || byCode.get(cleanCode(raw.baseCode || raw.code));
-      const baseName = String(raw.baseName || raw.canonicalName || target?.name || '').trim(); if (!baseName || key(rawName) === key(baseName)) continue;
-      const targetStore = target || base.find(store => key(store.name) === key(baseName)); if (!targetStore) continue;
-      const aliasKey = key(rawName), previous = learning.aliases[aliasKey], examples = Array.isArray(previous?.rawExamples) ? previous.rawExamples.filter(Boolean) : []; if (!examples.includes(rawName)) examples.push(rawName);
+      const baseName = String(raw.baseName || raw.canonicalName || target?.name || '').trim();
+      if (!baseName || key(rawName) === key(baseName)) continue;
+      const targetStore = target || base.find(store => key(store.name) === key(baseName));
+      if (!targetStore) continue;
+      const aliasKey = key(rawName);
+      const previous = learning.aliases[aliasKey];
+      const examples = Array.isArray(previous?.rawExamples) ? previous.rawExamples.filter(Boolean) : [];
+      if (!examples.includes(rawName)) examples.push(rawName);
       learning.aliases[aliasKey] = { baseKey: key(targetStore.name), baseCode: String(targetStore.code || ''), baseName: targetStore.name, count: Math.max(1, Number(previous?.count) || 0) + 1, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, rawExamples: examples.slice(-3) };
     }
-    pruneAliases(learning.aliases, 1000); learning.updatedAt = now; await redisSet(env, learningKey, learning);
-  } finally { await releaseLock(env, lockKey, token).catch(() => {}); }
+    pruneAliases(learning.aliases, 1000);
+    learning.updatedAt = now;
+    await redisSet(env, learningKey, learning);
+  } finally {
+    await releaseLock(env, lockKey, token).catch(() => {});
+  }
 }
 
 async function saveHistory(env, userId, route, date, today) {
-  const keyName = scopedKey(userId, route, `history:${date}`), old = await redisGet(env, keyName), list = Array.isArray(old) ? old : [];
-  const record = { orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle, count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: 0, duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, baseDatabaseAvailable: today.baseDatabaseAvailable !== false, source: today.source, updatedAt: today.updatedAt };
-  const signature = historySignature(record), index = list.findIndex(item => historySignature(item) === signature); if (index >= 0) list[index] = record; else list.push(record);
-  list.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || ''))); await redisSet(env, keyName, list.slice(0, 90));
+  const keyName = scopedKey(userId, route, `history:${date}`);
+  const old = await redisGet(env, keyName);
+  const list = Array.isArray(old) ? old : [];
+  const record = {
+    orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle,
+    count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count,
+    weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders,
+    matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: 0,
+    duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount,
+    rawOrderCount: today.rawOrderCount, baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
+    source: today.source, updatedAt: today.updatedAt
+  };
+  const signature = historySignature(record);
+  const index = list.findIndex(item => historySignature(item) === signature);
+  if (index >= 0) list[index] = record;
+  else list.push(record);
+  list.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
+  await redisSet(env, keyName, list.slice(0, 90));
 }
 
-async function getLearning(env, keyName) { const data = await redisGet(env, keyName); if (!data || typeof data !== 'object') return { version: 4, aliases: {} }; return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} }; }
+async function getLearning(env, keyName) {
+  const data = await redisGet(env, keyName);
+  if (!data || typeof data !== 'object') return { version: 4, aliases: {} };
+  return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
+}
+
 function scopedKey(userId, route, suffix) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:orders:${suffix}`; }
 function scopedLearningKey(userId, route, suffix = '') { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:learning${suffix ? `:${suffix}` : ''}`; }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
@@ -138,14 +249,15 @@ function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'A
 function normalizeRoute(value) { const s = String(value || '').trim(), m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`; }
-function resolveTotalWeight(value, rawText) { const direct = normalizeWeight(value); if (direct) return direct; const source = String(rawText || '').replace(/\s+/g, ' '), match = source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)\b/i); return match ? normalizeWeight(`${match[1]}${match[2] || ''}`) : ''; }
+function resolveTotalWeight(value, rawText) { const direct = normalizeWeight(value); if (direct) return direct; const source = String(rawText || '').replace(/\s+/g, ' '); const match = source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)\b/i); return match ? normalizeWeight(`${match[1]}${match[2] || ''}`) : ''; }
 function historySignature(record) { const stores = Array.isArray(record?.orders) ? record.orders.map(item => key(item?.name)).filter(Boolean).sort() : []; return JSON.stringify({ route: String(record?.route || ''), date: String(record?.date || ''), vehicle: String(record?.vehicle || ''), weight: normalizeWeight(record?.totalWeight ?? record?.weight), stores }); }
 async function readAfterWrite(env, keyName, batchId, count) { for (let attempt = 0; attempt < 3; attempt++) { const saved = await redisGet(env, keyName); if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count && normalizeWeight(saved.totalWeight)) return saved; if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1))); } return null; }
 function pruneAliases(aliases, limit) { const entries = Object.entries(aliases); if (entries.length <= limit) return; entries.sort((a, b) => String(a[1]?.updatedAt || '').localeCompare(String(b[1]?.updatedAt || ''))); for (const [alias] of entries.slice(0, entries.length - limit)) delete aliases[alias]; }
 function createBatchId(date, route) { return `${date}-${route.replace(/\D/g, '')}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
 function createLockToken() { return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.() || ''}`; }
-async function acquireLock(env, keyName, token, seconds) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(keyName)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) return false; const data = await response.json().catch(() => ({})); return data.result === 'OK'; }
-async function releaseLock(env, keyName, token) { const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"; await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, keyName, token]), cache: 'no-store' }); }
-async function redisGet(env, keyName) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(keyName)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis读取失败'); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
-async function redisSet(env, keyName, value) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(keyName)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(value), cache: 'no-store' }); if (!response.ok) throw new Error('Redis保存失败'); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
+async function acquireLock(env, keyName, token, seconds) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST' }); if (!response.ok) return false; const data = await response.json().catch(() => ({})); return data.result === 'OK'; }
+async function releaseLock(env, keyName, token) { const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"; await redisFetch(env, '/eval', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, keyName, token]) }); }
+async function redisFetch(env, path, options = {}) { const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, ''); if (!base) throw new Error('Redis URL 未配置'); const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), REDIS_TIMEOUT_MS); try { return await fetch(`${base}${path}`, { ...options, headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, ...(options.headers || {}) }, cache: 'no-store', signal: controller.signal }); } catch (error) { if (error?.name === 'AbortError') throw new Error('Redis 请求超时'); throw new Error(`Redis 网络请求失败：${error?.message || 'unknown error'}`); } finally { clearTimeout(timer); } }
+async function redisGet(env, keyName) { const response = await redisFetch(env, `/get/${encodeURIComponent(keyName)}`); if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
+async function redisSet(env, keyName, value) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }); if (!response.ok) throw new Error(`Redis保存失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
