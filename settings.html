@@ -1,67 +1,98 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-  <meta name="theme-color" content="#05070A">
-  <title>账户设置 · 智配One</title>
-  <link rel="stylesheet" href="css/login.css">
-  <style>
-    .setup-tip{margin:-4px 0 18px;text-align:center;color:#7F8B98;font-size:13px;line-height:1.6}
-    .save-btn{width:100%;height:50px;margin-top:18px;border:0;border-radius:14px;background:#2457A6;color:#fff;font-size:17px;font-weight:600;cursor:pointer}
-    .save-btn:disabled{opacity:.6;cursor:not-allowed}
-    .logout-link{display:block;width:100%;margin-top:14px;border:0;background:none;color:#7F8B98;font-size:13px;cursor:pointer}
-    .required{color:#E74C3C}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="theme-color" content="#05070A">
+<title>账户设置 · 智配One</title>
+<link rel="stylesheet" href="css/login.css">
+<style>
+*{box-sizing:border-box}
+body{background:#05070A;color:#fff;font-family:"Microsoft YaHei",Arial,sans-serif;min-height:100vh}
+.settings-page{width:100%;max-width:520px;min-height:100dvh;margin:0 auto;padding:18px 16px 30px;overflow-y:auto}
+.settings-header{height:52px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.back-btn{width:40px;height:40px;border:0;border-radius:13px;background:#18212B;color:#fff;font-size:20px;cursor:pointer}
+.header-title{font-size:18px;font-weight:700;letter-spacing:.5px}
+.header-placeholder{width:40px}
+.profile-hero{background:linear-gradient(145deg,#18212B,#111820);border:1px solid rgba(255,255,255,.05);border-radius:22px;padding:22px 20px;margin-bottom:14px;box-shadow:0 12px 30px rgba(0,0,0,.18)}
+.avatar{width:58px;height:58px;border-radius:18px;background:#2457A6;display:flex;align-items:center;justify-content:center;font-size:25px;font-weight:700;margin-bottom:15px}
+.profile-name{font-size:21px;font-weight:700}
+.profile-account{margin-top:5px;color:#7F8B98;font-size:12px}
+.section-card{background:#18212B;border-radius:20px;padding:18px;margin-bottom:14px;border:1px solid rgba(255,255,255,.04)}
+.section-title{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.section-title span{font-size:17px}
+.field{margin-bottom:11px}
+.field:last-child{margin-bottom:0}
+.field-label{display:block;color:#7F8B98;font-size:12px;margin:0 3px 7px}
+.input-wrap{position:relative}
+.input-wrap input{width:100%;height:48px;padding:0 45px 0 14px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#10161D;color:#fff;outline:none;font-size:15px}
+.input-wrap input:focus{border-color:#2457A6;box-shadow:0 0 0 2px rgba(36,87,166,.15)}
+.input-wrap input::placeholder{color:#566473}
+.eye{position:absolute;right:10px;top:7px;width:34px;height:34px;border:0;background:none;color:#7F8B98;font-size:17px;cursor:pointer}
+.route-row{display:flex;gap:10px}
+.route-row .field{flex:1}
+.save-btn{width:100%;height:48px;border:0;border-radius:14px;background:#2457A6;color:#fff;font-size:16px;font-weight:700;cursor:pointer;margin-top:15px}
+.save-btn:disabled{opacity:.55;cursor:not-allowed}
+.password-btn{width:100%;height:46px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#10161D;color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px}
+.password-btn:hover{background:#141C25}
+.notice{font-size:11px;color:#697786;line-height:1.6;margin:9px 2px 0}
+.message{display:none;border-radius:11px;padding:10px 12px;font-size:12px;line-height:1.5;margin-top:12px}
+.message.error{display:block;background:rgba(231,76,60,.10);color:#FF8F84;border:1px solid rgba(231,76,60,.15)}
+.message.success{display:block;background:rgba(39,174,96,.10);color:#76D59D;border:1px solid rgba(39,174,96,.15)}
+.logout-btn{width:100%;height:46px;border:1px solid rgba(255,176,32,.16);border-radius:13px;background:rgba(255,176,32,.05);color:#FFB020;font-size:14px;cursor:pointer;margin-top:2px}
+.hidden{display:none!important}
+@media(max-width:380px){.settings-page{padding-left:12px;padding-right:12px}.section-card{padding:15px}.profile-hero{padding:19px 17px}.route-row{display:block}.route-row .field{margin-bottom:11px}}
+</style>
 </head>
 <body>
-  <main class="login-container">
-    <section class="logo-area">
-      <img src="assets/logo.png" alt="天友乳业" class="logo">
-      <div class="brand-sub">配送路线优化引擎</div>
-    </section>
+<main class="settings-page">
+  <header class="settings-header">
+    <button class="back-btn" onclick="goBack()" aria-label="返回">‹</button>
+    <div class="header-title">账户设置</div>
+    <div class="header-placeholder"></div>
+  </header>
 
-    <section class="login-card">
-      <h1 class="form-title" style="margin:0 0 8px;text-align:center;font-size:22px;font-weight:700">账户设置</h1>
-      <div class="setup-tip">首次进入请完成资料设置，之后可随时修改。</div>
-      <div class="input-box"><input id="name" type="text" placeholder="姓名" autocomplete="name" maxlength="40"></div>
-      <div class="input-box"><input id="route" type="text" inputmode="numeric" placeholder="线路，例如 17号线" autocomplete="off"></div>
-      <div class="input-box"><input id="vehicle" type="text" placeholder="默认车辆（可选）" autocomplete="off" maxlength="30"></div>
-      <button class="save-btn" id="saveButton" onclick="saveProfile()">保存并进入</button>
-      <button class="logout-link" onclick="Auth.logout()">退出登录</button>
-      <div id="error" style="color:#E74C3C;font-size:14px;text-align:center;margin-top:12px;display:none"></div>
-    </section>
-  </main>
+  <section class="profile-hero">
+    <div class="avatar" id="avatar">智</div>
+    <div class="profile-name" id="profileName">加载中…</div>
+    <div class="profile-account" id="profileAccount">账户信息读取中</div>
+  </section>
 
-  <script src="js/auth.js"></script>
-  <script>
-    function showError(message){const el=document.getElementById('error');el.textContent=message;el.style.display='block'}
-    function hideError(){const el=document.getElementById('error');el.textContent='';el.style.display='none'}
-    async function init(){
-      try{
-        const user=await Auth.getProfile();
-        document.getElementById('name').value=user?.name||'';
-        document.getElementById('route').value=user?.route||'';
-        document.getElementById('vehicle').value=user?.vehicle||'';
-      }catch(error){
-        if(error.status===401){location.href='index.html';return;}
-        showError(error.message||'资料读取失败，请稍后重试');
-      }
-    }
-    async function saveProfile(){
-      const name=document.getElementById('name').value.trim();
-      const route=document.getElementById('route').value.trim();
-      const vehicle=document.getElementById('vehicle').value.trim();
-      const button=document.getElementById('saveButton');
-      hideError();
-      if(!name)return showError('请输入姓名');
-      if(!Auth.isValidRouteCode(route))return showError('请输入有效线路，例如 17号线');
-      button.disabled=true;button.textContent='保存中…';
-      try{await Auth.updateProfile({name,route,vehicle});location.href='home.html';}
-      catch(error){showError(error.message||'保存失败，请稍后重试');}
-      finally{button.disabled=false;button.textContent='保存并进入';}
-    }
-    init();
-  </script>
+  <section class="section-card">
+    <div class="section-title"><span>👤</span>配送资料</div>
+    <div class="route-row">
+      <div class="field"><label class="field-label" for="name">姓名</label><div class="input-wrap"><input id="name" type="text" placeholder="请输入姓名" autocomplete="name" maxlength="40"></div></div>
+      <div class="field"><label class="field-label" for="route">配送线路</label><div class="input-wrap"><input id="route" type="text" inputmode="numeric" placeholder="例如 17号线" autocomplete="off"></div></div>
+    </div>
+    <div class="field"><label class="field-label" for="vehicle">默认车辆</label><div class="input-wrap"><input id="vehicle" type="text" placeholder="可填写默认配送车辆" autocomplete="off" maxlength="30"></div></div>
+    <button class="save-btn" id="saveButton" onclick="saveProfile()">保存资料</button>
+    <div id="profileMessage" class="message"></div>
+  </section>
+
+  <section class="section-card">
+    <div class="section-title"><span>🔐</span>账号安全</div>
+    <div class="field"><label class="field-label" for="currentPassword">当前密码</label><div class="input-wrap"><input id="currentPassword" type="password" autocomplete="current-password" placeholder="请输入当前密码"><button class="eye" type="button" onclick="togglePassword('currentPassword',this)">◉</button></div></div>
+    <div class="field"><label class="field-label" for="newPassword">新密码</label><div class="input-wrap"><input id="newPassword" type="password" autocomplete="new-password" placeholder="6-72位字符"><button class="eye" type="button" onclick="togglePassword('newPassword',this)">◉</button></div></div>
+    <div class="field"><label class="field-label" for="confirmPassword">确认新密码</label><div class="input-wrap"><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入新密码"><button class="eye" type="button" onclick="togglePassword('confirmPassword',this)">◉</button></div></div>
+    <button class="password-btn" id="passwordButton" onclick="changePassword()">修改密码</button>
+    <div class="notice">修改后立即使用新密码登录。密码仅以加密哈希形式保存在服务器。</div>
+    <div id="passwordMessage" class="message"></div>
+  </section>
+
+  <button class="logout-btn" onclick="Auth.logout()">🚪 退出登录</button>
+</main>
+<script src="js/auth.js"></script>
+<script>
+function $(id){return document.getElementById(id)}
+function showMessage(id,message,type='error'){const el=$(id);el.textContent=message;el.className=`message ${type}`}
+function hideMessage(id){const el=$(id);el.textContent='';el.className='message'}
+function goBack(){location.href='home.html'}
+function togglePassword(id,button){const input=$(id);if(!input)return;const visible=input.type==='text';input.type=visible?'password':'text';button.textContent=visible?'◉':'◉';button.style.opacity=visible?'1':'.65'}
+function updateHero(user){const name=user?.name||user?.username||'用户';$('profileName').textContent=name;$('profileAccount').textContent=`账号：${user?.username||'—'}${user?.route?`  ·  ${user.route}`:''}`;$('avatar').textContent=String(name).trim().charAt(0)||'智'}
+async function init(){try{const user=await Auth.getProfile();updateHero(user);$('name').value=user?.name||'';$('route').value=user?.route||'';$('vehicle').value=user?.vehicle||'';}catch(error){if(error.status===401){location.href='index.html';return}showMessage('profileMessage',error.message||'资料读取失败，请稍后重试')}}
+async function saveProfile(){const name=$('name').value.trim();const route=$('route').value.trim();const vehicle=$('vehicle').value.trim();const button=$('saveButton');hideMessage('profileMessage');if(!name)return showMessage('profileMessage','请输入姓名');if(!Auth.isValidRouteCode(route))return showMessage('profileMessage','请输入有效线路，例如 17号线');button.disabled=true;button.textContent='保存中…';try{const user=await Auth.updateProfile({name,route,vehicle});updateHero(user);showMessage('profileMessage','资料已保存','success');}catch(error){showMessage('profileMessage',error.message||'保存失败，请稍后重试')}finally{button.disabled=false;button.textContent='保存资料'}}
+async function changePassword(){const currentPassword=$('currentPassword').value;const newPassword=$('newPassword').value;const confirmPassword=$('confirmPassword').value;const button=$('passwordButton');hideMessage('passwordMessage');if(!currentPassword)return showMessage('passwordMessage','请输入当前密码');if(newPassword.length<6||newPassword.length>72)return showMessage('passwordMessage','新密码需为6-72位字符');if(newPassword!==confirmPassword)return showMessage('passwordMessage','两次输入的新密码不一致');button.disabled=true;button.textContent='修改中…';try{const response=await fetch('/api/change-password',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({currentPassword,newPassword,confirmPassword})});const data=await response.json().catch(()=>({}));if(response.status===401){location.href='index.html';return}if(!response.ok||!data.success)throw new Error(data.error||'密码修改失败，请稍后重试');$('currentPassword').value='';$('newPassword').value='';$('confirmPassword').value='';showMessage('passwordMessage','密码修改成功，下次登录请使用新密码。','success')}catch(error){showMessage('passwordMessage',error.message||'密码修改失败，请稍后重试')}finally{button.disabled=false;button.textContent='修改密码'}}
+init();
+</script>
 </body>
 </html>
