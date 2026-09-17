@@ -55,18 +55,32 @@ function publicUser(user) {
 
 async function verifyPassword(password, encoded) {
   try {
-    const [salt, stored] = String(encoded).split(':');
-    if (!salt || !stored) return false;
-    const derived = await derivePassword(password, decodeBase64(salt));
+    const value = String(encoded || '');
+    let iterations = 100000;
+    let salt;
+    let stored;
+
+    // 当前注册格式：pbkdf2-sha256$100000$<salt>:<hash>
+    const parts = value.split('$');
+    if (parts.length === 3 && parts[0] === 'pbkdf2-sha256') {
+      iterations = Number(parts[1]);
+      [salt, stored] = parts[2].split(':');
+    } else {
+      // 兼容早期 salt:hash 格式。
+      [salt, stored] = value.split(':');
+    }
+
+    if (!salt || !stored || !Number.isInteger(iterations) || iterations < 1 || iterations > 100000) return false;
+    const derived = await derivePassword(password, decodeBase64(salt), iterations);
     return timingSafeEqual(derived, decodeBase64(stored));
   } catch {
     return false;
   }
 }
 
-async function derivePassword(password, salt) {
+async function derivePassword(password, salt, iterations = 100000) {
   const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' }, material, 256);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, material, 256);
   return new Uint8Array(bits);
 }
 
