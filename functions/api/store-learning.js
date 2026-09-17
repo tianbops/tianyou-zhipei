@@ -1,9 +1,10 @@
 // 天友智配One - 每条线路独立的门店学习库
-// 只保存用户明确确认过的 OCR 门店别名，不保存原始图片。
-// 学习键严格绑定当前登录线路，禁止跨线路写入或读取。
+// 只保存用户确认过的 OCR 门店别名，不保存原始图片。
+// 学习数据写入 Upstash Redis，绑定当前登录线路，因此换设备登录后仍可复用。
 import { authRequired } from './_auth.js';
 
 const MAX_ALIASES = 1000;
+const MAX_BATCH = 100;
 const LOCK_SECONDS = 10;
 
 export async function onRequest({ request, env }) {
@@ -13,21 +14,21 @@ export async function onRequest({ request, env }) {
   try {
     const body = await request.json().catch(() => ({}));
     const route = normalizeRoute(session.route);
-    const rawName = clean(body.rawName);
-    const baseName = clean(body.baseName);
-    const baseCode = cleanCode(body.baseCode);
     if (!route) return json({ success: false, error: '用户未绑定线路' }, 403);
-    if (!rawName || !baseName) return json({ success: false, error: '缺少待学习门店信息' }, 400);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '学习数据库不可用' }, 500);
 
+    const input = Array.isArray(body.items) ? body.items : [body];
+    const items = input.slice(0, MAX_BATCH).map(normalizeInput).filter(item => item.rawName && item.baseName);
+    if (!items.length) return json({ success: false, error: '缺少待学习门店信息' }, 400);
+    if (input.length > MAX_BATCH) return json({ success: false, error: `单次最多学习 ${MAX_BATCH} 家门店` }, 400);
+
     const base = await getBaseStores(env, route);
-    const nameKey = matchKey(baseName);
-    const codeTarget = baseCode ? base.find(item => String(item.code || '') === baseCode) : null;
-    const nameTarget = nameKey ? base.find(item => matchKey(item.name) === nameKey) : null;
-    if (baseCode && !codeTarget) return json({ success: false, error: '确认的基准门店编号不属于当前线路' }, 400);
-    if (!nameTarget && !codeTarget) return json({ success: false, error: '确认的基准门店不属于当前线路' }, 400);
-    if (nameTarget && codeTarget && nameTarget.code !== codeTarget.code) return json({ success: false, error: '门店名称与基准编号不一致，请重新确认' }, 409);
-    const target = nameTarget || codeTarget;
+    const validated = [];
+    for (const item of items) {
+      const target = resolveTarget(base, item);
+      if (!target) return json({ success: false, error: `确认的基准门店不属于当前线路：${item.baseName}` }, 400);
+      validated.push({ ...item, target });
+    }
 
     const key = `route:${route}:learning`;
     const lockKey = `lock:learning:${route}`;
@@ -35,30 +36,37 @@ export async function onRequest({ request, env }) {
     if (!(await acquireLock(env, lockKey, lockToken, LOCK_SECONDS))) return json({ success: false, error: '当前线路学习库正在更新，请稍后再试' }, 409);
     try {
       const learning = await getLearning(env, key);
-      const aliasKey = matchKey(rawName);
-      if (!aliasKey) return json({ success: false, error: '待学习门店名称无效' }, 400);
-
-      learning.version = 2;
+      learning.version = 3;
+      learning.route = route;
       learning.aliases = learning.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
-      const previous = learning.aliases[aliasKey];
       const now = new Date().toISOString();
-      const rawExamples = Array.isArray(previous?.rawExamples) ? previous.rawExamples.filter(Boolean) : [];
-      if (!rawExamples.includes(rawName)) rawExamples.push(rawName);
+      let learnedCount = 0;
+      const learned = [];
 
-      learning.aliases[aliasKey] = {
-        baseKey: matchKey(target.name),
-        baseCode: String(target.code || ''),
-        baseName: target.name,
-        count: Math.max(1, Number(previous?.count) || 0) + 1,
-        firstSeenAt: previous?.firstSeenAt || now,
-        updatedAt: now,
-        rawExamples: rawExamples.slice(-3)
-      };
+      for (const item of validated) {
+        const aliasKey = matchKey(item.rawName);
+        const baseKey = matchKey(item.target.name);
+        if (!aliasKey || !baseKey || aliasKey === baseKey) continue;
+        const previous = learning.aliases[aliasKey];
+        const rawExamples = Array.isArray(previous?.rawExamples) ? previous.rawExamples.filter(Boolean) : [];
+        if (!rawExamples.includes(item.rawName)) rawExamples.push(item.rawName);
+        learning.aliases[aliasKey] = {
+          baseKey,
+          baseCode: String(item.target.code || ''),
+          baseName: item.target.name,
+          count: Math.max(1, Number(previous?.count) || 0) + 1,
+          firstSeenAt: previous?.firstSeenAt || now,
+          updatedAt: now,
+          rawExamples: rawExamples.slice(-3)
+        };
+        learnedCount++;
+        learned.push({ rawName: item.rawName, baseName: item.target.name, count: learning.aliases[aliasKey].count });
+      }
+
       pruneAliases(learning.aliases, MAX_ALIASES);
       learning.updatedAt = now;
       await redisSet(env, key, learning);
-
-      return json({ success: true, data: { route, rawName, baseName: target.name, learned: true, count: learning.aliases[aliasKey]?.count || 1, aliasCount: Object.keys(learning.aliases).length } });
+      return json({ success: true, data: { route, learned: true, learnedCount, aliasCount: Object.keys(learning.aliases).length, items: learned } });
     } finally {
       await releaseLock(env, lockKey, lockToken).catch(() => {});
     }
@@ -66,6 +74,25 @@ export async function onRequest({ request, env }) {
     console.error('store learning error', error);
     return json({ success: false, error: error?.message || '学习记录保存失败' }, 503);
   }
+}
+
+function normalizeInput(item) {
+  const value = item && typeof item === 'object' ? item : {};
+  return {
+    rawName: clean(value.rawName),
+    baseName: clean(value.baseName),
+    baseCode: cleanCode(value.baseCode)
+  };
+}
+
+function resolveTarget(base, item) {
+  if (item.baseCode) {
+    const byCode = base.find(store => String(store.code || '') === item.baseCode);
+    if (!byCode) return null;
+    if (item.baseName && matchKey(byCode.name) !== matchKey(item.baseName)) return null;
+    return byCode;
+  }
+  return base.find(store => matchKey(store.name) === matchKey(item.baseName)) || null;
 }
 
 async function getBaseStores(env, route) {
@@ -76,7 +103,7 @@ async function getBaseStores(env, route) {
 
 async function getLearning(env, key) {
   const data = await redisGet(env, key);
-  if (!data || typeof data !== 'object') return { version: 2, aliases: {} };
+  if (!data || typeof data !== 'object') return { version: 3, aliases: {} };
   data.aliases = data.aliases && typeof data.aliases === 'object' ? data.aliases : {};
   return data;
 }
@@ -144,5 +171,4 @@ function normalizeRoute(value) {
 }
 
 function createLockToken() { return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.() || ''}`; }
-
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
