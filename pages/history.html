@@ -35,7 +35,15 @@ function selectedDate(){return selected||$('dateDisplay')?.textContent||''}
 function buildWheel(id,min,max,value,label){const box=$(id);box.innerHTML='';for(let n=min;n<=max;n++){const item=document.createElement('button');item.type='button';item.className='wheel-item';item.dataset.value=String(n);item.textContent=label==='year'?String(n):pad(n);item.addEventListener('click',()=>scrollToValue(box,n));box.appendChild(item)}scrollToValue(box,value,false)}
 function scrollToValue(box,value,smooth=true){const item=box.querySelector(`[data-value="${value}"]`);if(!item)return;const top=item.offsetTop-(box.clientHeight-item.offsetHeight)/2;box.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});box.querySelectorAll('.wheel-item').forEach(el=>el.classList.toggle('active',el===item))}
 function wheelValue(id){const box=$(id),items=[...box.querySelectorAll('.wheel-item')];if(!items.length)return 0;const center=box.scrollTop+box.clientHeight/2;let best=items[0],distance=Infinity;items.forEach(item=>{const d=Math.abs(item.offsetTop+item.offsetHeight/2-center);if(d<distance){distance=d;best=item}});scrollToValue(box,Number(best.dataset.value),false);return Number(best.dataset.value)}
-function openDatePicker(){const [y,m,d]=dateParts(selectedDate());buildWheel('yearWheel',2020,2035,y,'year');buildWheel('monthWheel',1,12,m,'month');buildWheel('dayWheel',1,daysInMonth(y,m),d,'day');$('dateModal').classList.add('active');$('dateModal').setAttribute('aria-hidden','false')}
+function openDatePicker(){
+  // 每次打开日期选择器都从当天开始，避免上次查询日期残留在高亮位置。
+  const [y,m,d]=today();
+  buildWheel('yearWheel',2020,2035,y,'year');
+  buildWheel('monthWheel',1,12,m,'month');
+  buildWheel('dayWheel',1,daysInMonth(y,m),d,'day');
+  $('dateModal').classList.add('active');
+  $('dateModal').setAttribute('aria-hidden','false');
+}
 function closeDatePicker(){$('dateModal').classList.remove('active');$('dateModal').setAttribute('aria-hidden','true')}
 function confirmDate(){const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=Math.min(wheelValue('dayWheel'),daysInMonth(y,m));selected=`${y}-${pad(m)}-${pad(d)}`;$('dateDisplay').textContent=selected;closeDatePicker();loadHistory(selected)}
 async function loadHistory(date){const box=$('historyList');box.innerHTML='<div class="empty-tip">⏳ 加载中...</div>';try{const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:Auth.getAuthHeaders?Auth.getAuthHeaders():{},credentials:'same-origin'});if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);const payload=await r.json();const records=Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);historyData=records;render(records)}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip">🌐 ${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}}
