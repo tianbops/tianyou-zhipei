@@ -1,4 +1,4 @@
-/* 天友智配One - 浏览器本地 PaddleOCR
+/* Zhipei One - 浏览器本地 PaddleOCR
  * 只负责：图片 → 原始文字。
  * 图片不上传服务器、不保存原图、不参与门店匹配。
  */
@@ -27,16 +27,20 @@
   }
 
   function setStatus(text, progress = 0, done = false, error = false) {
-    $('parseStatus')?.classList.add('active');
-    if ($('statusIcon')) $('statusIcon').textContent = error ? '⚠️' : done ? '✅' : '⏳';
+    const status = $('parseStatus');
+    status?.classList.add('active');
+
+    const icon = $('statusIcon');
+    if (icon) {
+      if (error) icon.textContent = '⚠️';
+      else if (done) icon.textContent = '✅';
+      else icon.innerHTML = '<span class="status-spinner" aria-hidden="true"></span>';
+    }
+
     if ($('statusText')) $('statusText').textContent = text;
     if ($('progressBar')) $('progressBar').style.width = `${Math.max(0, Math.min(100, progress))}%`;
-  }
-
-  function notify(message) {
-    if (typeof window.homeToast === 'function') window.homeToast(message, 'warning');
-    else if (typeof window.showError === 'function') window.showError(message);
-    else alert(message);
+    if (error) window.setHomeStatusError?.(text);
+    else window.clearHomeStatusError?.();
   }
 
   function isPlaceholder(text) {
@@ -133,11 +137,7 @@
     if (!poly.length) return { x: 0, y: 0, h: 20 };
     const xs = poly.map(p => Number(p?.[0] ?? 0));
     const ys = poly.map(p => Number(p?.[1] ?? 0));
-    return {
-      x: Math.min(...xs),
-      y: Math.min(...ys),
-      h: Math.max(8, Math.max(...ys) - Math.min(...ys))
-    };
+    return { x: Math.min(...xs), y: Math.min(...ys), h: Math.max(8, Math.max(...ys) - Math.min(...ys)) };
   }
 
   function sortItems(items) {
@@ -145,7 +145,6 @@
     const heights = prepared.map(x => x.box.h).sort((a, b) => a - b);
     const medianHeight = heights.length ? heights[Math.floor(heights.length / 2)] : 20;
     const rowTolerance = Math.max(10, Math.min(80, medianHeight * 0.65));
-
     prepared.sort((a, b) => {
       const ay = a.box.y;
       const by = b.box.y;
@@ -157,10 +156,7 @@
 
   function resultToText(result) {
     const items = Array.isArray(result?.items) ? sortItems(result.items) : [];
-    return normalizeText(items
-      .filter(item => String(item?.text ?? '').trim())
-      .map(item => item.text)
-      .join('\n'));
+    return normalizeText(items.filter(item => String(item?.text ?? '').trim()).map(item => item.text).join('\n'));
   }
 
   function putText(text) {
@@ -176,7 +172,6 @@
     busy = true;
     try {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
-
       setStatus('正在准备运单图片…', 15);
       const blob = await prepareImage(file);
       setStatus('正在启动本地 PaddleOCR…', 25);
@@ -194,7 +189,6 @@
     } catch (error) {
       console.error('[PaddleOCR]', error);
       setStatus(error?.message || 'OCR识别失败', 100, false, true);
-      notify(error?.message || '运单图片识别失败');
       throw error;
     } finally {
       busy = false;
@@ -209,12 +203,7 @@
     input.type = 'file';
     input.accept = 'image/*';
     if (type === 'camera') input.setAttribute('capture', 'environment');
-    input.style.position = 'fixed';
-    input.style.left = '-9999px';
-    input.style.top = '-9999px';
-    input.style.width = '1px';
-    input.style.height = '1px';
-    input.style.opacity = '0';
+    input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0';
 
     input.addEventListener('change', () => {
       const file = input.files?.[0];
