@@ -1,6 +1,6 @@
 // 天友智配One - 今日运单解析
-// OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前线路基准库匹配。
-// 线路基准库与OCR学习库完全独立；只有用户确认后的映射才进入学习库。
+// OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前用户线路基准库匹配。
+// 基准库按线路独立；学习库进一步按用户ID+线路隔离，避免不同账号互相学习。
 import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
@@ -11,11 +11,12 @@ export async function onRequest({ request, env }) {
     const body = await request.json().catch(() => ({}));
     const text = String(body?.text || '').trim();
     if (!text) return json({ success: false, error: '请输入或先识别运单文字' }, 400);
-    const route = normalizeRoute(session.route || body.route);
-    if (!route) return json({ success: false, error: '用户未绑定线路' }, 403);
+    const route = normalizeRoute(session.route);
+    const userId = normalizeUserId(session.id);
+    if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
 
-    const [base, learning] = await Promise.all([getBaseStores(env, route), getLearning(env, route)]);
+    const [base, learning] = await Promise.all([getBaseStores(env, route), getLearning(env, userId, route)]);
     const parsed = parseDeterministic(text);
     const result = matchTodayStores(parsed.stores, base, learning);
     if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
@@ -24,23 +25,14 @@ export async function onRequest({ request, env }) {
     return json({
       success: true,
       data: {
-        route,
-        date: parsed.date,
-        vehicle: parsed.vehicle,
-        totalWeight: normalizeWeight(parsed.totalWeight),
-        totalVolume: parsed.totalVolume,
-        rawOrderCount: parsed.rawOrderCount,
-        stores: result.stores,
-        storeCount: result.stores.length,
-        uniqueStoreCount: result.uniqueStoreCount,
-        matchedCount: result.matchedCount,
-        newStoreCount: result.newStoreCount,
-        reviewCount: result.reviewCount,
-        duplicateCount: result.duplicateCount,
-        learnedCount: result.learnedCount,
-        recognizedCount: parsed.stores.length,
-        matchStats: result.matchStats,
-        diagnostics,
+        route, userId, date: parsed.date, vehicle: parsed.vehicle,
+        totalWeight: normalizeWeight(parsed.totalWeight), totalVolume: parsed.totalVolume,
+        rawOrderCount: parsed.rawOrderCount, stores: result.stores,
+        storeCount: result.stores.length, uniqueStoreCount: result.uniqueStoreCount,
+        matchedCount: result.matchedCount, newStoreCount: result.newStoreCount,
+        reviewCount: result.reviewCount, duplicateCount: result.duplicateCount,
+        learnedCount: result.learnedCount, recognizedCount: parsed.stores.length,
+        matchStats: result.matchStats, diagnostics,
         warning: diagnostics.length ? diagnostics[0] : ''
       }
     });
@@ -61,14 +53,7 @@ function buildDiagnostics(result, recognizedCount) {
 
 function parseDeterministic(text) {
   const source = normalizeOcrText(text);
-  return {
-    date: extractDate(source),
-    vehicle: extractVehicle(source),
-    totalWeight: extractWeight(source),
-    totalVolume: extractVolume(source),
-    rawOrderCount: extractRawOrderCount(source),
-    stores: extractStores(source)
-  };
+  return { date: extractDate(source), vehicle: extractVehicle(source), totalWeight: extractWeight(source), totalVolume: extractVolume(source), rawOrderCount: extractRawOrderCount(source), stores: extractStores(source) };
 }
 
 function normalizeOcrText(value) {
@@ -107,7 +92,7 @@ function extractRouteRegion(source) {
 }
 
 function removeHeaderFields(value) {
-  let text = String(value || '').replace(/总\s*\n\s*(数量|重量|体积)/g, '总$1').replace(/总\s*数\s*量/g, '总数量').replace(/总\s*重\s*量/g, '总重量').replace(/总\s*体\s*积/g, '总体积');
+  const text = String(value || '').replace(/总\s*\n\s*(数量|重量|体积)/g, '总$1').replace(/总\s*数\s*量/g, '总数量').replace(/总\s*重\s*量/g, '总重量').replace(/总\s*体\s*积/g, '总体积');
   return text.split('\n').filter(line => !isHeaderLine(line)).join('\n').trim();
 }
 
@@ -182,10 +167,22 @@ async function getBaseStores(env, route) {
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
-async function getLearning(env, route) {
-  const data = await redisGet(env, `route:${normalizeRoute(route)}:learning`);
-  if (!data || typeof data !== 'object') return { version: 3, aliases: {} };
-  return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
+async function getLearning(env, userId, route) {
+  const data = await redisGet(env, learningKey(userId, route));
+  if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
+  return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
+}
+
+function learningKey(userId, route) {
+  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
+}
+
+function encodeKey(value) {
+  return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_');
+}
+
+function normalizeUserId(value) {
+  return String(value || '').trim().slice(0, 128);
 }
 
 async function redisGet(env, key) {
