@@ -121,8 +121,6 @@ window.Auth = {
 
   getCurrentRoute() { return this.serverUser?.route || ''; },
   getRoute() { return this.serverUser?.route || ''; },
-  getCurrentUser() { return this.serverUser?.name || this.serverUser?.username || ''; },
-  getUser() { return this.serverUser || null; },
 
   async logout() {
     this.serverUser = null;
