@@ -2,7 +2,9 @@
 body { background: #05070A; color: #fff; font-family: "Microsoft YaHei", Arial, sans-serif; min-height: 100vh; }
 .app-container { max-width: 420px; min-height: 100vh; margin: 0 auto; padding: 20px 16px; }
 .top-bar { height: 55px; display: flex; align-items: center; justify-content: space-between; }
-.back-btn { font-size: 28px; color: #fff; text-decoration: none; background: none; border: none; cursor: pointer; }
+.back-btn { width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex:0 0 40px; padding:0; border:0; border-radius:13px; background:#18212B; color:#fff; font-size:24px; font-family:Arial,"Microsoft YaHei",sans-serif; font-weight:400; line-height:1; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:background .15s,transform .1s; }
+.back-btn:hover { background:#202B37; }
+.back-btn:active { background:#2457A6; transform:scale(.94); }
 .app-title { font-size: 20px; font-weight: bold; }
 .card { background: #18212B; border-radius: 18px; padding: 20px; margin-top: 18px; }
 .card-title { font-size: 18px; font-weight: bold; }
