@@ -1,6 +1,7 @@
 // 天友智配One - 今日运单解析
 // OCR原文 -> 提取今日实际门店 -> 与线路基准库匹配 -> 按基准顺序排序。
 // 基准库只负责门店身份、固定配送顺序、导航和备注，不代表今天配送全部门店。
+// “总数量”是商品件数，不是门店数；原始记录数只统计实际识别出的门店记录。
 import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
@@ -62,12 +63,13 @@ export async function onRequest({ request, env }) {
 function parseDeterministic(text) {
   const source = normalizeOcrText(text);
   const routeText = extractRouteText(source);
+  const stores = extractArrowStores(routeText);
   return {
     date: extractDate(source),
     vehicle: extractVehicle(source),
     totalWeight: extractWeight(source),
-    rawOrderCount: extractRawOrderCount(source),
-    stores: extractArrowStores(routeText)
+    rawOrderCount: stores.length,
+    stores
   };
 }
 
@@ -107,7 +109,6 @@ function extractArrowStores(routeText) {
     const name = cleanStoreName(stripOrderMetadata(part.replace(/\n+/g, '')));
     if (isLikelyStore(name)) stores.push(name);
   }
-  // 这里故意不做 unique：OCR原始记录必须保留，重复门店由匹配层合并。
   return stores;
 }
 
@@ -156,7 +157,6 @@ function matchTodayStores(recognized, baseStores) {
   for (const raw of recognized) {
     const direct = findDirectMatch(raw, base, byName, byCode);
 
-    // 同一基准门店再次出现在OCR中：保留原始记录计数，但最终门店只保留一份。
     if (direct && used.has(direct.item.index)) {
       const canonical = canonicalByBaseIndex.get(direct.item.index);
       if (canonical) {
@@ -176,26 +176,14 @@ function matchTodayStores(recognized, baseStores) {
       canonicalByBaseIndex.set(hit.item.index, item);
     } else if (hit.type === 'review') {
       review.push({
-        code: '',
-        name: raw,
-        nav: '',
-        note: '',
-        isNew: false,
-        matched: false,
-        needsReview: true,
-        candidate: hit.item.name,
+        code: '', name: raw, nav: '', note: '', isNew: false, matched: false,
+        needsReview: true, candidate: hit.item.name,
         candidates: hit.alternatives.map(item => item.name),
-        matchScore: Number(hit.score.toFixed(3)),
-        rawNames: [raw]
+        matchScore: Number(hit.score.toFixed(3)), rawNames: [raw]
       });
     } else {
       news.push({
-        code: '',
-        name: raw,
-        nav: '',
-        note: '',
-        isNew: true,
-        matched: false,
+        code: '', name: raw, nav: '', note: '', isNew: true, matched: false,
         rawNames: [raw]
       });
     }
@@ -266,9 +254,7 @@ function storeSimilarity(a, b) {
 }
 
 function stableStoreKey(value) {
-  return matchKey(value)
-    .replace(/^(?:渝北|江北|特渠部|天友加盟|天友24h)/, '')
-    .replace(/谊品鲜/g, '谊品生鲜');
+  return matchKey(value).replace(/^(?:渝北|江北|特渠部|天友加盟|天友24h)/, '');
 }
 function tokenOverlap(a, b) {
   const ta = meaningfulTokens(a), tb = meaningfulTokens(b);
@@ -318,16 +304,9 @@ function editDistance(a, b) {
 }
 function toMatched(item, mode, score, raw) {
   return {
-    code: item.code,
-    name: item.name,
-    nav: item.nav,
-    note: item.note,
-    isNew: false,
-    matched: true,
-    matchType: mode,
-    matchScore: Number(score.toFixed(3)),
-    rawNames: [raw],
-    _i: item.index
+    code: item.code, name: item.name, nav: item.nav, note: item.note,
+    isNew: false, matched: true, matchType: mode,
+    matchScore: Number(score.toFixed(3)), rawNames: [raw], _i: item.index
   };
 }
 function normalizeBase(store, index) {
@@ -350,24 +329,19 @@ function extractBusinessCode(value) {
   const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])(JM\d{4,6}|Q\d{3,5}|A\d{4,6})(?:[^A-Z0-9]|$)/);
   return match ? match[1] : '';
 }
-
 function matchKey(value) {
   let text = cleanStoreName(value)
     .replace(/Ⅱ/g, 'II').replace(/Ⅲ/g, 'III').replace(/Ⅳ/g, 'IV').replace(/Ⅴ/g, 'V')
     .replace(/Ⅵ/g, 'VI').replace(/Ⅶ/g, 'VII').replace(/Ⅷ/g, 'VIII').replace(/Ⅸ/g, 'IX').replace(/Ⅹ/g, 'X')
-    // OCR订单常把年份/临时标记放进括号，这些属于同一门店身份，不参与匹配。
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
     .replace(/江北亿达鲜半华府店/g, '江北亿达鲜半山华府店')
     .replace(/谊品鲜/g, '谊品生鲜');
 
-  // 只对明确的“到家主城-江北区加州”别名做双向归一，避免误伤其他客服/客户中心。
   if (text.includes('到家主城') && text.includes('江北区加州')) {
     text = text.replace(/客服中心|客户中心/g, '服务中心');
   }
 
-  return text
-    .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '')
-    .toLowerCase();
+  return text.replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
 function cleanStoreName(value) {
   return String(value || '')
@@ -396,10 +370,6 @@ function extractWeight(value) {
   if (match) return `${match[1]}${match[2] || ''}`.trim();
   const fallback = source.match(/(?:总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
   return fallback ? `${fallback[1]}${fallback[2] || ''}`.trim() : '';
-}
-function extractRawOrderCount(value) {
-  const match = String(value || '').match(/总数量\s*[:：]?\s*(\d+)/);
-  return match ? Number(match[1]) : 0;
 }
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
