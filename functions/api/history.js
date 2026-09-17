@@ -2,28 +2,22 @@
 // 历史数据按「线路 + 业务日期」独立存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
 
-const ROUTE = '17号线';
-
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
-
-  const session = await authRequired(request, env, { route: ROUTE });
-  if (!session) return json({ error: '登录已失效或无权限' }, 401);
+  const session = await authRequired(request, env);
+  if (!session?.route) return json({ error: '登录已失效或无权限' }, 401);
 
   const url = new URL(request.url);
   const date = normalizeDate(url.searchParams.get('date'));
   if (!date) return json({ error: 'Missing date parameter' }, 400);
 
-  const key = `history:${ROUTE}:${date}`;
-
+  const key = `history:${session.route}:${date}`;
   try {
     if (request.method === 'DELETE') {
       const deleted = await redisCommand(env, ['DEL', key]);
       return json({ success: true, deleted: Number(deleted || 0) > 0, date });
     }
-
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
-
     const result = await redisCommand(env, ['GET', key]);
     let records = [];
     if (result) {
@@ -39,10 +33,7 @@ export async function onRequest({ request, env }) {
 async function redisCommand(env, command) {
   const response = await fetch(env.UPSTASH_REDIS_REST_URL, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(command),
     cache: 'no-store'
   });
@@ -58,8 +49,5 @@ function normalizeDate(value) {
 }
 
 function json(payload, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
-  });
+  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
