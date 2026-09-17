@@ -1,16 +1,14 @@
 /* 天友智配One - 浏览器本地 PaddleOCR
  * 只负责：图片 → 原始文字。
  * 图片不上传服务器、不保存原图、不参与门店匹配。
- *
- * 注意：Cloudflare Pages 页面与 jsDelivr 的 Worker 属于不同源。
- * 当前版本关闭 PaddleOCR Worker，避免浏览器阻止跨源 worker-entry 脚本。
  */
 (() => {
   'use strict';
 
-  const MAX_SIDE = 2600;
-  const JPEG_QUALITY = 0.92;
-  const OCR_SCORE = 0.35;
+  const MAX_SIDE = 3000;
+  const JPEG_QUALITY = 0.95;
+  // 降低识别过滤阈值，避免运单小字、浅色字因低置信度在进入 parse.js 前就被丢掉。
+  const OCR_SCORE = 0.25;
   const OCR_SDK_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
 
   let enginePromise = null;
@@ -25,7 +23,7 @@
       .replace(/\r\n?/g, '\n')
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
       .split('\n')
-      .map((line) => line.trim())
+      .map(line => line.trim())
       .filter(Boolean)
       .join('\n')
       .trim();
@@ -53,16 +51,16 @@
       '请提供您需要识别的图片', '请上传您需要识别的图片',
       '请上传需要识别的图片', '请提供图片', '请上传图片',
       '图片无法读取', '请重新上传图片'
-    ].some((item) => value === item || value.includes(item));
+    ].some(item => value === item || value.includes(item));
   }
 
   async function loadSdk() {
     if (sdkPromise) return sdkPromise;
     setStatus('正在加载本地OCR组件…', 28);
-    sdkPromise = import(OCR_SDK_URL).then((module) => {
+    sdkPromise = import(OCR_SDK_URL).then(module => {
       if (!module?.PaddleOCR) throw new Error('OCR组件加载失败，请检查网络连接后重试');
       return module.PaddleOCR;
-    }).catch((error) => {
+    }).catch(error => {
       sdkPromise = null;
       throw error;
     });
@@ -86,11 +84,10 @@
         numThreads: 2,
         simd: true
       }
-    }).catch((error) => {
+    }).catch(error => {
       enginePromise = null;
       throw error;
     });
-
     return enginePromise;
   }
 
@@ -130,27 +127,43 @@
     image.close?.();
 
     return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('图片处理失败')), 'image/jpeg', JPEG_QUALITY);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片处理失败')), 'image/jpeg', JPEG_QUALITY);
     });
   }
 
+  function boxInfo(item) {
+    const poly = Array.isArray(item?.poly) ? item.poly : [];
+    if (!poly.length) return { x: 0, y: 0, h: 20 };
+    const xs = poly.map(p => Number(p?.[0] ?? 0));
+    const ys = poly.map(p => Number(p?.[1] ?? 0));
+    return {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      h: Math.max(8, Math.max(...ys) - Math.min(...ys))
+    };
+  }
+
   function sortItems(items) {
-    return [...items].sort((a, b) => {
-      const box = (item) => {
-        const poly = Array.isArray(item?.poly) ? item.poly : [];
-        return {
-          x: poly.length ? Math.min(...poly.map((p) => Number(p?.[0] ?? 0))) : 0,
-          y: poly.length ? Math.min(...poly.map((p) => Number(p?.[1] ?? 0))) : 0
-        };
-      };
-      const A = box(a), B = box(b);
-      return Math.abs(A.y - B.y) <= 24 ? A.x - B.x : A.y - B.y;
+    const prepared = items.map((item, index) => ({ item, index, box: boxInfo(item) }));
+    const heights = prepared.map(x => x.box.h).sort((a, b) => a - b);
+    const medianHeight = heights.length ? heights[Math.floor(heights.length / 2)] : 20;
+    // 不再使用固定24px。不同手机截图分辨率下，固定阈值会把同一行拆成多行或把相邻行合并。
+    const rowTolerance = Math.max(10, Math.min(80, medianHeight * 0.65));
+
+    prepared.sort((a, b) => {
+      const ay = a.box.y, by = b.box.y;
+      if (Math.abs(ay - by) <= rowTolerance) return a.box.x - b.box.x || a.index - b.index;
+      return ay - by || a.index - b.index;
     });
+    return prepared.map(x => x.item);
   }
 
   function resultToText(result) {
     const items = Array.isArray(result?.items) ? sortItems(result.items) : [];
-    return normalizeText(items.filter((item) => String(item?.text ?? '').trim()).map((item) => item.text).join('\n'));
+    return normalizeText(items
+      .filter(item => String(item?.text ?? '').trim())
+      .map(item => item.text)
+      .join('\n'));
   }
 
   function putText(text) {
@@ -205,7 +218,6 @@
   window.callOCR = process;
   window.triggerUpload = function(type) {
     if (busy) return;
-
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
