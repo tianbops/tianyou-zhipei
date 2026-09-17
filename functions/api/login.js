@@ -1,6 +1,6 @@
-// 天友智配One - 多用户登录
-// 用户资料与密码哈希均保存在 Upstash；每个用户绑定独立线路。
-import { createSession, sessionCookie } from './_auth.js';
+// Zhipei One - 多用户登录
+// Web 与微信小程序共用同一用户资料和密码体系。
+import { createMiniToken, createSession, sessionCookie } from './_auth.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -11,8 +11,11 @@ export async function onRequest({ request, env }) {
     const body = await request.json().catch(() => ({}));
     const username = normalizeUsername(body.username || body.account);
     const password = String(body.password || '');
+    const client = String(body.client || 'web').trim().toLowerCase();
+
     if (!username) return json({ success: false, error: '用户名不能为空' }, 400);
     if (!password) return json({ success: false, error: '密码不能为空' }, 400);
+    if (client !== 'web' && client !== 'miniprogram') return json({ success: false, error: '不支持的登录客户端' }, 400);
 
     const userId = await redisGet(env, `user:username:${encodeURIComponent(username)}`);
     if (!userId) return json({ success: false, error: '用户名或密码错误' }, 401);
@@ -24,7 +27,12 @@ export async function onRequest({ request, env }) {
     }
 
     const safeUser = publicUser(user);
-    const token = await createSession(env, safeUser);
+    if (client === 'miniprogram') {
+      const token = await createMiniToken(env, user);
+      return json({ success: true, token, user: safeUser });
+    }
+
+    const token = await createSession(env, user, { client: 'web' });
     return new Response(JSON.stringify({ success: true, user: safeUser }), {
       status: 200,
       headers: {
@@ -59,17 +67,13 @@ async function verifyPassword(password, encoded) {
     let iterations = 100000;
     let salt;
     let stored;
-
-    // 当前注册格式：pbkdf2-sha256$100000$<salt>:<hash>
     const parts = value.split('$');
     if (parts.length === 3 && parts[0] === 'pbkdf2-sha256') {
       iterations = Number(parts[1]);
       [salt, stored] = parts[2].split(':');
     } else {
-      // 兼容早期 salt:hash 格式。
       [salt, stored] = value.split(':');
     }
-
     if (!salt || !stored || !Number.isInteger(iterations) || iterations < 1 || iterations > 100000) return false;
     const derived = await derivePassword(password, decodeBase64(salt), iterations);
     return timingSafeEqual(derived, decodeBase64(stored));
