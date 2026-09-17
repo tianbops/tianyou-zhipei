@@ -1,5 +1,5 @@
 // 天友智配One - 今日运单解析
-// OCR原文 -> 提取门店 -> 当前用户线路基准库匹配 -> 按基准顺序输出。
+// OCR原文 -> 清理运单元数据 -> 重组门店 -> 当前线路基准库匹配。
 // 解析规则与具体线路数据完全分离，不写死任何线路。
 import { authRequired } from './_auth.js';
 
@@ -7,41 +7,50 @@ export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
   const session = await authRequired(request, env);
   if (!session) return json({ success: false, error: '登录已失效或无权限' }, 401);
+
   try {
     const body = await request.json().catch(() => ({}));
     const text = String(body?.text || '').trim();
     if (!text) return json({ success: false, error: '请输入或先识别运单文字' }, 400);
+
     const route = normalizeRoute(session.route || body.route);
     if (!route) return json({ success: false, error: '用户未绑定线路' }, 403);
-    if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
+    if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+      return json({ success: false, error: '服务器基准数据库不可用' }, 500);
+    }
 
     const base = await getBaseStores(env, route);
     const parsed = parseDeterministic(text);
     const result = matchTodayStores(parsed.stores, base);
-    if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
+    if (!result.stores.length) {
+      return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
+    }
 
-    return json({ success: true, data: {
-      route,
-      date: parsed.date,
-      vehicle: parsed.vehicle,
-      totalWeight: normalizeWeight(parsed.totalWeight),
-      rawOrderCount: parsed.rawOrderCount,
-      stores: result.stores,
-      storeCount: result.stores.length,
-      uniqueStoreCount: result.uniqueStoreCount,
-      matchedCount: result.matchedCount,
-      newStoreCount: result.newStoreCount,
-      reviewCount: result.reviewCount,
-      duplicateCount: result.duplicateCount,
-      recognizedCount: parsed.stores.length,
-      warning: result.reviewCount
-        ? `发现 ${result.reviewCount} 家门店需要确认`
-        : result.newStoreCount
-          ? `发现 ${result.newStoreCount} 家新增门店，请核对`
-          : result.duplicateCount
-            ? `识别到 ${result.duplicateCount} 条重复门店记录，已合并`
-            : ''
-    }});
+    return json({
+      success: true,
+      data: {
+        route,
+        date: parsed.date,
+        vehicle: parsed.vehicle,
+        totalWeight: normalizeWeight(parsed.totalWeight),
+        rawOrderCount: parsed.rawOrderCount,
+        stores: result.stores,
+        storeCount: result.stores.length,
+        uniqueStoreCount: result.uniqueStoreCount,
+        matchedCount: result.matchedCount,
+        newStoreCount: result.newStoreCount,
+        reviewCount: result.reviewCount,
+        duplicateCount: result.duplicateCount,
+        recognizedCount: parsed.stores.length,
+        warning: result.reviewCount
+          ? `发现 ${result.reviewCount} 家门店需要确认`
+          : result.newStoreCount
+            ? `发现 ${result.newStoreCount} 家新增门店，请核对`
+            : result.duplicateCount
+              ? `识别到 ${result.duplicateCount} 条重复门店记录，已合并`
+              : ''
+      }
+    });
   } catch (error) {
     console.error('parse api error', error);
     return json({ success: false, error: error?.message || '运单文字解析失败' }, 503);
@@ -71,6 +80,11 @@ function normalizeOcrText(value) {
     .replace(/[｜|]/g, '|')
     .replace(/[，]/g, ',')
     .replace(/[：]/g, ':')
+    // OCR常把“总数量/总重量/总体积”拆成两行，先恢复标签。
+    .replace(/总\s*\n\s*(数量|重量|体积)/g, '总$1')
+    .replace(/总\s*数\s*量/g, '总数量')
+    .replace(/总\s*重\s*量/g, '总重量')
+    .replace(/总\s*体\s*积/g, '总体积')
     .split('\n')
     .map(line => line.replace(/\s+/g, ' ').trim())
     .filter(Boolean)
@@ -82,65 +96,81 @@ function extractStores(source) {
   const routeText = extractRouteRegion(source);
   if (!routeText) return [];
 
-  // 先按真正的箭头拆分；OCR把箭头识别成单独“>”时，normalizeOcrText已恢复。
   const parts = routeText.split(/\s*->\s*/);
   const stores = [];
+
   for (const part of parts) {
     const name = cleanStoreName(stripOrderMetadata(part));
     if (isLikelyStore(name)) stores.push(name);
   }
 
-  // 某些图片箭头全部漏识别：此时逐行恢复门店，避免整单直接变成0家。
   if (stores.length < 2 && !routeText.includes('->')) {
-    return routeText.split('\n')
+    return routeText
+      .split('\n')
       .map(line => cleanStoreName(stripOrderMetadata(line)))
-      .filter(isLikelyStore);
+      .filter(isLikelyStore)
+      .map(cleanStoreName)
+      .filter(Boolean);
   }
+
   return dedupeRawStores(stores);
 }
 
 function extractRouteRegion(source) {
   const lines = source.split('\n');
-  const firstArrow = source.indexOf('->');
-
-  // 运单通常从“承运订单”开始；只截取其后的内容，避免把日期、司机、重量当门店。
   const carrierIndex = source.lastIndexOf('承运订单');
+
+  // 有“承运订单”时，只取其后的内容；所有汇总字段在这里统一剥离。
   if (carrierIndex >= 0) {
     const after = source.slice(carrierIndex + '承运订单'.length);
     const cleaned = removeHeaderFields(after);
     if (cleaned) return cleaned;
   }
 
+  const firstArrow = source.indexOf('->');
   if (firstArrow >= 0) {
-    // 第一箭头前最后一段是首家门店。不要依赖“江北/渝北”等固定前缀。
     const before = source.slice(0, firstArrow);
-    const chunks = before.split('\n');
-    const candidates = [];
-    for (const line of chunks) {
-      const cleaned = cleanStoreName(stripOrderMetadata(line));
-      if (isLikelyStore(cleaned)) candidates.push(cleaned);
-    }
+    const candidates = before
+      .split('\n')
+      .map(line => cleanStoreName(stripOrderMetadata(line)))
+      .filter(isLikelyStore);
     const first = candidates.length ? candidates[candidates.length - 1] : '';
     return first ? `${first}${source.slice(firstArrow)}` : source.slice(firstArrow);
   }
 
-  // 无箭头时，寻找“订单区域”后的有效门店行。
   const start = findLastHeaderEnd(lines);
-  return lines.slice(start).filter(line => !isHeaderLine(line)).join('\n');
+  return lines.slice(start)
+    .filter(line => !isHeaderLine(line))
+    .join('\n');
 }
 
 function removeHeaderFields(value) {
-  return String(value || '')
+  let text = String(value || '');
+
+  // 先修复标签跨行，再删除完整的“总数量/总重量/总体积”字段。
+  text = text
+    .replace(/总\s*\n\s*(数量|重量|体积)/g, '总$1')
+    .replace(/总\s*数\s*量/g, '总数量')
+    .replace(/总\s*重\s*量/g, '总重量')
+    .replace(/总\s*体\s*积/g, '总体积');
+
+  text = text
     .split('\n')
     .filter(line => !isHeaderLine(line))
     .join('\n')
-    .replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/g, '')
+    .replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/gi, '')
+    // 防止OCR把“总体积”拆坏后残留“体积4.636011m³(11.59%)”。
+    .replace(/(?:^|\n)\s*体积\s*[\d]+(?:\.\d+)?\s*(?:m³|m3|立方米)(?:\s*\([^\n]*?\))?\s*/gi, '$1')
     .trim();
+
+  return text;
 }
 
 function findLastHeaderEnd(lines) {
   let index = 0;
-  for (let i = 0; i < lines.length; i++) if (isHeaderLine(lines[i])) index = i + 1;
+  for (let i = 0; i < lines.length; i++) {
+    if (isHeaderLine(lines[i])) index = i + 1;
+  }
   return index;
 }
 
@@ -153,8 +183,9 @@ function isHeaderLine(value) {
 
 function stripOrderMetadata(value) {
   return String(value || '')
-    .replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/g, ' ')
-    .replace(/(?:总数量|总重量|总体积)\s*[:：]?\s*[\d.]+\s*(?:kg|KG|千克|公斤|吨|t)?/gi, ' ')
+    .replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/gi, ' ')
+    .replace(/(?:总数量|总重量|总体积)\s*[:：]?\s*[\d.]+\s*(?:kg|KG|千克|公斤|吨|t)?(?:\s*\([^\)]*\))?/gi, ' ')
+    .replace(/(?:^|\n)\s*体积\s*[\d]+(?:\.\d+)?\s*(?:m³|m3|立方米)(?:\s*\([^\n]*?\))?/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -170,13 +201,17 @@ async function getBaseStores(env, route) {
   const data = await response.json().catch(() => ({}));
   let parsed = data?.result;
   try { parsed = typeof parsed === 'string' ? JSON.parse(parsed) : parsed; } catch { parsed = null; }
-  if (!Array.isArray(parsed?.stores) || !parsed.stores.length) throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
+  if (!Array.isArray(parsed?.stores) || !parsed.stores.length) {
+    throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
+  }
   return parsed.stores;
 }
 
 function matchTodayStores(recognized, baseStores) {
   const base = baseStores.map(normalizeBase).filter(Boolean);
-  const byName = new Map(), byCode = new Map();
+  const byName = new Map();
+  const byCode = new Map();
+
   for (const item of base) {
     const key = matchKey(item.name);
     if (key && !byName.has(key)) byName.set(key, item);
@@ -184,8 +219,11 @@ function matchTodayStores(recognized, baseStores) {
     if (code && !byCode.has(code)) byCode.set(code, item);
   }
 
-  const matched = [], review = [], news = [];
-  const used = new Set(), canonicalByBaseIndex = new Map();
+  const matched = [];
+  const review = [];
+  const news = [];
+  const used = new Set();
+  const canonicalByBaseIndex = new Map();
   let duplicateCount = 0;
 
   for (const raw of recognized) {
@@ -265,7 +303,9 @@ function findMatch(raw, base, byName, byCode, used) {
   if (best.score >= 0.86 || (best.score >= 0.80 && margin >= 0.06) || (best.score >= 0.74 && margin >= 0.12)) {
     return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
   }
-  if (best.score >= 0.60) return { type: 'review', item: best.item, score: best.score, alternatives: candidates.slice(0, 3).map(x => x.item) };
+  if (best.score >= 0.60) {
+    return { type: 'review', item: best.item, score: best.score, alternatives: candidates.slice(0, 3).map(x => x.item) };
+  }
   return { type: 'new', score: best.score };
 }
 
@@ -273,6 +313,7 @@ function storeSimilarity(a, b) {
   const ak = matchKey(a), bk = matchKey(b);
   if (!ak || !bk) return 0;
   if (ak === bk) return 1;
+
   const codeA = extractBusinessCode(a), codeB = extractBusinessCode(b);
   if (codeA && codeA === codeB) return 1;
 
@@ -377,7 +418,6 @@ function normalizeBase(store, index) {
 
 function extractBusinessCode(value) {
   const text = normalizeCodeText(value);
-  // 允许 OCR 在字母与数字之间插入空格、全角空格或连字符。
   const match = text.match(/(?:^|[^A-Z0-9])(JM\s*\d{4,6}|Q\s*\d{3,5}|A\s*\d{4,6})(?:[^A-Z0-9]|$)/);
   return match ? match[1].replace(/[\s-]/g, '') : '';
 }
@@ -393,12 +433,15 @@ function normalizeCodeText(value) {
 }
 
 function matchKey(value) {
+  const romanMap = { 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V', 'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X' };
   let text = cleanStoreName(value)
-    .replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => ({ 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V', 'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X' }[roman] || roman))
+    .replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => romanMap[roman] || roman)
     .replace(/\b(?:II|III)I(?=类)/gi, m => m.slice(0, -1).toUpperCase())
+    .replace(/[∥〢丨]/g, 'II')
+    .replace(/\bII\s*类/gi, 'II类')
+    .replace(/\bIII\s*类/gi, 'III类')
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
-    .replace(/谊品鲜/g, '谊品生鲜')
-    .replace(/沁园餐饮管理有限公司/g, '沁园餐饮管理有限公司');
+    .replace(/谊品鲜/g, '谊品生鲜');
   return text.replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
 
@@ -406,6 +449,9 @@ function cleanStoreName(value) {
   return String(value || '')
     .replace(/^[\s\d]+[、.．)）-]+/, '')
     .replace(/^承运订单[：:\s]*/, '')
+    // 清掉OCR箭头两侧可能遗留的孤立括号、竖线等噪声。
+    .replace(/^[)>）)]+\s*/, '')
+    .replace(/\s*[<(（]+\s*$/, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -413,9 +459,8 @@ function cleanStoreName(value) {
 function isLikelyStore(value) {
   const text = String(value || '').trim();
   if (!text || text.length < 3 || text.length > 160) return false;
-  if (/总重量|总数量|总体积|订单编号|运单编号|车牌|车辆|运输日期|日期|司机|送货员|主司机|承运订单|额定装载|额定载重|额定体积|总计|合计|单价|金额|主司机|送货员/.test(text)) return false;
+  if (/总重量|总数量|总体积|订单编号|运单编号|车牌|车辆|运输日期|日期|司机|送货员|主司机|承运订单|额定装载|额定载重|额定体积|总计|合计|单价|金额/.test(text)) return false;
   if (/^(?:\d+(?:\.\d+)?|[A-Z]{1,3}\d{3,8})$/.test(text)) return false;
-  // 路由已经由箭头切段，因此不再强制要求“店/公司”等后缀，防止OCR误差导致合法门店被过滤。
   return /[\u4e00-\u9fff]/.test(text) || /[A-Za-z]/.test(text);
 }
 
@@ -423,10 +468,11 @@ function dedupeRawStores(stores) {
   const seen = new Set();
   const result = [];
   for (const store of stores) {
-    const key = matchKey(store);
+    const cleaned = cleanStoreName(store);
+    const key = matchKey(cleaned);
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    result.push(store);
+    result.push(cleaned);
   }
   return result;
 }
@@ -443,7 +489,7 @@ function extractVehicle(value) {
 }
 
 function extractWeight(value) {
-  const source = String(value || '').replace(/\s+/g, ' ');
+  const source = String(value ||).replace(/\s+/g, ' ');
   const match = source.match(/总\s*重\s*量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
   if (match) return `${match[1]}${match[2] || ''}`.trim();
   const fallback = source.match(/(?:总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
@@ -469,7 +515,9 @@ function normalizeWeight(value) {
   return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`;
 }
 
-function normalizeVehicle(value) { return String(value || '').replace(/[\s>]+$/, '').trim(); }
+function normalizeVehicle(value) {
+  return String(value || '').replace(/[\s>]+$/, '').trim();
+}
 
 function normalizeDate(value) {
   const text = String(value || '').replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-');
