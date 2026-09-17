@@ -1,6 +1,6 @@
 // 天友智配One - 今日运单解析
-// OCR原文 -> 运单元数据 -> 跨行恢复 -> 门店切分 -> 当前线路基准库匹配。
-// 规则与线路数据分离；用户确认的OCR别名由 /api/store-learning 独立保存到当前线路学习库。
+// OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前线路基准库匹配。
+// 线路基准库与OCR学习库完全独立；只有用户确认后的映射才进入学习库。
 import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
@@ -30,6 +30,7 @@ export async function onRequest({ request, env }) {
         matchedCount: result.matchedCount, newStoreCount: result.newStoreCount,
         reviewCount: result.reviewCount, duplicateCount: result.duplicateCount,
         learnedCount: result.learnedCount, recognizedCount: parsed.stores.length,
+        matchStats: result.matchStats,
         warning: result.reviewCount ? `发现 ${result.reviewCount} 家门店需要确认` : result.newStoreCount ? `发现 ${result.newStoreCount} 家新增门店，请核对` : result.duplicateCount ? `识别到 ${result.duplicateCount} 条重复门店记录，已合并` : ''
       }
     });
@@ -58,7 +59,6 @@ function normalizeOcrText(value) {
 function extractStores(source) {
   const routeText = extractRouteRegion(source);
   if (!routeText) return [];
-  // 只在配送区域内恢复换行，防止OCR把“半/山”“有限/公司”等门店名称拆开。
   const continuous = routeText.replace(/\s+/g, ' ').replace(/\s*->\s*/g, '->').trim();
   if (continuous.includes('->')) return dedupeRawStores(continuous.split('->').map(part => cleanStoreName(stripOrderMetadata(part))).filter(isLikelyStore));
   return dedupeRawStores(routeText.split('\n').map(line => cleanStoreName(stripOrderMetadata(line))).filter(isLikelyStore));
@@ -67,25 +67,22 @@ function extractStores(source) {
 function extractRouteRegion(source) {
   const carrierIndex = source.lastIndexOf('承运订单');
   if (carrierIndex >= 0) {
-    const cleaned = removeHeaderFields(source.slice(carrierIndex + '承运订单'.length));
+    const cleaned = removeHeaderFields(source.slice(carrierIndex + 4));
     if (cleaned) return cleaned;
   }
   const firstArrow = source.indexOf('->');
   if (firstArrow >= 0) {
-    const before = source.slice(0, firstArrow);
-    const candidates = before.split('\n').map(line => cleanStoreName(stripOrderMetadata(line))).filter(isLikelyStore);
-    const first = candidates.length ? candidates[candidates.length - 1] : '';
+    const candidates = source.slice(0, firstArrow).split('\n').map(line => cleanStoreName(stripOrderMetadata(line))).filter(isLikelyStore);
+    const first = candidates.at(-1) || '';
     return first ? `${first}${source.slice(firstArrow)}` : source.slice(firstArrow);
   }
   const lines = source.split('\n');
-  const start = findLastHeaderEnd(lines);
-  return lines.slice(start).filter(line => !isHeaderLine(line)).join('\n');
+  return lines.slice(findLastHeaderEnd(lines)).filter(line => !isHeaderLine(line)).join('\n');
 }
 
 function removeHeaderFields(value) {
   let text = String(value || '').replace(/总\s*\n\s*(数量|重量|体积)/g, '总$1').replace(/总\s*数\s*量/g, '总数量').replace(/总\s*重\s*量/g, '总重量').replace(/总\s*体\s*积/g, '总体积');
-  text = text.split('\n').filter(line => !isHeaderLine(line)).join('\n');
-  return text.trim();
+  return text.split('\n').filter(line => !isHeaderLine(line)).join('\n').trim();
 }
 
 function findLastHeaderEnd(lines) {
@@ -112,18 +109,16 @@ function cleanStoreName(value) {
 }
 
 function isLikelyStore(value) {
-  const text = cleanStoreName(value);
-  if (!text || text.length < 3) return false;
-  const compact = text.replace(/\s/g, '');
+  const text = cleanStoreName(value), compact = text.replace(/\s/g, '');
+  if (!text || text.length < 3 || !/[\u4e00-\u9fff]/.test(text)) return false;
   if (/^(?:运输日期|车牌号|额定装载|额定载重|额定体积|主司机|送货员|承运订单|总数量|总重量|总体积|运单列表)$/.test(compact)) return false;
-  if (/^(?:20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?|渝[A-Z0-9]{5,7})$/.test(compact)) return false;
-  return /[\u4e00-\u9fff]/.test(text);
+  return !/^(?:20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?|渝[A-Z0-9]{5,7})$/.test(compact);
 }
 
 function dedupeRawStores(stores) {
   const result = [], seen = new Set();
   for (const raw of stores) {
-    const name = cleanStoreName(raw), key = matchKey(name);
+    const name = cleanStoreName(raw), key = name.replace(/\s+/g, '').toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key); result.push(name);
   }
@@ -146,14 +141,12 @@ function extractRawOrderCount(source) {
 }
 
 function extractWeight(source) {
-  const match = String(source).match(/总\s*重\s*量\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i)
-    || String(source).match(/(?:总重|重量)\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i);
+  const match = String(source).match(/总\s*重\s*量\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || String(source).match(/(?:总重|重量)\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i);
   return match ? `${match[1]}${match[2] || ''}` : '';
 }
 
 function extractVolume(source) {
-  const match = String(source).match(/总\s*体\s*积\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(m³|m3|m²|m2|立方米)/i)
-    || String(source).match(/(?:总体积|体积)\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(m³|m3|m²|m2|立方米)/i);
+  const match = String(source).match(/总\s*体\s*积\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(m³|m3|m²|m2|立方米)/i) || String(source).match(/(?:总体积|体积)\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(m³|m3|m²|m2|立方米)/i);
   return match ? `${match[1]}m³` : '';
 }
 
@@ -166,8 +159,7 @@ async function getBaseStores(env, route) {
 async function getLearning(env, route) {
   const data = await redisGet(env, `route:${normalizeRoute(route)}:learning`);
   if (!data || typeof data !== 'object') return { version: 3, aliases: {} };
-  data.aliases = data.aliases && typeof data.aliases === 'object' ? data.aliases : {};
-  return data;
+  return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
 async function redisGet(env, key) {
@@ -182,17 +174,19 @@ async function redisGet(env, key) {
 function matchTodayStores(recognized, baseStores, learning) {
   const base = baseStores.map(normalizeBase).filter(Boolean), byName = new Map(), byCode = new Map(), byLearning = new Map();
   for (const item of base) {
-    const key = matchKey(item.name); if (key && !byName.has(key)) byName.set(key, item);
-    const businessCode = extractBusinessCode(item.name); if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
+    const nameKey = matchKey(item.name);
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
+    const businessCode = extractBusinessCode(item.name);
+    if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
   }
-  const aliases = learning?.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
-  for (const [aliasKey, record] of Object.entries(aliases)) {
-    const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && base.find(item => String(item.code) === String(record.baseCode))) || null;
+  for (const [aliasKey, record] of Object.entries(learning?.aliases || {})) {
+    const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && base.find(item => String(item.code) === String(record.baseCode)));
     if (target && !byLearning.has(aliasKey)) byLearning.set(aliasKey, target);
   }
 
   const matched = [], review = [], news = [], used = new Set(), canonicalByBaseIndex = new Map();
-  let duplicateCount = 0, learnedCount = 0;
+  const matchStats = { learned: 0, businessCode: 0, exact: 0, similarity: 0, review: 0, new: 0, duplicate: 0 };
+  let duplicateCount = 0;
   for (const raw of recognized) {
     const direct = findDirectMatch(raw, byName, byCode, byLearning);
     if (direct && used.has(direct.item.index)) {
@@ -201,8 +195,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         canonical.duplicateCount = Number(canonical.duplicateCount || 0) + 1;
         canonical.rawNames = Array.isArray(canonical.rawNames) ? canonical.rawNames : [canonical.name];
         if (!canonical.rawNames.includes(raw)) canonical.rawNames.push(raw);
-        duplicateCount++;
-        continue;
+        duplicateCount++; matchStats.duplicate++; continue;
       }
     }
     const hit = findMatch(raw, base, byName, byCode, used, byLearning);
@@ -210,11 +203,13 @@ function matchTodayStores(recognized, baseStores, learning) {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
       matched.push(item); canonicalByBaseIndex.set(hit.item.index, item);
-      if (hit.mode === 'learned') learnedCount++;
+      matchStats[hit.mode] = Number(matchStats[hit.mode] || 0) + 1;
     } else if (hit.type === 'review') {
-      review.push({ code: '', name: raw, nav: '', note: '', isNew: false, matched: false, needsReview: true, candidate: hit.item.name, candidates: hit.alternatives.map(item => item.name), candidateCode: hit.item.code, matchScore: Number(hit.score.toFixed(3)), rawNames: [raw] });
+      review.push({ code: '', name: raw, nav: '', note: '', isNew: false, matched: false, needsReview: true, matchType: 'review', candidate: hit.item.name, candidates: hit.alternatives.map(item => item.name), candidateCode: hit.item.code, matchScore: Number(hit.score.toFixed(3)), rawName: raw, rawNames: [raw] });
+      matchStats.review++;
     } else {
-      news.push({ code: '', name: raw, nav: '', note: '', isNew: true, matched: false, rawNames: [raw] });
+      news.push({ code: '', name: raw, nav: '', note: '', isNew: true, matched: false, matchType: 'new', matchScore: Number(hit.score || 0), rawName: raw, rawNames: [raw] });
+      matchStats.new++;
     }
   }
   matched.sort((a, b) => a._i - b._i);
@@ -222,7 +217,7 @@ function matchTodayStores(recognized, baseStores, learning) {
   review.forEach((item, index) => { item.code = `R${String(index + 1).padStart(2, '0')}`; });
   news.forEach((item, index) => { item.code = `N${String(index + 1).padStart(2, '0')}`; });
   const stores = matched.concat(review, news).map(({ _i, ...item }) => item);
-  return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, learnedCount, uniqueStoreCount: stores.length };
+  return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, learnedCount: matchStats.learned, uniqueStoreCount: stores.length, matchStats };
 }
 
 function findDirectMatch(raw, byName, byCode, byLearning) {
@@ -236,8 +231,6 @@ function findDirectMatch(raw, byName, byCode, byLearning) {
 }
 
 function findMatch(raw, base, byName, byCode, used, byLearning) {
-  const learned = byLearning.get(matchKey(raw));
-  if (learned && !used.has(learned.index)) return { type: 'match', item: learned, mode: 'learned', score: 1 };
   const direct = findDirectMatch(raw, byName, byCode, byLearning);
   if (direct && !used.has(direct.item.index)) return direct;
   const businessCode = extractBusinessCode(raw);
@@ -285,8 +278,7 @@ function toMatched(item, mode, score, rawName) {
 }
 
 function extractBusinessCode(value) {
-  const text = String(value || '').toUpperCase();
-  const match = text.match(/(?:^|[^A-Z0-9])((?:JM|Q|A)\s*\d{3,8})(?!\d)/);
+  const text = String(value || '').toUpperCase(), match = text.match(/(?:^|[^A-Z0-9])((?:JM|Q|A)\s*\d{3,8})(?!\d)/);
   return match ? match[1].replace(/\s+/g, '') : '';
 }
 
@@ -299,15 +291,13 @@ function matchKey(value) {
 }
 
 function normalizeRoute(value) {
-  const text = String(value || '').trim();
-  const match = text.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
+  const text = String(value || '').trim(), match = text.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
   return match ? `${String(parseInt(match[1] || match[2], 10)).padStart(2, '0')}号线` : text;
 }
 
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
-  const text = String(value).trim().replace(/,/g, '');
-  const match = text.match(/[\d]+(?:\.\d+)?/);
+  const text = String(value).trim().replace(/,/g, ''), match = text.match(/[\d]+(?:\.\d+)?/);
   if (!match) return '';
   const n = Number(match[0]); if (!Number.isFinite(n)) return '';
   if (/吨|\bt\b/i.test(text)) return `${n}t`;
