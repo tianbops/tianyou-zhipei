@@ -21,7 +21,7 @@ export async function createSession(env, user) {
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL,
     sessionVersion: Number(user.sessionVersion || 1)
   };
-  if (!payload.id || !payload.route) throw new Error('用户资料缺少 id 或线路');
+  if (!payload.id) throw new Error('用户资料缺少 id');
   const body = base64url(new TextEncoder().encode(JSON.stringify(payload)));
   const signature = base64url(await sign(secret, body));
   return `${body}.${signature}`;
@@ -41,13 +41,12 @@ export async function verifySession(request, env) {
     if (!timingSafeEqual(expected, actual)) return null;
     const payload = JSON.parse(new TextDecoder().decode(decodeBase64url(body)));
     if (!payload?.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
-    const route = normalizeRoute(payload.route);
     const id = String(payload.id || '').trim();
-    if (!id || !route) return null;
+    if (!id) return null;
     return {
       id,
       name: String(payload.name || ''),
-      route,
+      route: normalizeRoute(payload.route),
       vehicle: String(payload.vehicle || ''),
       sessionVersion: Number(payload.sessionVersion || 1)
     };
