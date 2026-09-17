@@ -1,5 +1,5 @@
 // 天友智配One - 运单确认入库 API
-// 只有用户确认后的数据才能进入正式订单。
+// 只有用户确认后的数据才能进入正式订单；原始记录数与最终唯一门店数分开保存。
 import { authRequired } from './_auth.js';
 
 const ROUTE = '17号线';
@@ -19,20 +19,28 @@ export async function onRequest({ request, env }) {
 
     const date = normalizeDate(body.date) || businessDate();
     const base = await loadBase(env);
+    const inputCount = body.orders.length;
     const canonical = canonicalizeOrders(body.orders, base);
+    const duplicateCount = countDuplicates(canonical, base);
+    const uniqueCanonical = dedupeCanonical(canonical, base);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date);
-    const orders = sortOrders(canonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date)), base);
+    const orders = sortOrders(uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date)), base);
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
     if (!totalWeight) return json({ success: false, code: 'WEIGHT_MISSING', error: '未识别到商品总量，请重新解析后再确认' }, 422);
 
+    const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || inputCount;
     const todayData = {
       orderBatchId, date, route: ROUTE,
-      vehicle: String(body.vehicle || '').trim() || '渝DK7692',
-      orders, totalWeight, count: orders.length,
+      vehicle: String(body.vehicle || '').trim() || session.vehicle || '渝DK7692',
+      orders, totalWeight,
+      count: orders.length,
+      uniqueStoreCount: orders.length,
       matchedCount: orders.filter(item => item.matched).length,
       newStoreCount: orders.filter(item => item.isNew).length,
-      recognizedCount: Number(body.recognizedCount) || orders.length,
-      rawOrderCount: Number(body.rawOrderCount) || 0,
+      reviewCount: 0,
+      duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
+      recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount,
+      rawOrderCount,
       source: String(body.source || 'web-confirm'),
       updatedAt: new Date().toISOString()
     };
@@ -54,7 +62,14 @@ async function loadBase(env) {
   const raw = await redisGet(env, `route:${ROUTE}:base`);
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${ROUTE}独立基准数据库`);
-  return stores.map((store, index) => ({ name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(), code: String(store?.code || index + 1).padStart(2, '0'), nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(), routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1 })).filter(store => store.name);
+  return stores.map((store, index) => ({
+    name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
+    code: String(store?.code || index + 1).padStart(2, '0'),
+    nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(),
+    note: String(store?.note || store?.['备注'] || '').trim(),
+    routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1,
+    index
+  })).filter(store => store.name);
 }
 
 function canonicalizeOrders(input, base) {
@@ -65,22 +80,44 @@ function canonicalizeOrders(input, base) {
     const name = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
     const hit = byName.get(key(name)) || byCode.get(String(raw.code || ''));
     if (!hit) return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new' };
-    return { ...raw, name: hit.name, code: hit.code, nav: hit.nav, matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1 };
+    return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
   });
 }
 
+function dedupeCanonical(items, base) {
+  const seen = new Set();
+  const output = [];
+  for (const item of items) {
+    const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`;
+    if (!identity || seen.has(identity)) continue;
+    seen.add(identity);
+    output.push(item);
+  }
+  return output;
+}
+
+function countDuplicates(items) {
+  const seen = new Set();
+  let count = 0;
+  for (const item of items) {
+    const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`;
+    if (seen.has(identity)) count += 1; else seen.add(identity);
+  }
+  return count;
+}
+
 function sortOrders(orders, base) {
-  const rank = new Map(base.map((store, index) => [key(store.name), Number(store.routeOrder) || index + 1]));
+  const rank = new Map(base.map((store, index) => [store.index, Number(store.routeOrder) || index + 1]));
   const matched = [], news = [];
   for (const item of orders) {
-    const order = rank.get(key(item.name));
-    if (order == null) news.push({ ...item, isNew: true, matched: false });
-    else matched.push({ ...item, routeOrder: order, isNew: false, matched: true });
+    const routeOrder = item._baseIndex != null ? rank.get(item._baseIndex) : null;
+    if (routeOrder == null) news.push({ ...item, isNew: true, matched: false });
+    else matched.push({ ...item, routeOrder, isNew: false, matched: true });
   }
   matched.sort((a, b) => a.routeOrder - b.routeOrder);
   matched.forEach((item, index) => { item.code = String(index + 1).padStart(2, '0'); });
   news.forEach((item, index) => { item.code = `N${String(index + 1).padStart(2, '0')}`; });
-  return matched.concat(news).map(({ routeOrder, ...item }) => item);
+  return matched.concat(news).map(({ routeOrder, _baseIndex, ...item }) => item);
 }
 
 function normalizeOrder(item, index, batchId, date) {
@@ -91,7 +128,15 @@ async function saveHistory(env, date, today) {
   const keyName = `history:${ROUTE}:${date}`;
   const old = await redisGet(env, keyName);
   let list = Array.isArray(old) ? old : [];
-  const record = { orderBatchId: today.orderBatchId, date, route: ROUTE, vehicle: today.vehicle, count: today.count, weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders, matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount, source: today.source, updatedAt: today.updatedAt };
+  const record = {
+    orderBatchId: today.orderBatchId, date, route: ROUTE, vehicle: today.vehicle,
+    count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count,
+    weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders,
+    matchedCount: today.matchedCount, newStoreCount: today.newStoreCount,
+    reviewCount: today.reviewCount || 0, duplicateCount: today.duplicateCount || 0,
+    recognizedCount: today.recognizedCount, rawOrderCount: today.rawOrderCount,
+    source: today.source, updatedAt: today.updatedAt
+  };
   const index = list.findIndex(item => item?.orderBatchId === today.orderBatchId);
   if (index >= 0) list[index] = record; else list.push(record);
   if (list.length > 90) list = list.slice(-90);
@@ -123,16 +168,11 @@ async function redisSet(env, keyName, value) {
 }
 
 function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-function key(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]{}]/g, '').toLowerCase(); }
+function key(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]{}]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase(); }
+function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'); const m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''); const m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`; }
-function resolveTotalWeight(value, rawText) {
-  const direct = normalizeWeight(value);
-  if (direct) return direct;
-  const source = String(rawText || '').replace(/\s+/g, ' ');
-  const match = source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/([\d]+(?:\.\d+)?)\s*(?:kg|千克|公斤|吨|t)\b/i);
-  return match ? normalizeWeight(`${match[1]}${match[2] || ''}`) : '';
-}
+function resolveTotalWeight(value, rawText) { const direct = normalizeWeight(value); if (direct) return direct; const source = String(rawText || '').replace(/\s+/g, ' '); const match = source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/([\d]+(?:\.\d+)?)\s*(?:kg|千克|公斤|吨|t)\b/i); return match ? normalizeWeight(`${match[1]}${match[2] || ''}`) : ''; }
 function createBatchId(date) { return `${date}-17-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json;charset=UTF-8', 'Cache-Control': 'no-store' } }); }
