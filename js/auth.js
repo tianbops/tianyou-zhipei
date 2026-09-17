@@ -7,7 +7,12 @@ const Auth = {
   async loginWithCredentials(_type, account, password) {
     const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', credentials: 'same-origin', body: JSON.stringify({ username: String(account || '').trim(), password }) });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data?.success) { const error = new Error(data?.error || '登录失败'); error.status = response.status; throw error; }
+    if (!response.ok || !data?.success) {
+      const error = new Error(data?.error || '登录失败');
+      error.status = response.status;
+      error.detail = data?.detail || '';
+      throw error;
+    }
     this.serverUser = data.user || null;
     return this.serverUser;
   },
@@ -15,7 +20,12 @@ const Auth = {
   async register(payload) {
     const response = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', credentials: 'same-origin', body: JSON.stringify(payload || {}) });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data?.success) { const error = new Error(data?.error || '注册失败'); error.status = response.status; throw error; }
+    if (!response.ok || !data?.success) {
+      const error = new Error(data?.error || '注册失败');
+      error.status = response.status;
+      error.detail = data?.detail || '';
+      throw error;
+    }
     this.serverUser = data.user || null;
     return data.user || null;
   },
