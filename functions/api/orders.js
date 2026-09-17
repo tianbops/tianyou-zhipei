@@ -1,5 +1,5 @@
 // 天友智配One - 服务器订单 API
-// 订单按「17号线 + 业务日期」独立存储；今日订单只保存实际配送门店。
+// 订单按「线路 + 业务日期」独立存储；每条订单只保存实际配送门店。
 import { authRequired } from './_auth.js';
 
 const ROUTE = '17号线';
@@ -27,10 +27,8 @@ async function saveOrder(request, env) {
   const lockToken = createLockToken();
   if (!(await acquireLock(env, lockKey, lockToken, 15))) return json({ error: '该线路正在保存订单，请稍后再试' }, 409);
   try {
-    let existing = null;
-    let orderBatchId = String(body.orderBatchId || '').trim();
-    if (!orderBatchId || !String(body.vehicle || '').trim()) existing = await redisGet(env, key);
-    orderBatchId = orderBatchId || existing?.orderBatchId || createBatchId(date);
+    const existing = await redisGet(env, key);
+    const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date);
     let orders = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, date)).filter(item => item.name);
     orders = sortByRouteBase(orders, await loadBaseData(env));
     const incomingWeight = normalizeWeight(body.totalWeight ?? body.weight);
@@ -46,18 +44,19 @@ async function saveOrder(request, env) {
 async function readOrder(request, env) {
   const url = new URL(request.url);
   const date = normalizeDate(url.searchParams.get('date')) || businessDate();
+  const batch = String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim();
   const todayKey = `today_orders:${ROUTE}:${date}`;
+  const historyKey = `history:${ROUTE}:${date}`;
   let today = await redisGet(env, todayKey);
-  if (!today || !Array.isArray(today.orders)) {
-    const history = await redisGet(env, `history:${ROUTE}:${date}`);
-    if (Array.isArray(history) && history.length) {
-      today = history[history.length - 1] || null;
-    } else if (history && Array.isArray(history.orders)) {
-      today = history;
-    }
-  }
-  const historyData = await redisGet(env, `history:${ROUTE}:${date}`);
+  const historyData = await redisGet(env, historyKey);
   const history = Array.isArray(historyData) ? historyData : [];
+
+  if (batch) {
+    if (today?.orderBatchId !== batch) today = history.find(item => item?.orderBatchId === batch) || null;
+  } else if (!today || !Array.isArray(today.orders)) {
+    today = Array.isArray(historyData) && historyData.length ? historyData[historyData.length - 1] : (historyData?.orders ? historyData : null);
+  }
+
   return json({ success: true, today: today && normalizeDate(today.date) === date ? today : null, history });
 }
 
