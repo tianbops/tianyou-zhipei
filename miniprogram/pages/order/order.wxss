@@ -1,0 +1,1 @@
+.route{margin:12rpx 0;font-size:42rpx;font-weight:700}.store{display:grid;grid-template-columns:64rpx 1fr auto;gap:14rpx;align-items:center;padding:22rpx;margin-bottom:16rpx}.store-no{font-size:28rpx;font-weight:700}.store-name{font-size:29rpx;line-height:1.4}.new-tag{font-size:22rpx;color:#FFB020}
