@@ -75,9 +75,38 @@ function canonicalizeOrders(input, base) {
   return input.map(item => {
     const raw = typeof item === 'string' ? { name: item } : (item || {});
     const name = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
+    const parserMatched = raw.matched === true && raw.isNew !== true && raw.needsReview !== true;
+    const parserNew = raw.isNew === true || raw.newStore === true;
     const hit = byName.get(key(name)) || byCode.get(String(raw.code || ''));
-    if (!hit) return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new' };
-    return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
+
+    // 解析接口已经完成基准库匹配时，确认入库必须保留这个结果。
+    // 旧版本这里再次要求“完全相同名称”，会把解析器已经匹配成功的门店全部重新判成新增。
+    if (parserMatched) {
+      return {
+        ...raw,
+        name: hit?.name || name,
+        code: hit?.code || raw.code || '',
+        nav: hit?.nav || raw.nav || '',
+        note: hit?.note || raw.note || '',
+        matched: true,
+        isNew: false,
+        needsReview: false,
+        candidate: '',
+        matchType: raw.matchType || 'confirmed',
+        matchScore: Number(raw.matchScore) || 1,
+        _baseIndex: hit?.index
+      };
+    }
+
+    if (parserNew) {
+      return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: undefined };
+    }
+
+    if (hit) {
+      return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
+    }
+
+    return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: undefined };
   });
 }
 
@@ -108,7 +137,8 @@ function sortOrders(orders, base) {
   const matched = [], news = [];
   for (const item of orders) {
     const routeOrder = item._baseIndex != null ? rank.get(item._baseIndex) : null;
-    if (routeOrder == null) news.push({ ...item, isNew: true, matched: false });
+    if (routeOrder == null && item.matched !== true) news.push({ ...item, isNew: true, matched: false });
+    else if (routeOrder == null && item.matched === true) matched.push({ ...item, routeOrder: Number.MAX_SAFE_INTEGER, isNew: false, matched: true });
     else matched.push({ ...item, routeOrder, isNew: false, matched: true });
   }
   matched.sort((a, b) => a.routeOrder - b.routeOrder);
