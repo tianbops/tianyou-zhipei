@@ -1,6 +1,6 @@
 // 天友智配One - 今日运单解析
-// OCR原文 -> 提取今日实际门店 -> 当前线路基准库匹配 -> 按基准顺序排序。
-// 规则：基准库优先；“到家”等名称本身不是排除条件；无法可靠匹配才进入待确认/新增。
+// OCR原文 -> 提取门店 -> 当前用户线路基准库匹配 -> 按基准顺序输出。
+// 解析规则与具体线路数据完全分离，不写死任何线路。
 import { authRequired } from './_auth.js';
 
 export async function onRequest({ request, env }) {
@@ -14,16 +14,33 @@ export async function onRequest({ request, env }) {
     const route = normalizeRoute(session.route || body.route);
     if (!route) return json({ success: false, error: '用户未绑定线路' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
+
     const base = await getBaseStores(env, route);
     const parsed = parseDeterministic(text);
     const result = matchTodayStores(parsed.stores, base);
     if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
+
     return json({ success: true, data: {
-      route, date: parsed.date, vehicle: parsed.vehicle, totalWeight: normalizeWeight(parsed.totalWeight),
-      rawOrderCount: parsed.rawOrderCount, stores: result.stores, storeCount: result.stores.length,
-      uniqueStoreCount: result.uniqueStoreCount, matchedCount: result.matchedCount, newStoreCount: result.newStoreCount,
-      reviewCount: result.reviewCount, duplicateCount: result.duplicateCount, recognizedCount: parsed.stores.length,
-      warning: result.reviewCount ? `发现 ${result.reviewCount} 家门店需要确认` : result.newStoreCount ? `发现 ${result.newStoreCount} 家新增门店，请核对` : result.duplicateCount ? `识别到 ${result.duplicateCount} 条重复门店记录，已合并` : ''
+      route,
+      date: parsed.date,
+      vehicle: parsed.vehicle,
+      totalWeight: normalizeWeight(parsed.totalWeight),
+      rawOrderCount: parsed.rawOrderCount,
+      stores: result.stores,
+      storeCount: result.stores.length,
+      uniqueStoreCount: result.uniqueStoreCount,
+      matchedCount: result.matchedCount,
+      newStoreCount: result.newStoreCount,
+      reviewCount: result.reviewCount,
+      duplicateCount: result.duplicateCount,
+      recognizedCount: parsed.stores.length,
+      warning: result.reviewCount
+        ? `发现 ${result.reviewCount} 家门店需要确认`
+        : result.newStoreCount
+          ? `发现 ${result.newStoreCount} 家新增门店，请核对`
+          : result.duplicateCount
+            ? `识别到 ${result.duplicateCount} 条重复门店记录，已合并`
+            : ''
     }});
   } catch (error) {
     console.error('parse api error', error);
@@ -33,57 +50,122 @@ export async function onRequest({ request, env }) {
 
 function parseDeterministic(text) {
   const source = normalizeOcrText(text);
-  const routeText = extractRouteText(source);
-  return { date: extractDate(source), vehicle: extractVehicle(source), totalWeight: extractWeight(source), rawOrderCount: extractRawOrderCount(source), stores: extractArrowStores(routeText) };
+  return {
+    date: extractDate(source),
+    vehicle: extractVehicle(source),
+    totalWeight: extractWeight(source),
+    rawOrderCount: extractRawOrderCount(source),
+    stores: extractStores(source)
+  };
 }
 
 function normalizeOcrText(value) {
   return String(value || '')
     .replace(/\r\n?/g, '\n')
-    .replace(/[→＞》➜➤⇒]/g, '->')
-    // OCR经常把箭头识别成“-”换行“>”，也可能在箭头两侧插入空格。
-    .replace(/-\s*\n\s*>/g, '->')
-    .replace(/-\s*>/g, '->')
-    .replace(/[﹣－—–]/g, '-')
-    .replace(/[\u00a0\u200b\ufeff]/g, ' ')
+    .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ')
+    .replace(/[＞》➜➤⇒↦]/g, '->')
+    .replace(/→/g, '->')
+    .replace(/[-﹣－—–]\s*\n\s*[>＞]/g, '->')
+    .replace(/[-﹣－—–]\s*[>＞]/g, '->')
+    .replace(/(^|\n)\s*[>＞]\s*(?=\n|$)/g, '$1->')
+    .replace(/[｜|]/g, '|')
+    .replace(/[，]/g, ',')
+    .replace(/[：]/g, ':')
+    .split('\n')
+    .map(line => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
     .trim();
 }
 
-function extractRouteText(source) {
-  const firstArrow = source.indexOf('->');
-  if (firstArrow < 0) return '';
-  return source.slice(findRouteStart(source, firstArrow)).trim();
-}
-
-function findRouteStart(source, arrowIndex) {
-  const before = source.slice(0, arrowIndex);
-  const lines = before.split('\n');
-  const lastLine = cleanStoreName(lines.at(-1) || '');
-  if (isLikelyStore(lastLine)) return before.length - lastLine.length;
-  const starts = /(?:到家主城|江北|渝北|特渠部|天友加盟|天友24h|Ⅱ类|II类|III类|Ⅲ类)/g;
-  let last = -1, match;
-  while ((match = starts.exec(before))) last = match.index;
-  return last >= 0 ? last : arrowIndex;
-}
-
-function extractArrowStores(routeText) {
+function extractStores(source) {
+  const routeText = extractRouteRegion(source);
   if (!routeText) return [];
+
+  // 先按真正的箭头拆分；OCR把箭头识别成单独“>”时，normalizeOcrText已恢复。
+  const parts = routeText.split(/\s*->\s*/);
   const stores = [];
-  for (const part of routeText.split(/\s*(?:->|-->)\s*/)) {
-    const name = cleanStoreName(stripOrderMetadata(part.replace(/\n+/g, '')));
+  for (const part of parts) {
+    const name = cleanStoreName(stripOrderMetadata(part));
     if (isLikelyStore(name)) stores.push(name);
   }
-  return stores;
+
+  // 某些图片箭头全部漏识别：此时逐行恢复门店，避免整单直接变成0家。
+  if (stores.length < 2 && !routeText.includes('->')) {
+    return routeText.split('\n')
+      .map(line => cleanStoreName(stripOrderMetadata(line)))
+      .filter(isLikelyStore);
+  }
+  return dedupeRawStores(stores);
+}
+
+function extractRouteRegion(source) {
+  const lines = source.split('\n');
+  const firstArrow = source.indexOf('->');
+
+  // 运单通常从“承运订单”开始；只截取其后的内容，避免把日期、司机、重量当门店。
+  const carrierIndex = source.lastIndexOf('承运订单');
+  if (carrierIndex >= 0) {
+    const after = source.slice(carrierIndex + '承运订单'.length);
+    const cleaned = removeHeaderFields(after);
+    if (cleaned) return cleaned;
+  }
+
+  if (firstArrow >= 0) {
+    // 第一箭头前最后一段是首家门店。不要依赖“江北/渝北”等固定前缀。
+    const before = source.slice(0, firstArrow);
+    const chunks = before.split('\n');
+    const candidates = [];
+    for (const line of chunks) {
+      const cleaned = cleanStoreName(stripOrderMetadata(line));
+      if (isLikelyStore(cleaned)) candidates.push(cleaned);
+    }
+    const first = candidates.length ? candidates[candidates.length - 1] : '';
+    return first ? `${first}${source.slice(firstArrow)}` : source.slice(firstArrow);
+  }
+
+  // 无箭头时，寻找“订单区域”后的有效门店行。
+  const start = findLastHeaderEnd(lines);
+  return lines.slice(start).filter(line => !isHeaderLine(line)).join('\n');
+}
+
+function removeHeaderFields(value) {
+  return String(value || '')
+    .split('\n')
+    .filter(line => !isHeaderLine(line))
+    .join('\n')
+    .replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/g, '')
+    .trim();
+}
+
+function findLastHeaderEnd(lines) {
+  let index = 0;
+  for (let i = 0; i < lines.length; i++) if (isHeaderLine(lines[i])) index = i + 1;
+  return index;
+}
+
+function isHeaderLine(value) {
+  const text = String(value || '').replace(/\s/g, '');
+  if (!text) return true;
+  return /^(?:运单列表|运输日期|车牌号|额定载重|额定装载|额定体积|主司机|送货员|承运订单|总数量|总重量|总体积|订单编号|运单编号|车辆信息|配送信息)/.test(text)
+    || /^(?:20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?|渝[A-Z0-9]{5,7})$/.test(text);
 }
 
 function stripOrderMetadata(value) {
-  return String(value || '').split(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?/)[0].trim();
+  return String(value || '')
+    .replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/g, ' ')
+    .replace(/(?:总数量|总重量|总体积)\s*[:：]?\s*[\d.]+\s*(?:kg|KG|千克|公斤|吨|t)?/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 async function getBaseStores(env, route) {
   const key = `route:${normalizeRoute(route)}:base`;
   const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
-  const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
+  const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+    cache: 'no-store'
+  });
   if (!response.ok) throw new Error('线路基准数据库读取失败');
   const data = await response.json().catch(() => ({}));
   let parsed = data?.result;
@@ -101,8 +183,11 @@ function matchTodayStores(recognized, baseStores) {
     const code = extractBusinessCode(item.name);
     if (code && !byCode.has(code)) byCode.set(code, item);
   }
-  const matched = [], review = [], news = [], used = new Set(), canonicalByBaseIndex = new Map();
+
+  const matched = [], review = [], news = [];
+  const used = new Set(), canonicalByBaseIndex = new Map();
   let duplicateCount = 0;
+
   for (const raw of recognized) {
     const direct = findDirectMatch(raw, byName, byCode);
     if (direct && used.has(direct.item.index)) {
@@ -115,6 +200,7 @@ function matchTodayStores(recognized, baseStores) {
         continue;
       }
     }
+
     const hit = findMatch(raw, base, byName, byCode, used);
     if (hit.type === 'match') {
       used.add(hit.item.index);
@@ -122,17 +208,31 @@ function matchTodayStores(recognized, baseStores) {
       matched.push(item);
       canonicalByBaseIndex.set(hit.item.index, item);
     } else if (hit.type === 'review') {
-      review.push({ code: '', name: raw, nav: '', note: '', isNew: false, matched: false, needsReview: true, candidate: hit.item.name, candidates: hit.alternatives.map(item => item.name), matchScore: Number(hit.score.toFixed(3)), rawNames: [raw] });
+      review.push({
+        code: '', name: raw, nav: '', note: '', isNew: false, matched: false,
+        needsReview: true, candidate: hit.item.name,
+        candidates: hit.alternatives.map(item => item.name),
+        matchScore: Number(hit.score.toFixed(3)), rawNames: [raw]
+      });
     } else {
       news.push({ code: '', name: raw, nav: '', note: '', isNew: true, matched: false, rawNames: [raw] });
     }
   }
+
   matched.sort((a, b) => a._i - b._i);
   matched.forEach((item, i) => { item.code = String(i + 1).padStart(2, '0'); });
   review.forEach((item, i) => { item.code = `R${String(i + 1).padStart(2, '0')}`; });
   news.forEach((item, i) => { item.code = `N${String(i + 1).padStart(2, '0')}`; });
+
   const stores = matched.concat(review, news).map(({ _i, ...item }) => item);
-  return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, uniqueStoreCount: stores.length };
+  return {
+    stores,
+    matchedCount: matched.length,
+    reviewCount: review.length,
+    newStoreCount: news.length,
+    duplicateCount,
+    uniqueStoreCount: stores.length
+  };
 }
 
 function findDirectMatch(raw, byName, byCode) {
@@ -146,17 +246,25 @@ function findDirectMatch(raw, byName, byCode) {
 function findMatch(raw, base, byName, byCode, used) {
   const direct = findDirectMatch(raw, byName, byCode);
   if (direct && !used.has(direct.item.index)) return direct;
+
   const code = extractBusinessCode(raw);
   if (code) {
     const codeCandidate = base.find(item => extractBusinessCode(item.name) === code && !used.has(item.index));
     if (codeCandidate) return { type: 'match', item: codeCandidate, mode: 'businessCode', score: 1 };
   }
-  const candidates = base.filter(item => !used.has(item.index)).map(item => ({ item, score: storeSimilarity(raw, item.name) })).sort((a, b) => b.score - a.score);
+
+  const candidates = base
+    .filter(item => !used.has(item.index))
+    .map(item => ({ item, score: storeSimilarity(raw, item.name) }))
+    .sort((a, b) => b.score - a.score);
   const best = candidates[0];
   if (!best) return { type: 'new', score: 0 };
   const second = candidates[1];
   const margin = second ? best.score - second.score : best.score;
-  if (best.score >= 0.86 || (best.score >= 0.80 && margin >= 0.06) || (best.score >= 0.74 && margin >= 0.12)) return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
+
+  if (best.score >= 0.86 || (best.score >= 0.80 && margin >= 0.06) || (best.score >= 0.74 && margin >= 0.12)) {
+    return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
+  }
   if (best.score >= 0.60) return { type: 'review', item: best.item, score: best.score, alternatives: candidates.slice(0, 3).map(x => x.item) };
   return { type: 'new', score: best.score };
 }
@@ -167,12 +275,22 @@ function storeSimilarity(a, b) {
   if (ak === bk) return 1;
   const codeA = extractBusinessCode(a), codeB = extractBusinessCode(b);
   if (codeA && codeA === codeB) return 1;
-  const edit = normalizedEditSimilarity(ak, bk), ngram = characterNgramSimilarity(ak, bk), token = tokenOverlap(stableStoreKey(a), stableStoreKey(b));
-  const containment = ak.includes(bk) || bk.includes(ak) ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length) : 0;
+
+  const edit = normalizedEditSimilarity(ak, bk);
+  const ngram = characterNgramSimilarity(ak, bk);
+  const token = tokenOverlap(stableStoreKey(a), stableStoreKey(b));
+  const containment = ak.includes(bk) || bk.includes(ak)
+    ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length)
+    : 0;
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
 }
 
-function stableStoreKey(value) { return matchKey(value).replace(/^(?:渝北|江北|特渠部|天友加盟|天友24h)/, '').replace(/谊品鲜/g, '谊品生鲜'); }
+function stableStoreKey(value) {
+  return matchKey(value)
+    .replace(/^(?:渝北|江北|特渠部|天友加盟|天友24h)/, '')
+    .replace(/谊品鲜/g, '谊品生鲜');
+}
+
 function tokenOverlap(a, b) {
   const aa = meaningfulTokens(a), bb = meaningfulTokens(b);
   if (!aa.size || !bb.size) return 0;
@@ -180,11 +298,15 @@ function tokenOverlap(a, b) {
   for (const token of aa) if (bb.has(token)) common++;
   return common / Math.max(aa.size, bb.size);
 }
+
 function meaningfulTokens(value) {
   const set = new Set();
-  for (const token of matchKey(value).match(/[a-z]+|\d+|[\u4e00-\u9fff]+/g) || []) if (token.length >= 2 || /\d/.test(token) || /[a-z]/i.test(token)) set.add(token);
+  for (const token of matchKey(value).match(/[a-z]+|\d+|[\u4e00-\u9fff]+/g) || []) {
+    if (token.length >= 2 || /\d/.test(token) || /[a-z]/i.test(token)) set.add(token);
+  }
   return set;
 }
+
 function characterNgramSimilarity(a, b, n = 2) {
   const aa = ngramSet(matchKey(a), n), bb = ngramSet(matchKey(b), n);
   if (!aa.size || !bb.size) return 0;
@@ -192,6 +314,7 @@ function characterNgramSimilarity(a, b, n = 2) {
   for (const value of aa) if (bb.has(value)) common++;
   return (2 * common) / (aa.size + bb.size);
 }
+
 function ngramSet(text, n) {
   const set = new Set();
   if (!text) return set;
@@ -199,11 +322,13 @@ function ngramSet(text, n) {
   for (let i = 0; i <= text.length - n; i++) set.add(text.slice(i, i + n));
   return set;
 }
+
 function normalizedEditSimilarity(a, b) {
   const x = matchKey(a), y = matchKey(b);
   if (!x || !y) return 0;
   return 1 - editDistance(x, y) / Math.max(x.length, y.length);
 }
+
 function editDistance(a, b) {
   if (a === b) return 0;
   let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -217,7 +342,22 @@ function editDistance(a, b) {
   }
   return previous[b.length];
 }
-function toMatched(item, mode, score, raw) { return { code: item.code, name: item.name, nav: item.nav, note: item.note, isNew: false, matched: true, matchType: mode, matchScore: Number(score.toFixed(3)), rawNames: [raw], _i: item.index }; }
+
+function toMatched(item, mode, score, raw) {
+  return {
+    code: item.code,
+    name: item.name,
+    nav: item.nav,
+    note: item.note,
+    isNew: false,
+    matched: true,
+    matchType: mode,
+    matchScore: Number(score.toFixed(3)),
+    rawNames: [raw],
+    _i: item.index
+  };
+}
+
 function normalizeBase(store, index) {
   if (typeof store === 'string') {
     const name = cleanStoreName(store);
@@ -226,32 +366,82 @@ function normalizeBase(store, index) {
   if (!store) return null;
   const name = cleanStoreName(store.name || store.storeName || store.title || store.customerName || store['门店名称'] || '');
   if (!name) return null;
-  return { name, code: String(store.code || index + 1).padStart(2, '0'), nav: store.nav || store.navigation || store.url || store['导航'] || '', note: store.note || store['备注'] || '', index };
+  return {
+    name,
+    code: String(store.code || index + 1).padStart(2, '0'),
+    nav: store.nav || store.navigation || store.url || store['导航'] || '',
+    note: store.note || store['备注'] || '',
+    index
+  };
 }
+
 function extractBusinessCode(value) {
-  const text = String(value || '').toUpperCase().replace(/[ＯО]/g, 'O').replace(/[Ｑ]/g, 'Q').replace(/[Ａ]/g, 'A');
-  const match = text.match(/(?:^|[^A-Z0-9])(JM\d{4,6}|Q\d{3,5}|A\d{4,6})(?:[^A-Z0-9]|$)/);
-  return match ? match[1] : '';
+  const text = normalizeCodeText(value);
+  // 允许 OCR 在字母与数字之间插入空格、全角空格或连字符。
+  const match = text.match(/(?:^|[^A-Z0-9])(JM\s*\d{4,6}|Q\s*\d{3,5}|A\s*\d{4,6})(?:[^A-Z0-9]|$)/);
+  return match ? match[1].replace(/[\s-]/g, '') : '';
 }
+
+function normalizeCodeText(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[ＯО0]/g, 'O')
+    .replace(/[Ｑ]/g, 'Q')
+    .replace(/[Ａ]/g, 'A')
+    .replace(/[Ｊ]/g, 'J')
+    .replace(/[Ｍ]/g, 'M');
+}
+
 function matchKey(value) {
   let text = cleanStoreName(value)
     .replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => ({ 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V', 'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X' }[roman] || roman))
     .replace(/\b(?:II|III)I(?=类)/gi, m => m.slice(0, -1).toUpperCase())
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
-    .replace(/谊品鲜/g, '谊品生鲜');
+    .replace(/谊品鲜/g, '谊品生鲜')
+    .replace(/沁园餐饮管理有限公司/g, '沁园餐饮管理有限公司');
   return text.replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
+
 function cleanStoreName(value) {
-  return String(value || '').replace(/^[\s\d]+[、.．)）-]+/, '').replace(/^承运订单[：:\s]*/, '').replace(/\s+/g, ' ').trim();
+  return String(value || '')
+    .replace(/^[\s\d]+[、.．)）-]+/, '')
+    .replace(/^承运订单[：:\s]*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
+
 function isLikelyStore(value) {
   const text = String(value || '').trim();
   if (!text || text.length < 3 || text.length > 160) return false;
-  if (/总重量|总数量|总体积|订单编号|运单编号|车牌|车辆|运输日期|日期|司机|送货员|主司机|承运订单|额定装载|额定载重|额定体积|总计|合计|单价|金额/.test(text)) return false;
-  return /店|公司|经销商|加盟|中心|超市|便利|生鲜|食品|贸易|商行|门市|乳业|大厦|药房|餐饮|酒店|委员会|管理中心|服务中心|供应链|公园|食堂/.test(text);
+  if (/总重量|总数量|总体积|订单编号|运单编号|车牌|车辆|运输日期|日期|司机|送货员|主司机|承运订单|额定装载|额定载重|额定体积|总计|合计|单价|金额|主司机|送货员/.test(text)) return false;
+  if (/^(?:\d+(?:\.\d+)?|[A-Z]{1,3}\d{3,8})$/.test(text)) return false;
+  // 路由已经由箭头切段，因此不再强制要求“店/公司”等后缀，防止OCR误差导致合法门店被过滤。
+  return /[\u4e00-\u9fff]/.test(text) || /[A-Za-z]/.test(text);
 }
-function extractDate(value) { const match = String(value || '').match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/); return match ? normalizeDate(match[1]) : ''; }
-function extractVehicle(value) { const match = String(value || '').match(/(?:车牌号|车牌|车辆)\s*[:：]?\s*([\u4e00-\u9fa5][A-Z0-9]{5,7})/i); return match ? normalizeVehicle(match[1]) : ''; }
+
+function dedupeRawStores(stores) {
+  const seen = new Set();
+  const result = [];
+  for (const store of stores) {
+    const key = matchKey(store);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(store);
+  }
+  return result;
+}
+
+function extractDate(value) {
+  const match = String(value || '').match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
+  return match ? normalizeDate(match[1]) : '';
+}
+
+function extractVehicle(value) {
+  const source = String(value || '').replace(/[\s>]/g, '');
+  const match = source.match(/(?:车牌号|车牌|车辆)[:：]?([\u4e00-\u9fa5][A-Z0-9]{5,7})/i);
+  return match ? normalizeVehicle(match[1]) : '';
+}
+
 function extractWeight(value) {
   const source = String(value || '').replace(/\s+/g, ' ');
   const match = source.match(/总\s*重\s*量\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
@@ -259,7 +449,12 @@ function extractWeight(value) {
   const fallback = source.match(/(?:总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|KG|千克|公斤|吨|t)?/i);
   return fallback ? `${fallback[1]}${fallback[2] || ''}`.trim() : '';
 }
-function extractRawOrderCount(value) { const match = String(value || '').match(/总数量\s*[:：]?\s*(\d+)/); return match ? Number(match[1]) : 0; }
+
+function extractRawOrderCount(value) {
+  const match = String(value || '').match(/总\s*数\s*量\s*[:：]?\s*(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
   const text = String(value).trim().replace(/,/g, '');
@@ -267,20 +462,30 @@ function normalizeWeight(value) {
   if (!match) return '';
   const number = Number(match[0]);
   if (!Number.isFinite(number) || number < 0) return '';
-  const hasKg = /kg|千克|公斤/i.test(text), hasTon = /吨|\bt\b/i.test(text);
+  const hasKg = /kg|千克|公斤/i.test(text);
+  const hasTon = /吨|\bt\b/i.test(text);
   const tons = hasTon ? number : hasKg ? number / 1000 : number >= 1000 ? number / 1000 : number;
   const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000;
   return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`;
 }
+
 function normalizeVehicle(value) { return String(value || '').replace(/[\s>]+$/, '').trim(); }
+
 function normalizeDate(value) {
   const text = String(value || '').replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-');
   const match = text.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
   return match ? `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}` : text;
 }
+
 function normalizeRoute(value) {
   const text = String(value || '').trim();
   const match = text.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
   return match ? `${String(parseInt(match[1] || match[2], 10)).padStart(2, '0')}号线` : text;
 }
-function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json;charset=UTF-8', 'Cache-Control': 'no-store' } }); }
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json;charset=UTF-8', 'Cache-Control': 'no-store' }
+  });
+}
