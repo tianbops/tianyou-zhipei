@@ -13,7 +13,6 @@
   let enginePromise = null;
   let sdkPromise = null;
   let busy = false;
-  let activeFileInput = null;
   const $ = (id) => document.getElementById(id);
 
   function normalizeText(value) {
@@ -216,20 +215,14 @@
     input.style.width = '1px';
     input.style.height = '1px';
     input.style.opacity = '0';
-    activeFileInput = input;
 
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file) process(file).catch(() => {});
-      setTimeout(() => {
-        if (activeFileInput === input) activeFileInput = null;
-        input.remove();
-      }, 1000);
+      setTimeout(() => input.remove(), 1000);
     }, { once: true });
 
     document.body.appendChild(input);
     input.click();
   };
-
-  window.triggerCameraUpload = () => window.triggerUpload('camera');
 })();
