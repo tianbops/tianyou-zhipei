@@ -19,6 +19,16 @@
   window.setHomeStatusError = setError;
   window.clearHomeStatusError = clearError;
 
+  function observeStatus() {
+    const box = $('parseStatus');
+    if (!box) return;
+    const observer = new MutationObserver(() => {
+      const icon = String($('statusIcon')?.textContent || '').trim();
+      if (icon === '✅' || icon === '⏳') clearError();
+    });
+    observer.observe(box, { childList: true, characterData: true, subtree: true });
+  }
+
   function observeToast() {
     const sync = () => {
       const toast = $('homeToast');
@@ -48,6 +58,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    observeStatus();
     observeToast();
     observePageError();
   }, { once: true });
