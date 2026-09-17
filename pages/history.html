@@ -16,14 +16,12 @@
     </header>
 
     <section class="task-card history-filter-card">
-      <div class="date-picker-title">选择日期</div>
-      <button class="date-display" id="dateDisplay" type="button" aria-label="选择日期">2026-09-17</button>
-      <button class="query-btn" id="queryBtn" type="button">查询配送记录</button>
+      <button class="date-picker-btn" id="datePickerBtn" type="button">选择日期</button>
     </section>
 
     <section class="task-card history-record-card">
       <div class="route-title">📋 配送记录</div>
-      <div class="history-scroll" id="historyList"><div class="empty-tip">请选择日期并点击查询</div></div>
+      <div class="history-scroll" id="historyList"><div class="empty-tip">⏳ 加载中...</div></div>
     </section>
   </div>
 
@@ -47,30 +45,28 @@
 <script src="../js/auth.js"></script>
 <script>
 'use strict';
-let historyData=[], selected='';
+let historyDates=[], selected='';
 const $=id=>document.getElementById(id), pad=v=>String(v).padStart(2,'0');
 function today(){const d=new Date();return [d.getFullYear(),d.getMonth()+1,d.getDate()]}
 function daysInMonth(y,m){return new Date(Number(y),Number(m),0).getDate()}
-function selectedDate(){return selected||$('dateDisplay')?.textContent||''}
 function buildWheel(id,min,max,value,label){const box=$(id);box.innerHTML='';for(let n=min;n<=max;n++){const item=document.createElement('button');item.type='button';item.className='wheel-item';item.dataset.value=String(n);item.textContent=label==='year'?String(n):pad(n);item.addEventListener('click',()=>snapWheel(box,n));box.appendChild(item)}requestAnimationFrame(()=>snapWheel(box,value,false))}
 function snapWheel(box,value,smooth=true){const item=box.querySelector(`[data-value="${value}"]`);if(!item)return;const top=item.offsetTop-(box.clientHeight-item.offsetHeight)/2;box.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});setActive(box,item)}
 function setActive(box,item){box.querySelectorAll('.wheel-item').forEach(el=>el.classList.toggle('active',el===item))}
 function wheelValue(id){const box=$(id),items=[...box.querySelectorAll('.wheel-item')];if(!items.length)return 0;const center=box.scrollTop+box.clientHeight/2;let best=items[0],distance=Infinity;items.forEach(item=>{const d=Math.abs(item.offsetTop+item.offsetHeight/2-center);if(d<distance){distance=d;best=item}});setActive(box,best);return Number(best.dataset.value)}
-function openDatePicker(){const [y,m,d]=selectedDate().split('-').map(Number);buildWheel('yearWheel',2020,2035,y,'year');buildWheel('monthWheel',1,12,m,'month');buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day');$('dateModal').classList.add('active');$('dateModal').setAttribute('aria-hidden','false')}
+function openDatePicker(){const now=selected?selected.split('-').map(Number):today();const [y,m,d]=now;buildWheel('yearWheel',2020,2035,y,'year');buildWheel('monthWheel',1,12,m,'month');buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day');$('dateModal').classList.add('active');$('dateModal').setAttribute('aria-hidden','false')}
 function closeDatePicker(){$('dateModal').classList.remove('active');$('dateModal').setAttribute('aria-hidden','true')}
-function confirmDate(){const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=Math.min(wheelValue('dayWheel'),daysInMonth(y,m));selected=`${y}-${pad(m)}-${pad(d)}`;$('dateDisplay').textContent=selected;closeDatePicker();loadHistory(selected)}
-async function loadHistory(date){const box=$('historyList'),button=$('queryBtn');box.innerHTML='<div class="empty-tip">⏳ 加载中...</div>';if(button){button.disabled=true;button.textContent='查询中…'}try{const r=await fetch(`/api/history?date=${encodeURIComponent(date)}`,{cache:'no-store',headers:Auth.getAuthHeaders?Auth.getAuthHeaders():{},credentials:'same-origin'});if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);const payload=await r.json();const records=Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);historyData=records;render(records)}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip">🌐 ${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}finally{if(button){button.disabled=false;button.textContent='查询配送记录'}}}
-function render(records){const box=$('historyList');if(!records.length){box.innerHTML='<div class="empty-tip">📭 暂无配送记录</div>';return}box.innerHTML='';records.forEach((item,i)=>{const card=document.createElement('div');card.className='history-item';const count=Number(item.uniqueStoreCount??item.count??item.orders?.length??0);const countText=`${count} 家门店`;card.innerHTML=`<div class="history-head"><div class="history-date">${escapeHtml(item.date||'未知日期')}</div><button class="history-view" type="button" data-action="view" data-index="${i}">查看记录 →</button></div><div class="info-row"><span>线路</span><b>${escapeHtml(item.route||'')}</b></div><div class="info-row"><span>车辆</span><b>🚚 ${escapeHtml(item.vehicle||'未设置')}</b></div><div class="info-row"><span>配送</span><b>${countText}</b></div><div class="info-row"><span>总重量</span><b>${escapeHtml(formatWeight(item.weight??item.totalWeight))}</b></div><div class="info-row"><span>批次</span><b>${escapeHtml(item.orderBatchId||'—')}</b></div><div class="history-actions"><button class="history-delete" data-action="delete" data-index="${i}">删除</button></div>`;card.querySelector('[data-action="view"]').addEventListener('click',()=>viewHistoryDetail(i));card.querySelector('[data-action="delete"]').addEventListener('click',()=>deleteHistory(i));box.appendChild(card)})}
-function viewHistoryDetail(i){const item=historyData[i];if(!item?.orderBatchId){alert('该历史记录缺少运单批次，无法打开详情');return}closeDatePicker();const date=encodeURIComponent(item.date||selectedDate());const batch=encodeURIComponent(item.orderBatchId);window.location.href=`order_detail.html?mode=history&date=${date}&orderBatchId=${batch}`}
-async function deleteHistory(i){const item=historyData[i];if(!item)return;const date=item.date||selectedDate();const batch=item.orderBatchId||'';if(!batch){alert('该历史记录缺少运单批次，无法安全删除');return}if(!confirm(`确定删除这条 ${date} 的历史配送记录吗？\n如果存在完全相同的重复数据，会一并删除；同一天其它不同配送不会删除。`))return;const button=document.querySelector(`.history-delete[data-index="${i}"]`);if(button){button.disabled=true;button.textContent='删除中…'}try{const r=await fetch(`/api/history?date=${encodeURIComponent(date)}&orderBatchId=${encodeURIComponent(batch)}`,{method:'DELETE',cache:'no-store',headers:Auth.getAuthHeaders?Auth.getAuthHeaders():{},credentials:'same-origin'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.success)throw new Error(data.error||`删除失败（${r.status}）`);await loadHistory(selectedDate())}catch(e){if(button){button.disabled=false;button.textContent='删除'}alert(e.message||'历史记录删除失败')}}
-function formatWeight(v){if(v===null||v===undefined||v==='')return '0t';const s=String(v).trim().replace(/,/g,'');const m=s.match(/[\d]+(?:\.\d+)?/);if(!m)return '0t';const n=Number(m[0]);if(!Number.isFinite(n))return '0t';const tons=/吨|\bt\b/i.test(s)?n:/kg|千克|公斤/i.test(s)?n/1000:n>=1000?n/1000:n;const fixed=Math.round((tons+Number.EPSILON)*1e6)/1e6;return `${fixed.toFixed(6).replace(/0+$/,'').replace(/\.$/,'')}t`}
-function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function confirmDate(){const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=Math.min(wheelValue('dayWheel'),daysInMonth(y,m));selected=`${y}-${pad(m)}-${pad(d)}`;closeDatePicker();loadHistory(selected,true)}
+async function loadHistory(date='',showSelected=false){const box=$('historyList');box.innerHTML='<div class="empty-tip">⏳ 加载中...</div>';try{const query=date?`?date=${encodeURIComponent(date)}`:'';const r=await fetch(`/api/history${query}`,{cache:'no-store',headers:Auth.getAuthHeaders?Auth.getAuthHeaders():{},credentials:'same-origin'});if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);const payload=await r.json();if(date){if(showSelected)renderSelectedRecords(date,payload);else renderSelectedRecords(date,payload);return}historyDates=Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);renderDates(historyDates)}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip">🌐 ${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}}
+function renderDates(dates){const box=$('historyList');if(!dates.length){box.innerHTML='<div class="empty-tip">📭 暂无配送记录</div>';return}box.innerHTML='';dates.forEach((date,i)=>{const card=document.createElement('div');card.className='history-date-item';card.innerHTML=`<div class="history-head"><div class="history-date">${escapeHtml(date)}</div><button class="history-view" type="button">查看记录 →</button></div>`;card.querySelector('.history-view').addEventListener('click',()=>openDateHistory(date));box.appendChild(card)})}
+async function openDateHistory(date){selected=date;await loadHistory(date,true)}
+function renderSelectedRecords(date,payload){const records=Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);if(!records.length){$('historyList').innerHTML=`<div class="empty-tip">📭 ${escapeHtml(date)} 暂无配送记录</div>`;return}const item=records[0];if(!item?.orderBatchId){$('historyList').innerHTML='<div class="empty-tip">该日期记录缺少运单批次，无法打开详情</div>';return}const batch=encodeURIComponent(item.orderBatchId);window.location.href=`order_detail.html?mode=history&date=${encodeURIComponent(date)}&orderBatchId=${batch}`}
 function goBack(){closeDatePicker();location.href='../home.html'}
-$('dateDisplay')?.addEventListener('click',openDatePicker);$('queryBtn')?.addEventListener('click',()=>loadHistory(selectedDate()));$('cancelDate')?.addEventListener('click',closeDatePicker);$('confirmDate')?.addEventListener('click',confirmDate);$('dateModal')?.addEventListener('click',e=>{if(e.target===$('dateModal'))closeDatePicker()});
+$('datePickerBtn')?.addEventListener('click',openDatePicker);$('cancelDate')?.addEventListener('click',closeDatePicker);$('confirmDate')?.addEventListener('click',confirmDate);$('dateModal')?.addEventListener('click',e=>{if(e.target===$('dateModal'))closeDatePicker()});
 ['yearWheel','monthWheel','dayWheel'].forEach(id=>$(id)?.addEventListener('scroll',()=>{const box=$(id);clearTimeout(box._timer);box._timer=setTimeout(()=>{const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=wheelValue('dayWheel');if(id==='yearWheel'||id==='monthWheel')buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day')},90)}));
-document.addEventListener('DOMContentLoaded',async()=>{try{closeDatePicker();if(!(await Auth.checkAuth()))return;const [y,m,d]=today();selected=`${y}-${pad(m)}-${pad(d)}`;$('dateDisplay').textContent=selected;await loadHistory(selected)}catch(e){console.error(e)}});
+document.addEventListener('DOMContentLoaded',async()=>{try{closeDatePicker();if(!(await Auth.checkAuth()))return;await loadHistory()}catch(e){console.error(e)}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDatePicker()});
 window.addEventListener('pagehide',closeDatePicker);window.addEventListener('pageshow',closeDatePicker);
+function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 </script>
 </body>
 </html>
