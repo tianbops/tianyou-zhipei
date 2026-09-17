@@ -14,7 +14,7 @@ export async function onRequest({ request, env }) {
 
     if (!/^[a-z0-9_]{3,32}$/.test(username)) return json({ success: false, error: '用户名需为3-32位字母、数字或下划线' }, 400);
     if (password.length < 6 || password.length > 72) return json({ success: false, error: '密码需为6-72位' }, 400);
-    if (!route || !/^\d{1,3}号线$/.test(route)) return json({ success: false, error: '请输入有效线路，例如 17号线' }, 400);
+    if (!route || !/^\d{2,3}号线$/.test(route)) return json({ success: false, error: '请输入有效线路，例如 17号线' }, 400);
     if (name.length > 40) return json({ success: false, error: '姓名不能超过40个字符' }, 400);
     if (vehicle.length > 30) return json({ success: false, error: '车辆信息不能超过30个字符' }, 400);
 
@@ -39,7 +39,6 @@ export async function onRequest({ request, env }) {
       updatedAt: now
     };
 
-    // 通过 NX 防止并发注册产生同名或同线路账号。
     const userClaim = await redisSetNx(env, usernameKey, id);
     if (!userClaim) return json({ success: false, error: '用户名已存在，请换一个用户名' }, 409);
 
@@ -56,16 +55,7 @@ export async function onRequest({ request, env }) {
       return json({ success: false, error: '用户保存失败，请稍后重试' }, 500);
     }
 
-    return json({
-      success: true,
-      user: {
-        id,
-        username,
-        name: user.name,
-        route,
-        vehicle
-      }
-    }, 201);
+    return json({ success: true, user: { id, username, name: user.name, route, vehicle } }, 201);
   } catch (error) {
     console.error('register error', error);
     return json({ success: false, error: '注册服务异常，请稍后重试' }, 500);
@@ -87,8 +77,7 @@ function base64(bytes) {
 
 async function redisGet(env, key) {
   const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-    cache: 'no-store'
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
   });
   if (!response.ok) throw new Error('Redis 读取失败');
   const data = await response.json().catch(() => ({}));
@@ -97,9 +86,7 @@ async function redisGet(env, key) {
 
 async function redisSetNx(env, key, value) {
   const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}/NX`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-    cache: 'no-store'
+    method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
   });
   if (!response.ok) throw new Error('Redis 写入失败');
   const data = await response.json().catch(() => ({}));
@@ -108,10 +95,8 @@ async function redisSetNx(env, key, value) {
 
 async function redisSet(env, key, value) {
   const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(value),
-    cache: 'no-store'
+    method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(value), cache: 'no-store'
   });
   const data = await response.json().catch(() => ({}));
   return response.ok && (data.result === undefined || data.result === 'OK');
@@ -119,29 +104,17 @@ async function redisSet(env, key, value) {
 
 async function redisDelete(env, key) {
   await fetch(`${env.UPSTASH_REDIS_REST_URL}/del/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-    cache: 'no-store'
+    method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
   }).catch(() => {});
 }
 
-function redisReady(env) {
-  return Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
-}
-
-function normalizeUsername(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
+function redisReady(env) { return Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN); }
+function normalizeUsername(value) { return String(value || '').trim().toLowerCase(); }
 function normalizeRoute(value) {
   const s = String(value || '').trim();
   const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
-  return m ? `${String(parseInt(m[1] || m[2], 10))}号线` : s;
+  return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s;
 }
-
 function json(payload, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
-  });
+  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
