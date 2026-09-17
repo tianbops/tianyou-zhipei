@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="card task-card">
+    <view class="task-title"><text>今日任务</text><text>● 🚚 {{user.vehicle || '未绑定车辆'}}</text></view>
+    <view class="route">{{user.route || '未绑定线路'}}</view>
+    <view class="stats">
+      <view><text class="muted">今日配送</text><text class="stat-value">{{order.count}}家</text></view>
+      <view><text class="muted">商品总量</text><text class="stat-value">{{order.weight}}</text></view>
+    </view>
+  </view>
+  <view class="section-title">配送路线</view>
+  <view wx:if="{{!order.stores.length}}" class="card muted">今日暂无运单</view>
+  <view wx:for="{{order.stores}}" wx:key="id" class="card store">
+    <view class="store-no">{{index + 1}}</view>
+    <view class="store-name">{{item.displayName || item.name}}</view>
+    <view wx:if="{{item.isNew}}" class="new-tag">⚠ 新增</view>
+  </view>
+  <view class="nav-row">
+    <view class="nav-item" bindtap="openOrder">今日路线</view>
+    <view class="nav-item" bindtap="openHistory">历史查询</view>
+    <view class="nav-item" bindtap="openSettings">账户设置</view>
+  </view>
+</view>
