@@ -7,7 +7,6 @@
 
   const MAX_SIDE = 3000;
   const JPEG_QUALITY = 0.95;
-  // 降低识别过滤阈值，避免运单小字、浅色字因低置信度在进入 parse.js 前就被丢掉。
   const OCR_SCORE = 0.25;
   const OCR_SDK_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
 
@@ -15,7 +14,6 @@
   let sdkPromise = null;
   let busy = false;
   let activeFileInput = null;
-  let uploadedImageFile = null;
   const $ = (id) => document.getElementById(id);
 
   function normalizeText(value) {
@@ -34,7 +32,6 @@
     if ($('statusIcon')) $('statusIcon').textContent = error ? '⚠️' : done ? '✅' : '⏳';
     if ($('statusText')) $('statusText').textContent = text;
     if ($('progressBar')) $('progressBar').style.width = `${Math.max(0, Math.min(100, progress))}%`;
-    if ($('statusCount') && !done) $('statusCount').textContent = '';
   }
 
   function notify(message) {
@@ -71,7 +68,6 @@
     if (enginePromise) return enginePromise;
     const PaddleOCR = await loadSdk();
     setStatus('正在加载中文OCR模型中…', 35);
-
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
@@ -103,7 +99,9 @@
         image.onerror = () => reject(new Error('图片读取失败'));
         image.src = url;
       });
-    } finally { URL.revokeObjectURL(url); }
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function prepareImage(file) {
@@ -147,11 +145,11 @@
     const prepared = items.map((item, index) => ({ item, index, box: boxInfo(item) }));
     const heights = prepared.map(x => x.box.h).sort((a, b) => a - b);
     const medianHeight = heights.length ? heights[Math.floor(heights.length / 2)] : 20;
-    // 不再使用固定24px。不同手机截图分辨率下，固定阈值会把同一行拆成多行或把相邻行合并。
     const rowTolerance = Math.max(10, Math.min(80, medianHeight * 0.65));
 
     prepared.sort((a, b) => {
-      const ay = a.box.y, by = b.box.y;
+      const ay = a.box.y;
+      const by = b.box.y;
       if (Math.abs(ay - by) <= rowTolerance) return a.box.x - b.box.x || a.index - b.index;
       return ay - by || a.index - b.index;
     });
@@ -172,13 +170,11 @@
     input.value = text;
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.scrollTop = 0;
-    if ($('charCount')) $('charCount').textContent = String(text.length);
   }
 
   async function process(file) {
     if (busy) return;
     busy = true;
-    uploadedImageFile = file || null;
     try {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
 
@@ -206,16 +202,8 @@
     }
   }
 
-  window.clearUploadedImage = function() {
-    uploadedImageFile = null;
-    if (activeFileInput) {
-      activeFileInput.value = '';
-      activeFileInput.remove();
-      activeFileInput = null;
-    }
-  };
-
   window.callOCR = process;
+
   window.triggerUpload = function(type) {
     if (busy) return;
     const input = document.createElement('input');
