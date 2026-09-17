@@ -65,7 +65,7 @@ function parseDeterministic(text) {
     date: extractDate(source),
     vehicle: extractVehicle(source),
     totalWeight: extractWeight(source),
-    stores
+    stores: dedupeRecognizedStores(stores)
   };
 }
 
@@ -80,7 +80,7 @@ function normalizeOcrText(value) {
 
 function extractRouteText(source) {
   const firstArrow = source.indexOf('->');
-  if (firstArrow < 0) return '';
+  if (firstArrow < 0) return source;
   const start = findRouteStart(source, firstArrow);
   return source.slice(start).trim();
 }
@@ -102,14 +102,32 @@ function extractArrowStores(routeText) {
   if (!routeText) return [];
   const stores = [];
   for (const part of routeText.split(/\s*(?:->|-->)\s*/)) {
-    const name = cleanStoreName(stripOrderMetadata(part.replace(/\n+/g, ' ')));
-    if (isLikelyStore(name)) stores.push(name);
+    const lines = part.split('\n');
+    const candidates = lines.length > 1 ? lines : [part];
+    for (const candidate of candidates) {
+      const name = cleanStoreName(stripOrderMetadata(candidate));
+      if (isLikelyStore(name)) stores.push(name);
+    }
   }
   return stores;
 }
 
+function dedupeRecognizedStores(stores) {
+  const seen = new Set();
+  const result = [];
+  for (const name of stores) {
+    const key = matchKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+  return result;
+}
+
 function stripOrderMetadata(value) {
-  return String(value || '').split(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?/)[0].trim();
+  return String(value || '')
+    .split(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?/)[0]
+    .trim();
 }
 
 async function getBaseStores(env, route) {
@@ -150,14 +168,7 @@ function matchTodayStores(recognized, baseStores) {
   let duplicateCount = 0;
 
   for (const raw of recognized) {
-    const duplicate = findCanonicalDuplicate(raw, matched, canonicalByBaseIndex);
-    if (duplicate) {
-      mergeDuplicate(duplicate, raw);
-      duplicateCount += 1;
-      continue;
-    }
-
-    const direct = findDirectMatch(raw, base, byName, byCode);
+    const direct = findDirectMatch(raw, byName, byCode);
     if (direct && used.has(direct.item.index)) {
       const canonical = canonicalByBaseIndex.get(direct.item.index);
       if (canonical) {
@@ -165,6 +176,13 @@ function matchTodayStores(recognized, baseStores) {
         duplicateCount += 1;
         continue;
       }
+    }
+
+    const duplicate = findCanonicalDuplicate(raw, matched, canonicalByBaseIndex);
+    if (duplicate) {
+      mergeDuplicate(duplicate, raw);
+      duplicateCount += 1;
+      continue;
     }
 
     const hit = findMatch(raw, base, byName, byCode, used);
@@ -216,12 +234,7 @@ function findCanonicalDuplicate(raw, matched, canonicalByBaseIndex) {
     if (rawCode && canonicalCode && rawCode === canonicalCode) return canonical;
     const canonicalKey = matchKey(canonical.name);
     if (rawKey && canonicalKey === rawKey) return canonical;
-    if (rawKey && canonicalKey && storeSimilarity(raw, canonical.name) >= 0.91) return canonical;
-    if (Array.isArray(canonical.rawNames)) {
-      for (const previous of canonical.rawNames) {
-        if (matchKey(previous) === rawKey || (rawKey && storeSimilarity(raw, previous) >= 0.94)) return canonical;
-      }
-    }
+    if (rawKey && canonicalKey && storeSimilarity(raw, canonical.name) >= 0.97) return canonical;
   }
   return null;
 }
@@ -232,11 +245,12 @@ function mergeDuplicate(canonical, raw) {
   if (!canonical.rawNames.includes(raw)) canonical.rawNames.push(raw);
 }
 
-function findDirectMatch(raw, base, byName, byCode) {
+function findDirectMatch(raw, byName, byCode) {
   const key = matchKey(raw);
-  if (!key) return null;
-  const exact = byName.get(key);
-  if (exact) return { type: 'match', item: exact, mode: 'exact', score: 1 };
+  if (key) {
+    const exact = byName.get(key);
+    if (exact) return { type: 'match', item: exact, mode: 'exact', score: 1 };
+  }
 
   const businessCode = extractBusinessCode(raw);
   if (businessCode) {
@@ -247,7 +261,7 @@ function findDirectMatch(raw, base, byName, byCode) {
 }
 
 function findMatch(raw, base, byName, byCode, used) {
-  const direct = findDirectMatch(raw, base, byName, byCode);
+  const direct = findDirectMatch(raw, byName, byCode);
   if (direct && !used.has(direct.item.index)) return direct;
 
   const scored = base
@@ -357,17 +371,11 @@ function extractBusinessCode(value) {
   return match ? match[1] : '';
 }
 function matchKey(value) {
-  let text = cleanStoreName(value)
+  const text = cleanStoreName(value)
     .replace(/Ⅱ/g, 'II').replace(/Ⅲ/g, 'III').replace(/Ⅳ/g, 'IV').replace(/Ⅴ/g, 'V')
     .replace(/Ⅵ/g, 'VI').replace(/Ⅶ/g, 'VII').replace(/Ⅷ/g, 'VIII').replace(/Ⅸ/g, 'IX').replace(/Ⅹ/g, 'X')
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
-    .replace(/江北亿达鲜半华府店/g, '江北亿达鲜半山华府店')
-    .replace(/谊品鲜/g, '谊品生鲜')
-    .replace(/沁园餐饮管理有限公司/g, '沁园餐饮管理有限公司');
-
-  if (text.includes('到家主城') && text.includes('江北区加州')) {
-    text = text.replace(/客服中心|客户中心/g, '服务中心');
-  }
+    .replace(/谊品鲜/g, '谊品生鲜');
 
   return text.replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
