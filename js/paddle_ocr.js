@@ -16,6 +16,8 @@
   let enginePromise = null;
   let sdkPromise = null;
   let busy = false;
+  let activeFileInput = null;
+  let uploadedImageFile = null;
   const $ = (id) => document.getElementById(id);
 
   function normalizeText(value) {
@@ -70,7 +72,7 @@
   async function loadEngine() {
     if (enginePromise) return enginePromise;
     const PaddleOCR = await loadSdk();
-    setStatus('正在加载中文OCR模型，首次使用需要一点时间…', 35);
+    setStatus('正在加载中文OCR模型中…', 35);
 
     enginePromise = PaddleOCR.create({
       lang: 'ch',
@@ -163,6 +165,7 @@
   async function process(file) {
     if (busy) return;
     busy = true;
+    uploadedImageFile = file || null;
     try {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
 
@@ -190,6 +193,15 @@
     }
   }
 
+  window.clearUploadedImage = function() {
+    uploadedImageFile = null;
+    if (activeFileInput) {
+      activeFileInput.value = '';
+      activeFileInput.remove();
+      activeFileInput = null;
+    }
+  };
+
   window.callOCR = process;
   window.triggerUpload = function(type) {
     if (busy) return;
@@ -204,11 +216,15 @@
     input.style.width = '1px';
     input.style.height = '1px';
     input.style.opacity = '0';
+    activeFileInput = input;
 
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file) process(file).catch(() => {});
-      setTimeout(() => input.remove(), 1000);
+      setTimeout(() => {
+        if (activeFileInput === input) activeFileInput = null;
+        input.remove();
+      }, 1000);
     }, { once: true });
 
     document.body.appendChild(input);
