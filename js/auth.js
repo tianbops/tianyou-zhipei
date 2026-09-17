@@ -10,7 +10,7 @@ const Auth = {
       headers: { 'Content-Type': 'application/json' },
       cache: 'no-store',
       credentials: 'same-origin',
-      body: JSON.stringify({ type: 'route', username: String(account || '').trim(), password })
+      body: JSON.stringify({ username: String(account || '').trim(), password })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.success) {
@@ -20,6 +20,23 @@ const Auth = {
     }
     this.serverUser = data.user || null;
     return this.serverUser;
+  },
+
+  async register(payload) {
+    const response = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      credentials: 'same-origin',
+      body: JSON.stringify(payload || {})
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.success) {
+      const error = new Error(data?.error || '注册失败');
+      error.status = response.status;
+      throw error;
+    }
+    return data.user || null;
   },
 
   getAuthHeaders(extra = {}) { return { ...extra }; },
