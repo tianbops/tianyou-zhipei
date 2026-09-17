@@ -1,5 +1,5 @@
-// 天友智配One - 用户独立订单 API
-// 今日订单、最近订单均按用户ID+线路+日期存储，服务器为唯一真实数据源。
+// Zhipei One - 用户独立订单 API
+// 订单按用户ID+线路+日期存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
 
 const REDIS_TIMEOUT_MS = 8000;
@@ -60,18 +60,9 @@ async function readOrder(request, env, session) {
   const url = new URL(request.url), requestedDate = normalizeDate(url.searchParams.get('date'));
   const batch = String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim();
 
-  // 前端已提供日期时直接读取该日期，避免无意义的 latest 查询导致整条接口被 Redis 瞬时故障拖成 503。
-  let date = requestedDate;
-  if (!date) {
-    const latest = await redisGet(env, scopedKey(userId, route, 'latest'));
-    date = normalizeDate(latest?.date);
-  }
-  if (!date) {
-    const fallback = await findLatestHistory(env, userId, route);
-    date = fallback?.date || '';
-  }
-  if (!date) return json({ success: true, today: null, history: [] });
-
+  // 未指定日期时只读取业务日，避免明日预上传通过 latest 提前进入首页“今日任务”。
+  // 需要读取历史或明日数据的页面必须显式传 date。
+  const date = requestedDate || businessDate();
   const today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
   const historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
   const history = Array.isArray(historyData) ? historyData : [];
@@ -79,23 +70,6 @@ async function readOrder(request, env, session) {
   if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
   else if (!selected || !Array.isArray(selected.orders)) selected = history[history.length - 1] || null;
   return json({ success: true, today: selected && normalizeDate(selected.date) === date ? selected : null, history });
-}
-
-async function findLatestHistory(env, userId, route) {
-  let cursor = '0', newest = null;
-  const pattern = scopedKey(userId, route, 'history:*');
-  for (let page = 0; page < 5; page += 1) {
-    const response = await redisFetch(env, `/scan/${cursor}/match/${encodeURIComponent(pattern)}/count/100`);
-    if (!response.ok) break;
-    const data = await response.json().catch(() => ({}));
-    for (const key of Array.isArray(data.result?.[1]) ? data.result[1] : []) {
-      const value = await redisGet(env, key), list = Array.isArray(value) ? value : (value?.orders ? [value] : []);
-      for (const item of list) if (item?.date && item?.orders?.length && (!newest || String(item.updatedAt || '') > String(newest.updatedAt || ''))) newest = item;
-    }
-    cursor = String(data.result?.[0] || '0');
-    if (cursor === '0') break;
-  }
-  return newest;
 }
 
 async function loadBaseData(env, route) {
