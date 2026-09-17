@@ -1,6 +1,6 @@
 // 天友智配One - 前端认证
 // 服务器 Session 是唯一身份来源；浏览器不保存密码、Session Token 或线路身份。
-// 使用 window.Auth 直接注册全局对象，避免部分浏览器/缓存环境出现 “Auth is not defined”。
+// 注意：本文件必须保持零语法错误，否则整个 window.Auth 都不会注册。
 window.Auth = {
   serverUser: null,
   authPromise: null,
@@ -98,9 +98,7 @@ window.Auth = {
   async checkAuth() {
     const page = location.pathname.split('/').pop();
     if (['index.html', 'login.html', ''].includes(page)) return true;
-    if (this.serverUser) {
-      if (this.serverUser.route || page === 'settings.html') return true;
-    }
+    if (this.serverUser && (this.serverUser.route || page === 'settings.html')) return true;
     if (this.authPromise) return this.authPromise;
     this.authPromise = this.getCurrentServerUser().then(user => {
       if (!user) {
@@ -129,11 +127,7 @@ window.Auth = {
   async logout() {
     this.serverUser = null;
     this.authPromise = null;
-    await fetch('/api/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store'
-    }).catch(() => {});
+    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
     location.href = location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
   },
 
@@ -148,17 +142,17 @@ window.Auth = {
   }
 };
 
-// 兼容旧页面调用，但身份仍只来自服务器 Session。
 window.Authentication = window.Auth;
 
-// 全站统一返回：优先返回智配One内部上一页；直接打开或外部进入时回到首页。
+// 全站统一返回。这里使用简单的 URL 解析，不使用容易造成语法错误的复杂正则。
 (function setupSmartBack() {
   function isAppPage(url) {
     try {
       const target = new URL(url, location.href);
       if (target.origin !== location.origin) return false;
       const path = target.pathname.replace(/\\/g, '/');
-      return !/(^|\\/)index\\.html$/.test(path);
+      const file = path.split('/').pop() || '';
+      return file !== 'index.html';
     } catch (_) {
       return false;
     }
@@ -168,7 +162,9 @@ window.Authentication = window.Auth;
     return location.pathname.includes('/pages/') ? '../home.html' : 'home.html';
   }
 
-  function smartBack(event) {
+  document.addEventListener('click', event => {
+    const button = event.target.closest?.('.back-btn');
+    if (!button) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const referrer = document.referrer;
@@ -177,10 +173,5 @@ window.Authentication = window.Auth;
       return;
     }
     window.location.href = fallbackHome();
-  }
-
-  document.addEventListener('click', event => {
-    const button = event.target.closest?.('.back-btn');
-    if (button) smartBack(event);
   }, true);
 })();
