@@ -6,7 +6,7 @@ let currentRoute='',currentData={orders:[],weight:'',orderBatchId:'',date:'',veh
 let historyMode=false;
 function currentDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
 function clean(v){return String(v||'').replace(/[\u3000]/g,' ').replace(/^\s*[\d０-９]+[、.．)）\s-]*/u,'').replace(/\s+/g,' ').trim()}
-function key(v){return clean(v).replace(/[\s，,。；;：:（）()【】\[\]<>《》“”"'‘’·-]/g,'').replace(/（临时）|\(临时\)|（20\d{2}）|\(20\d{2}\)/g,'').replace(/谊品鲜/g,'谊品生鲜').toLowerCase()}
+function key(v){return clean(v).replace(/[\s，,。；;：:（）()【】\[\]<>《》“”"'‘’·-]/g,'').replace(/（临时）|\(临时\)|（20\d{2}）|\(20\d{2}\)/g,'').replace(/谊品鲜/g,'谊品生鲜').replace(/到家/g,'').replace(/客户/g,'客服').replace(/Ⅱ类|II类|Ⅱ類|II類/g,'2类').toLowerCase()}
 function baseName(x){return clean(x?.name||x?.storeName||x?.shopName||x?.title||x?.customerName)}
 function noteOf(x){return String(x?.note??x?.notes??x?.remark??x?.备注??'').replace(/\s+/g,' ').trim()}
 function navOf(x){return String(x?.nav||x?.navigation||x?.url||x?.amap||'').trim()}
