@@ -16,7 +16,8 @@ export async function onRequest({ request, env }) {
     if (password.length < 6 || password.length > 72) return json({ success: false, error: '密码需为6-72位' }, 400);
 
     const usernameKey = `user:username:${encodeURIComponent(username)}`;
-    if (await redisGet(env, usernameKey)) return json({ success: false, error: '用户名已存在，请换一个用户名' }, 409);
+    const existing = await redisCommand(env, ['GET', usernameKey]);
+    if (existing) return json({ success: false, error: '用户名已存在，请换一个用户名' }, 409);
 
     const id = crypto.randomUUID();
     const passwordHash = await hashPassword(password);
@@ -34,13 +35,15 @@ export async function onRequest({ request, env }) {
       updatedAt: now
     };
 
-    const userClaim = await redisSetNx(env, usernameKey, id);
-    if (!userClaim) return json({ success: false, error: '用户名已存在，请换一个用户名' }, 409);
+    const claim = await redisCommand(env, ['SET', usernameKey, id, 'NX']);
+    if (claim !== 'OK') return json({ success: false, error: '用户名已存在，请换一个用户名' }, 409);
 
-    const saved = await redisSet(env, `user:${id}`, user);
-    if (!saved) {
-      await redisDelete(env, usernameKey);
-      return json({ success: false, error: '用户保存失败，请稍后重试' }, 500);
+    try {
+      const saved = await redisCommand(env, ['SET', `user:${id}`, JSON.stringify(user)]);
+      if (saved !== 'OK') throw new Error('用户保存失败');
+    } catch (error) {
+      await redisCommand(env, ['DEL', usernameKey]).catch(() => {});
+      throw error;
     }
 
     const safeUser = { id, username, name: username, route: '', vehicle: '' };
@@ -55,7 +58,7 @@ export async function onRequest({ request, env }) {
     });
   } catch (error) {
     console.error('register error', error);
-    return json({ success: false, error: '注册服务异常，请稍后重试' }, 500);
+    return json({ success: false, error: '注册服务异常，请稍后重试', detail: safeError(error) }, 500);
   }
 }
 
@@ -66,49 +69,47 @@ async function hashPassword(password) {
   return `${base64(salt)}:${base64(new Uint8Array(bits))}`;
 }
 
+async function redisCommand(env, command) {
+  const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
+  const token = String(env.UPSTASH_REDIS_REST_TOKEN || '');
+  const response = await fetch(`${url}/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(command),
+    cache: 'no-store'
+  });
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+  if (!response.ok || data.error) throw new Error(data.error || `Upstash HTTP ${response.status}`);
+  return data.result;
+}
+
 function base64(bytes) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 
-async function redisGet(env, key) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
-  });
-  if (!response.ok) throw new Error('Redis 读取失败');
-  const data = await response.json().catch(() => ({}));
-  return data.result || null;
+function redisReady(env) {
+  return Boolean(String(env.UPSTASH_REDIS_REST_URL || '').trim() && String(env.UPSTASH_REDIS_REST_TOKEN || '').trim());
 }
 
-async function redisSetNx(env, key, value) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}/NX`, {
-    method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
-  });
-  if (!response.ok) throw new Error('Redis 写入失败');
-  const data = await response.json().catch(() => ({}));
-  return data.result === 'OK';
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
-async function redisSet(env, key, value) {
-  const encodedValue = encodeURIComponent(JSON.stringify(value));
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodedValue}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-    cache: 'no-store'
-  });
-  const data = await response.json().catch(() => ({}));
-  return response.ok && data.result === 'OK';
+function safeError(error) {
+  const message = String(error?.message || error || '').trim();
+  return message ? message.slice(0, 180) : 'unknown';
 }
 
-async function redisDelete(env, key) {
-  await fetch(`${env.UPSTASH_REDIS_REST_URL}/del/${encodeURIComponent(key)}`, {
-    method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store'
-  }).catch(() => {});
-}
-
-function redisReady(env) { return Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN); }
-function normalizeUsername(value) { return String(value || '').trim().toLowerCase(); }
 function json(payload, status = 200) {
-  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+  });
 }
