@@ -2,6 +2,8 @@
 // 今日订单、最近订单均按用户ID+线路+日期存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
 
+const REDIS_TIMEOUT_MS = 8000;
+
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
   const session = await authRequired(request, env);
@@ -12,7 +14,7 @@ export async function onRequest({ request, env }) {
     return json({ error: 'Method not allowed' }, 405);
   } catch (error) {
     console.error('orders api error', error);
-    return json({ success: false, error: '订单数据服务暂不可用' }, 503);
+    return json({ success: false, error: '订单数据服务暂不可用', detail: error?.message || 'server error' }, 503);
   }
 }
 
@@ -57,13 +59,19 @@ async function readOrder(request, env, session) {
   const route = normalizeRoute(session.route), userId = normalizeUserId(session.id);
   const url = new URL(request.url), requestedDate = normalizeDate(url.searchParams.get('date'));
   const batch = String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim();
-  const latest = await redisGet(env, scopedKey(userId, route, 'latest'));
-  let date = requestedDate || normalizeDate(latest?.date);
+
+  // 前端已提供日期时直接读取该日期，避免无意义的 latest 查询导致整条接口被 Redis 瞬时故障拖成 503。
+  let date = requestedDate;
+  if (!date) {
+    const latest = await redisGet(env, scopedKey(userId, route, 'latest'));
+    date = normalizeDate(latest?.date);
+  }
   if (!date) {
     const fallback = await findLatestHistory(env, userId, route);
     date = fallback?.date || '';
   }
   if (!date) return json({ success: true, today: null, history: [] });
+
   const today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
   const historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
   const history = Array.isArray(historyData) ? historyData : [];
@@ -77,7 +85,7 @@ async function findLatestHistory(env, userId, route) {
   let cursor = '0', newest = null;
   const pattern = scopedKey(userId, route, 'history:*');
   for (let page = 0; page < 5; page += 1) {
-    const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/scan/${cursor}/match/${encodeURIComponent(pattern)}/count/100`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
+    const response = await redisFetch(env, `/scan/${cursor}/match/${encodeURIComponent(pattern)}/count/100`);
     if (!response.ok) break;
     const data = await response.json().catch(() => ({}));
     for (const key of Array.isArray(data.result?.[1]) ? data.result[1] : []) {
@@ -139,12 +147,43 @@ function normalizeWeight(value) { if (value === null || value === undefined || v
 function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d+)?/); return !m || Number(m[0]) === 0; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
+function normalizeRoute(value) { const s = String(value || '').trim(); const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function createBatchId(date, route) { return `${date}-${route.replace(/\D/g, '')}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`; }
 function createLockToken() { return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.() || ''}`; }
-async function acquireLock(env, key, token, seconds) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) return false; const data = await response.json().catch(() => ({})); return data.result === 'OK'; }
-async function releaseLock(env, key, token) { const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"; await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, key, token]), cache: 'no-store' }); }
-async function redisGet(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis读取失败'); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
-async function redisSet(env, key, value) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(value), cache: 'no-store' }); if (!response.ok) throw new Error('Redis保存失败'); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
+
+async function redisFetch(env, path, options = {}) {
+  const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, '');
+  if (!base) throw new Error('Redis URL 未配置');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REDIS_TIMEOUT_MS);
+  try {
+    return await fetch(`${base}${path}`, { ...options, headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, ...(options.headers || {}) }, cache: 'no-store', signal: controller.signal });
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('Redis 请求超时');
+    throw new Error(`Redis 网络请求失败：${error?.message || 'unknown error'}`);
+  } finally { clearTimeout(timer); }
+}
+
+async function acquireLock(env, key, token, seconds) {
+  const response = await redisFetch(env, `/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST' });
+  if (!response.ok) return false;
+  const data = await response.json().catch(() => ({}));
+  return data.result === 'OK';
+}
+async function releaseLock(env, key, token) { const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"; await redisFetch(env, '/eval', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, key, token]) }); }
+async function redisGet(env, key) {
+  const response = await redisFetch(env, `/get/${encodeURIComponent(key)}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`);
+  if (data.result === null || data.result === undefined || data.result === '') return null;
+  try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
+}
+async function redisSet(env, key, value) {
+  const response = await redisFetch(env, `/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`Redis保存失败（HTTP ${response.status}）`);
+  if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认');
+}
 async function readAfterWrite(env, key, batchId, count) { for (let attempt = 0; attempt < 3; attempt += 1) { const saved = await redisGet(env, key); if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count) return saved; if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1))); } return null; }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
