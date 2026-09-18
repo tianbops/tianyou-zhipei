@@ -178,17 +178,22 @@
     if (busy) return;
     busy = true;
     cancelRequested = false;
+    const ocrDeadline = Date.now() + OCR_TIMEOUT_MS;
     try {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
       setStatus('正在准备运单图片…', 15);
       const blob = await prepareImage(file);
+      const loadRemaining = ocrDeadline - Date.now();
+      if (loadRemaining <= 0) throw new Error('OCR处理超过5秒，请重新拍摄清晰的运单图片后重试');
       setStatus('正在启动本地 PaddleOCR…', 25);
-      const ocr = await withTimeout(loadEngine(), OCR_TIMEOUT_MS, 'OCR组件加载超过5秒，请检查网络后重试');
+      const ocr = await withTimeout(loadEngine(), loadRemaining, 'OCR组件加载超过5秒，请检查网络后重试');
+      const predictRemaining = ocrDeadline - Date.now();
+      if (predictRemaining <= 0) throw new Error('OCR处理超过5秒，请重新拍摄清晰的运单图片后重试');
       setStatus('正在本地识别运单文字…', 55);
 
       const [result] = await withTimeout(
         ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
-        OCR_TIMEOUT_MS,
+        predictRemaining,
         'OCR识别超过5秒，请重新拍摄清晰的运单图片后重试'
       );
       const text = resultToText(result);
@@ -199,7 +204,7 @@
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     } catch (error) {
-      if (/OCR组件加载超过5秒|OCR识别超过5秒/.test(String(error?.message || ''))) await disposeEngine();
+      if (/OCR组件加载超过5秒|OCR识别超过5秒|OCR处理超过5秒/.test(String(error?.message || ''))) await disposeEngine();
       console.error('[PaddleOCR]', error);
       setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
