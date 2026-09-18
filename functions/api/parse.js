@@ -16,7 +16,7 @@ export async function onRequest({ request, env }) {
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
 
-    const deadline = Date.now() + 2800;
+    const deadline = Date.now() + 120000;
     const [base, learning] = await Promise.all([
       getBaseStores(env, route, deadline),
       getLearning(env, userId, route, deadline)
@@ -204,7 +204,7 @@ function normalizeUserId(value) {
   return String(value || '').trim().slice(0, 128);
 }
 
-const REDIS_TIMEOUT_MS = 2200;
+const REDIS_TIMEOUT_MS = 15000;
 async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
   const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
   const controller = new AbortController();
