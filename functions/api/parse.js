@@ -185,13 +185,28 @@ function normalizeUserId(value) {
   return String(value || '').trim().slice(0, 128);
 }
 
+const REDIS_TIMEOUT_MS = 8000;
 async function redisGet(env, key) {
   const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
-  const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
-  if (!response.ok) throw new Error('Redis读取失败');
-  const data = await response.json().catch(() => ({}));
-  if (data?.result === null || data?.result === undefined || data?.result === '') return null;
-  try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REDIS_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`);
+    const data = await response.json().catch(() => ({}));
+    if (data?.result === null || data?.result === undefined || data?.result === '') return null;
+    try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('Redis读取超时');
+    if (/Redis读取失败/.test(String(error?.message || ''))) throw error;
+    throw new Error('Redis网络请求失败');
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function matchTodayStores(recognized, baseStores, learning) {
