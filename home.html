@@ -57,7 +57,7 @@
     <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon"><span class="status-spinner" aria-hidden="true"></span></span><span id="statusText">等待处理...</span></div><div id="statusError" class="status-error" aria-live="polite"></div><div class="progress-track"><div id="progressBar"></div></div></div>
     <div class="input-area"><textarea id="manualOrderInput" rows="10" placeholder="上传图片后，这里显示识别文字。请核对后再开始解析，也可直接粘贴运单文字。" autocomplete="off"></textarea></div>
     <div class="quick-actions"><button type="button" onclick="pasteFromClipboard()">📋 粘贴</button><button type="button" onclick="clearManualInput()">🗑️ 清空</button><button type="button" onclick="parseManualInput()">🔍 解析</button></div>
-    <div class="sheet-footer"><button class="btn-cancel" type="button" onclick="toggleUpload()">取消</button><button class="btn-confirm" id="confirmBtn" type="button" onclick="submitManualOrder()">确认录入</button></div>
+    <div class="sheet-footer"><button class="btn-cancel" type="button" onclick="cancelParse();toggleUpload()">取消</button><button class="btn-confirm" id="confirmBtn" type="button" onclick="submitManualOrder()">确认录入</button></div>
   </div>
 </div>
 <script src="js/auth.js"></script>
