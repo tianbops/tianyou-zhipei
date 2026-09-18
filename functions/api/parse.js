@@ -291,13 +291,40 @@ function findMatch(raw, base, byName, byCode, used, byLearning) {
   return { type: 'new', score: best.score };
 }
 
+const baseMatchMeta = new WeakMap();
+
+function getBaseMatchMeta(item) {
+  let meta = baseMatchMeta.get(item);
+  if (meta) return meta;
+  const name = item?.name || '';
+  const key = matchKey(name);
+  meta = {
+    key,
+    businessCode: extractBusinessCode(name),
+    stableKey: stableStoreKey(name),
+    ngrams: ngramSet(key, 2)
+  };
+  baseMatchMeta.set(item, meta);
+  return meta;
+}
+
 function storeSimilarity(a, b) {
-  const ak = matchKey(a), bk = matchKey(b);
+  const ak = matchKey(a);
+  const bm = getBaseMatchMeta(b);
+  const bk = bm.key;
   if (!ak || !bk) return 0;
   if (ak === bk) return 1;
-  const codeA = extractBusinessCode(a), codeB = extractBusinessCode(b);
-  if (codeA && codeA === codeB) return 1;
-  const edit = normalizedEditSimilarity(ak, bk), ngram = characterNgramSimilarity(ak, bk), token = tokenOverlap(stableStoreKey(a), stableStoreKey(b));
+  const codeA = extractBusinessCode(a);
+  if (codeA && codeA === bm.businessCode) return 1;
+  const edit = normalizedEditSimilarity(ak, bk);
+  const aa = ngramSet(ak, 2), bb = bm.ngrams;
+  let ngram = 0;
+  if (aa.size && bb.size) {
+    let common = 0;
+    for (const value of aa) if (bb.has(value)) common++;
+    ngram = (2 * common) / (aa.size + bb.size);
+  }
+  const token = tokenOverlap(stableStoreKey(a), bm.stableKey);
   const containment = ak.includes(bk) || bk.includes(ak) ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length) : 0;
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
 }
