@@ -12,7 +12,10 @@
 
   let enginePromise = null;
   let sdkPromise = null;
+  let engineInstance = null;
   let busy = false;
+  let cancelRequested = false;
+  const OCR_TIMEOUT_MS = 45000;
   const $ = (id) => document.getElementById(id);
 
   function normalizeText(value) {
@@ -74,7 +77,7 @@
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
-      worker: false,
+      worker: true,
       textDetectionBatchSize: 1,
       textRecognitionBatchSize: 6,
       ortOptions: {
@@ -83,8 +86,12 @@
         numThreads: 2,
         simd: true
       }
+    }).then(engine => {
+      engineInstance = engine;
+      return engine;
     }).catch(error => {
       enginePromise = null;
+      engineInstance = null;
       throw error;
     });
     return enginePromise;
@@ -170,15 +177,20 @@
   async function process(file) {
     if (busy) return;
     busy = true;
+    cancelRequested = false;
     try {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
       setStatus('正在准备运单图片…', 15);
       const blob = await prepareImage(file);
       setStatus('正在启动本地 PaddleOCR…', 25);
-      const ocr = await loadEngine();
+      const ocr = await withTimeout(loadEngine(), OCR_TIMEOUT_MS, 'OCR组件加载超时，请检查网络后重试');
       setStatus('正在本地识别运单文字…', 55);
 
-      const [result] = await ocr.predict(blob, { textRecScoreThresh: OCR_SCORE });
+      const [result] = await withTimeout(
+        ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
+        OCR_TIMEOUT_MS,
+        'OCR识别超时，请重新拍摄清晰的运单图片后重试'
+      );
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
 
@@ -192,8 +204,35 @@
       throw error;
     } finally {
       busy = false;
+      cancelRequested = false;
     }
   }
+
+  function withTimeout(promise, ms, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  async function disposeEngine() {
+    const engine = engineInstance;
+    engineInstance = null;
+    enginePromise = null;
+    if (engine?.dispose) {
+      try { await engine.dispose(); } catch (_) {}
+    }
+  }
+
+  window.cancelOCR = async function() {
+    if (!busy) return false;
+    cancelRequested = true;
+    await disposeEngine();
+    busy = false;
+    setStatus('已取消OCR识别', 100, false, true);
+    return true;
+  };
 
   window.callOCR = process;
 
