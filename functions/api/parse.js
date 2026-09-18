@@ -131,7 +131,11 @@ function stripOrderMetadata(value) {
 }
 
 function cleanStoreName(value) {
-  return String(value || '').replace(/^\s*[\d０-９]+\s*[、.．)）-]+\s*/, '').replace(/^[\s|]+|[\s|]+$/g, '').replace(/\s+/g, ' ').trim();
+  return String(value || '')
+    .replace(/^\s*[\d０-９]+\s*[、.．)）-]+\s*/, '')
+    .replace(/^\s*[\d,.]+\s*m(?:²|³|2|3)\s*(?:\([^)]*\))?\s*/i, '')
+    .replace(/^[\s|]+|[\s|]+$/g, '')
+    .replace(/\s+/g, ' ').trim();
 }
 
 function isLikelyStore(value) {
@@ -227,10 +231,15 @@ async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
 
 function matchTodayStores(recognized, baseStores, learning) {
   // getBaseStores 已完成标准化；保留原 index，避免重复 normalizeBase 导致线路顺序与去重键失效。
-  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byLearning = new Map();
+  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byWeakName = new Map(), byLearning = new Map();
   for (const item of base) {
     const nameKey = matchKey(item.name);
     if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
+    const weakKey = weakMatchKey(item.name);
+    if (weakKey) {
+      const existing = byWeakName.get(weakKey);
+      byWeakName.set(weakKey, existing === undefined ? item : null);
+    }
     const businessCode = extractBusinessCode(item.name);
     if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
   }
@@ -243,7 +252,7 @@ function matchTodayStores(recognized, baseStores, learning) {
   const matchStats = { learned: 0, businessCode: 0, exact: 0, similarity: 0, review: 0, new: 0, duplicate: 0 };
   let duplicateCount = 0;
   for (const raw of recognized) {
-    const direct = findDirectMatch(raw, byName, byCode, byLearning);
+    const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName);
     if (direct && used.has(direct.item.index)) {
       const canonical = canonicalByBaseIndex.get(direct.item.index);
       if (canonical) {
@@ -253,7 +262,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, base, byName, byCode, used, byLearning);
+    const hit = findMatch(raw, base, byName, byCode, used, byLearning, byWeakName);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -275,18 +284,21 @@ function matchTodayStores(recognized, baseStores, learning) {
   return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, learnedCount: matchStats.learned, uniqueStoreCount: stores.length, matchStats };
 }
 
-function findDirectMatch(raw, byName, byCode, byLearning) {
+function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   const learned = byLearning.get(matchKey(raw));
   if (learned) return { type: 'match', item: learned, mode: 'learned', score: 1 };
   const businessCode = extractBusinessCode(raw);
   if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
   const key = matchKey(raw);
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
+  const weakKey = weakMatchKey(raw);
+  const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
+  if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   return null;
 }
 
-function findMatch(raw, base, byName, byCode, used, byLearning) {
-  const direct = findDirectMatch(raw, byName, byCode, byLearning);
+function findMatch(raw, base, byName, byCode, used, byLearning, byWeakName) {
+  const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName);
   if (direct && !used.has(direct.item.index)) return direct;
   const businessCode = extractBusinessCode(raw);
   if (businessCode) {
@@ -339,6 +351,10 @@ function storeSimilarity(a, b) {
   const token = tokenOverlap(stableStoreKey(a), bm.stableKey);
   const containment = ak.includes(bk) || bk.includes(ak) ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length) : 0;
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
+}
+
+function weakMatchKey(value) {
+  return matchKey(value).replace(/^(?:i|ii)类/, '');
 }
 
 function stableStoreKey(value) { return matchKey(value).replace(/^(?:渝北|江北|特渠部|天友加盟|天友24h)/, ''); }
