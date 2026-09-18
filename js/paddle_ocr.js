@@ -21,12 +21,16 @@
 
   function normalizeText(value) {
     return String(value ?? '')
-      .replace(/\r\n?/g, '\n')
+      .replace(/\r
+?/g, '
+')
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      .split('\n')
+      .split('
+')
       .map(line => line.trim())
       .filter(Boolean)
-      .join('\n')
+      .join('
+')
       .trim();
   }
 
@@ -151,7 +155,8 @@
 
   function resultToText(result) {
     const items = Array.isArray(result?.items) ? sortItems(result.items) : [];
-    return normalizeText(items.filter(item => String(item?.text ?? '').trim()).map(item => item.text).join('\n'));
+    return normalizeText(items.filter(item => String(item?.text ?? '').trim()).map(item => item.text).join('
+'));
   }
 
   function putText(text) {
@@ -194,7 +199,10 @@
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     } catch (error) {
-      if (/OCR组件加载超过5秒|OCR识别超过5秒|OCR处理超过5秒|OCR识别已取消/.test(String(error?.message || ''))) {\n        ++operationId;\n        disposeEngine().catch(() => {});\n      }
+      if (/OCR组件加载超过5秒|OCR识别超过5秒|OCR处理超过5秒|OCR识别已取消/.test(String(error?.message || ''))) {
+        ++operationId;
+        disposeEngine().catch(() => {});
+      }
       console.error('[PaddleOCR]', error);
       setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
