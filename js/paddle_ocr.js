@@ -31,20 +31,7 @@
   }
 
   function setStatus(text, progress = 0, done = false, error = false) {
-    const status = $('parseStatus');
-    status?.classList.add('active');
-
-    const icon = $('statusIcon');
-    if (icon) {
-      if (error) icon.textContent = '⚠️';
-      else if (done) icon.textContent = '✅';
-      else icon.innerHTML = '<span class="status-spinner" aria-hidden="true"></span>';
-    }
-
-    if ($('statusText')) $('statusText').textContent = text;
-    if ($('progressBar')) $('progressBar').style.width = `${Math.max(0, Math.min(100, progress))}%`;
-    if (error) window.setHomeStatusError?.(text);
-    else window.clearHomeStatusError?.();
+    window.renderUnifiedStatus?.(error ? 'error' : done ? 'success' : 'loading', progress, text);
   }
 
   function isPlaceholder(text) {
