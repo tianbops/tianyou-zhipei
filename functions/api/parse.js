@@ -16,7 +16,11 @@ export async function onRequest({ request, env }) {
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
 
-    const [base, learning] = await Promise.all([getBaseStores(env, route), getLearning(env, userId, route)]);
+    const deadline = Date.now() + 2800;
+    const [base, learning] = await Promise.all([
+      getBaseStores(env, route, deadline),
+      getLearning(env, userId, route, deadline)
+    ]);
     const parsed = parseDeterministic(text);
     const result = matchTodayStores(parsed.stores, base, learning);
     if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
@@ -161,14 +165,14 @@ function extractVolume(source) {
   return match ? `${match[1]}m³` : '';
 }
 
-async function getBaseStores(env, route) {
-  const data = await redisGet(env, `route:${normalizeRoute(route)}:base`);
+async function getBaseStores(env, route, deadline) {
+  const data = await redisGet(env, `route:${normalizeRoute(route)}:base`, deadline);
   if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
-async function getLearning(env, userId, route) {
-  const data = await redisGet(env, learningKey(userId, route));
+async function getLearning(env, userId, route, deadline) {
+  const data = await redisGet(env, learningKey(userId, route), deadline);
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
@@ -185,11 +189,12 @@ function normalizeUserId(value) {
   return String(value || '').trim().slice(0, 128);
 }
 
-const REDIS_TIMEOUT_MS = 8000;
-async function redisGet(env, key) {
+const REDIS_TIMEOUT_MS = 2200;
+async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
   const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REDIS_TIMEOUT_MS);
+  const remaining = Math.max(1, Math.min(REDIS_TIMEOUT_MS, deadline - Date.now()));
+  const timer = setTimeout(() => controller.abort(), remaining);
   try {
     const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
       headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
@@ -201,7 +206,7 @@ async function redisGet(env, key) {
     if (data?.result === null || data?.result === undefined || data?.result === '') return null;
     try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
   } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('Redis读取超时');
+    if (error?.name === 'AbortError') throw new Error('Redis读取超时（已达到解析时间预算）');
     if (/Redis读取失败/.test(String(error?.message || ''))) throw error;
     throw new Error('Redis网络请求失败');
   } finally {
