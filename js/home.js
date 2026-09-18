@@ -27,7 +27,8 @@ async function parseOrderText(text){
   const route=currentRoute();if(!route)throw Error('未指定配送线路');
   if(parseInFlight)throw Error('解析正在进行，请勿重复点击');
   parseInFlight=true;parseAbortController=new AbortController();
-  const timer=setTimeout(()=>parseAbortController?.abort(),3000);
+  const PARSE_TIMEOUT_MS=120000; // P0测试：门店提取与基准库比对最多等待2分钟
+  const timer=setTimeout(()=>parseAbortController?.abort(),PARSE_TIMEOUT_MS);
   try{
     const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,route}),credentials:'same-origin',cache:'no-store',signal:parseAbortController.signal});
     const data=await response.json().catch(()=>({}));
@@ -38,7 +39,7 @@ async function parseOrderText(text){
     }
     return data.data;
   }catch(e){
-    if(e?.name==='AbortError')throw Error('解析超过3秒或已取消，请检查网络后重试');
+    if(e?.name==='AbortError')throw Error('解析超过2分钟或已取消，请检查网络后重试');
     throw e;
   }finally{
     clearTimeout(timer);parseAbortController=null;parseInFlight=false;
