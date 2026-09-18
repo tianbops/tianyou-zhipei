@@ -17,8 +17,6 @@
   let busy = false;
   let cancelRequested = false;
   let operationId = 0;
-  const OCR_TIMEOUT_MS = 5000;
-  const OCR_ENGINE_LOAD_TIMEOUT_MS = 60000;
   let warmingUp = false;
   const $ = (id) => document.getElementById(id);
 
@@ -171,25 +169,15 @@
     busy = true;
     cancelRequested = false;
     const currentOperation = ++operationId;
-    const ocrDeadline = Date.now() + OCR_TIMEOUT_MS;
     try {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
       setStatus('正在准备运单图片…', 15);
       const blob = await prepareImage(file);
-      const loadRemaining = ocrDeadline - Date.now();
-      if (loadRemaining <= 0) throw new Error('OCR处理超过5秒，请重新拍摄清晰的运单图片后重试');
       setStatus('正在启动本地 PaddleOCR…', 25);
-      const engineLoadRemaining = OCR_ENGINE_LOAD_TIMEOUT_MS;
-      const ocr = await withTimeout(loadEngine(), engineLoadRemaining, 'OCR组件加载超过60秒，请检查网络后重试');
-      const predictRemaining = ocrDeadline - Date.now();
-      if (predictRemaining <= 0) throw new Error('OCR处理超过5秒，请重新拍摄清晰的运单图片后重试');
+      const ocr = await loadEngine();
       setStatus('正在本地识别运单文字…', 55);
 
-      const [result] = await withTimeout(
-        ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
-        predictRemaining,
-        'OCR识别超过5秒，请重新拍摄清晰的运单图片后重试'
-      );
+      const [result] = await ocr.predict(blob, { textRecScoreThresh: OCR_SCORE });
       if (currentOperation !== operationId || cancelRequested) throw new Error('OCR识别已取消');
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
@@ -199,7 +187,7 @@
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     } catch (error) {
-      if (/OCR组件加载超过60秒|OCR识别超过5秒|OCR处理超过5秒|OCR识别已取消/.test(String(error?.message || ''))) {
+      if (/OCR识别已取消/.test(String(error?.message || ''))) {
         ++operationId;
         disposeEngine().catch(() => {});
       }
@@ -212,13 +200,6 @@
     }
   }
 
-  function withTimeout(promise, ms, message) {
-    let timer;
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(message)), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-  }
 
   async function disposeEngine() {
     const engine = engineInstance;
