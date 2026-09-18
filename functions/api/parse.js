@@ -291,7 +291,8 @@ function findMatch(raw, base, byName, byCode, used, byLearning) {
   return { type: 'new', score: best.score };
 }
 
-const baseMatchMeta = new WeakMap();
+// Cloudflare Workers 数据可能来自不同结构；使用 Map 避免非对象键触发 “Invalid value used as weak map key”。
+const baseMatchMeta = new Map();
 
 function getBaseMatchMeta(item) {
   let meta = baseMatchMeta.get(item);
