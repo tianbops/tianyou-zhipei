@@ -9,6 +9,7 @@
   const JPEG_QUALITY = 0.95;
   const OCR_SCORE = 0.25;
   const OCR_SDK_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
+  const OCR_WORKER_URL = '/api/paddleocr-worker';
 
   let enginePromise = null;
   let sdkPromise = null;
@@ -34,7 +35,7 @@
   }
 
   function isPlaceholder(text) {
-    const value = normalizeText(text).replace(/[“”"'`]/g, '').replace(/\s+/g, '');
+    const value = normalizeText(text).replace(/[“”\"'\`]/g, '').replace(/\s+/g, '');
     if (!value) return true;
     return [
       '这里放整张图片的完整文字', '这里放整张图片的完整原始文字',
@@ -64,7 +65,9 @@
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
-      worker: true,
+      worker: {
+        createWorker: () => new Worker(OCR_WORKER_URL, { type: 'module' })
+      },
       textDetectionBatchSize: 1,
       textRecognitionBatchSize: 6,
       ortOptions: {
