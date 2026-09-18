@@ -243,10 +243,10 @@
 
   // 正式版启动后后台预热 OCR：把 SDK/模型首次加载从“上传时等待”前移，
   // 预热失败不阻断页面操作，用户上传时仍会再次尝试。
-  setTimeout(() => {
-    warmingUp = true;
-    loadEngine().catch(() => {}).finally(() => { warmingUp = false; });
-  }, 1200);
+  // 首页脚本加载完成后立即后台预热 OCR，不再等待用户打开上传面板。
+  // 预热过程不显示错误、不阻塞首页；用户真正上传图片时直接复用已完成的引擎。
+  warmingUp = true;
+  loadEngine().catch(() => {}).finally(() => { warmingUp = false; });
 
   window.triggerUpload = function(type) {
     if (busy) return;
