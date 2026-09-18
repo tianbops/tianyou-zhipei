@@ -215,7 +215,8 @@ async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
 }
 
 function matchTodayStores(recognized, baseStores, learning) {
-  // getBaseStores 已完成标准化；保留原 index，避免重复 normalizeBase 导致线路顺序与去重键失效。\n  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byLearning = new Map();
+  // getBaseStores 已完成标准化；保留原 index，避免重复 normalizeBase 导致线路顺序与去重键失效。
+  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byLearning = new Map();
   for (const item of base) {
     const nameKey = matchKey(item.name);
     if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
