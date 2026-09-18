@@ -15,6 +15,7 @@
   let engineInstance = null;
   let busy = false;
   let cancelRequested = false;
+  let operationId = 0;
   const OCR_TIMEOUT_MS = 5000;
   const $ = (id) => document.getElementById(id);
 
@@ -178,6 +179,7 @@
     if (busy) return;
     busy = true;
     cancelRequested = false;
+    const currentOperation = ++operationId;
     const ocrDeadline = Date.now() + OCR_TIMEOUT_MS;
     try {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
@@ -196,6 +198,7 @@
         predictRemaining,
         'OCR识别超过5秒，请重新拍摄清晰的运单图片后重试'
       );
+      if (currentOperation !== operationId || cancelRequested) throw new Error('OCR识别已取消');
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
 
@@ -204,7 +207,7 @@
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     } catch (error) {
-      if (/OCR组件加载超过5秒|OCR识别超过5秒|OCR处理超过5秒/.test(String(error?.message || ''))) await disposeEngine();
+      if (/OCR组件加载超过5秒|OCR识别超过5秒|OCR处理超过5秒|OCR识别已取消/.test(String(error?.message || ''))) await disposeEngine();
       console.error('[PaddleOCR]', error);
       setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
@@ -234,6 +237,7 @@
   window.cancelOCR = async function() {
     if (!busy) return false;
     cancelRequested = true;
+    ++operationId;
     await disposeEngine();
     busy = false;
     setStatus('已取消OCR识别', 100, false, true);
