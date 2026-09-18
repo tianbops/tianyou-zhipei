@@ -15,7 +15,7 @@
   let engineInstance = null;
   let busy = false;
   let cancelRequested = false;
-  const OCR_TIMEOUT_MS = 45000;
+  const OCR_TIMEOUT_MS = 5000;
   const $ = (id) => document.getElementById(id);
 
   function normalizeText(value) {
@@ -183,13 +183,13 @@
       setStatus('正在准备运单图片…', 15);
       const blob = await prepareImage(file);
       setStatus('正在启动本地 PaddleOCR…', 25);
-      const ocr = await withTimeout(loadEngine(), OCR_TIMEOUT_MS, 'OCR组件加载超时，请检查网络后重试');
+      const ocr = await withTimeout(loadEngine(), OCR_TIMEOUT_MS, 'OCR组件加载超过5秒，请检查网络后重试');
       setStatus('正在本地识别运单文字…', 55);
 
       const [result] = await withTimeout(
         ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
         OCR_TIMEOUT_MS,
-        'OCR识别超时，请重新拍摄清晰的运单图片后重试'
+        'OCR识别超过5秒，请重新拍摄清晰的运单图片后重试'
       );
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
@@ -199,7 +199,7 @@
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     } catch (error) {
-      if (/OCR组件加载超时|OCR识别超时/.test(String(error?.message || ''))) await disposeEngine();
+      if (/OCR组件加载超过5秒|OCR识别超过5秒/.test(String(error?.message || ''))) await disposeEngine();
       console.error('[PaddleOCR]', error);
       setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
