@@ -199,6 +199,7 @@
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     } catch (error) {
+      if (/OCR组件加载超时|OCR识别超时/.test(String(error?.message || ''))) await disposeEngine();
       console.error('[PaddleOCR]', error);
       setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
