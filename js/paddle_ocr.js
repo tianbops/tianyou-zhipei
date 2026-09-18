@@ -18,6 +18,8 @@
   let cancelRequested = false;
   let operationId = 0;
   const OCR_TIMEOUT_MS = 5000;
+  const OCR_ENGINE_LOAD_TIMEOUT_MS = 30000;
+  let warmingUp = false;
   const $ = (id) => document.getElementById(id);
 
   function normalizeText(value) {
@@ -47,7 +49,7 @@
 
   async function loadSdk() {
     if (sdkPromise) return sdkPromise;
-    setStatus('正在加载本地OCR组件…', 28);
+    if (!warmingUp) setStatus('正在加载本地OCR组件…', 28);
     sdkPromise = import(OCR_SDK_URL).then(module => {
       if (!module?.PaddleOCR) throw new Error('OCR组件加载失败，请检查网络连接后重试');
       return module.PaddleOCR;
@@ -61,7 +63,7 @@
   async function loadEngine() {
     if (enginePromise) return enginePromise;
     const PaddleOCR = await loadSdk();
-    setStatus('正在加载中文OCR模型中…', 35);
+    if (!warmingUp) setStatus('正在加载中文OCR模型中…', 35);
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
@@ -177,7 +179,8 @@
       const loadRemaining = ocrDeadline - Date.now();
       if (loadRemaining <= 0) throw new Error('OCR处理超过5秒，请重新拍摄清晰的运单图片后重试');
       setStatus('正在启动本地 PaddleOCR…', 25);
-      const ocr = await withTimeout(loadEngine(), loadRemaining, 'OCR组件加载超过5秒，请检查网络后重试');
+      const engineLoadRemaining = Math.min(Math.max(loadRemaining, 0), OCR_ENGINE_LOAD_TIMEOUT_MS);
+      const ocr = await withTimeout(loadEngine(), engineLoadRemaining, 'OCR组件加载超过30秒，请检查网络后重试');
       const predictRemaining = ocrDeadline - Date.now();
       if (predictRemaining <= 0) throw new Error('OCR处理超过5秒，请重新拍摄清晰的运单图片后重试');
       setStatus('正在本地识别运单文字…', 55);
@@ -237,6 +240,13 @@
   };
 
   window.callOCR = process;
+
+  // 正式版启动后后台预热 OCR：把 SDK/模型首次加载从“上传时等待”前移，
+  // 预热失败不阻断页面操作，用户上传时仍会再次尝试。
+  setTimeout(() => {
+    warmingUp = true;
+    loadEngine().catch(() => {}).finally(() => { warmingUp = false; });
+  }, 1200);
 
   window.triggerUpload = function(type) {
     if (busy) return;
