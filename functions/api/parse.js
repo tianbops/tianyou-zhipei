@@ -238,7 +238,8 @@ function matchTodayStores(recognized, baseStores, learning) {
     const weakKey = weakMatchKey(item.name);
     if (weakKey) {
       const existing = byWeakName.get(weakKey);
-      byWeakName.set(weakKey, existing === undefined ? item : null);
+      if (existing === undefined) byWeakName.set(weakKey, item);
+      else if (existing !== item) byWeakName.set(weakKey, null);
     }
     const businessCode = extractBusinessCode(item.name);
     if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
@@ -306,6 +307,10 @@ function findMatch(raw, base, byName, byCode, used, byLearning, byWeakName) {
     if (candidate) return { type: 'match', item: candidate, mode: 'businessCode', score: 1 };
   }
   const candidates = base.filter(item => !used.has(item.index)).map(item => ({ item, score: storeSimilarity(raw, item.name) })).sort((a, b) => b.score - a.score);
+  // 相似度只作为候选排序，不允许在存在明显歧义时直接吞掉新门店。
+  const weakKey = weakMatchKey(raw);
+  const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
+  if (weakCandidate && !used.has(weakCandidate.index)) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   const best = candidates[0];
   if (!best) return { type: 'new', score: 0 };
   const second = candidates[1], margin = second ? best.score - second.score : best.score;
