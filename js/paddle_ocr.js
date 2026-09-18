@@ -8,6 +8,8 @@
   const MAX_SIDE = 3000;
   const JPEG_QUALITY = 0.95;
   const OCR_SCORE = 0.25;
+  // P0测试：OCR单次提取最多等待2分钟，用于验证完整识别能力。
+  const OCR_TIMEOUT_MS = 120000;
   const OCR_SDK_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
   const OCR_WORKER_URL = '/api/paddleocr-worker';
 
@@ -177,7 +179,10 @@
       const ocr = await loadEngine();
       setStatus('正在本地识别运单文字…', 55);
 
-      const [result] = await ocr.predict(blob, { textRecScoreThresh: OCR_SCORE });
+      const [result] = await Promise.race([
+        ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('OCR识别超过2分钟，请检查图片质量或OCR处理链路')), OCR_TIMEOUT_MS))
+      ]);
       if (currentOperation !== operationId || cancelRequested) throw new Error('OCR识别已取消');
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
