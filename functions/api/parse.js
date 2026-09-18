@@ -16,7 +16,11 @@ export async function onRequest({ request, env }) {
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
 
-    const [base, learning] = await Promise.all([getBaseStores(env, route), getLearning(env, userId, route)]);
+    const deadline = Date.now() + 2800;
+    const [base, learning] = await Promise.all([
+      getBaseStores(env, route, deadline),
+      getLearning(env, userId, route, deadline)
+    ]);
     const parsed = parseDeterministic(text);
     const result = matchTodayStores(parsed.stores, base, learning);
     if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
@@ -161,14 +165,14 @@ function extractVolume(source) {
   return match ? `${match[1]}m³` : '';
 }
 
-async function getBaseStores(env, route) {
-  const data = await redisGet(env, `route:${normalizeRoute(route)}:base`);
+async function getBaseStores(env, route, deadline) {
+  const data = await redisGet(env, `route:${normalizeRoute(route)}:base`, deadline);
   if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
-async function getLearning(env, userId, route) {
-  const data = await redisGet(env, learningKey(userId, route));
+async function getLearning(env, userId, route, deadline) {
+  const data = await redisGet(env, learningKey(userId, route), deadline);
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
@@ -185,17 +189,34 @@ function normalizeUserId(value) {
   return String(value || '').trim().slice(0, 128);
 }
 
-async function redisGet(env, key) {
+const REDIS_TIMEOUT_MS = 2200;
+async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
   const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
-  const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
-  if (!response.ok) throw new Error('Redis读取失败');
-  const data = await response.json().catch(() => ({}));
-  if (data?.result === null || data?.result === undefined || data?.result === '') return null;
-  try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
+  const controller = new AbortController();
+  const remaining = Math.max(1, Math.min(REDIS_TIMEOUT_MS, deadline - Date.now()));
+  const timer = setTimeout(() => controller.abort(), remaining);
+  try {
+    const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`);
+    const data = await response.json().catch(() => ({}));
+    if (data?.result === null || data?.result === undefined || data?.result === '') return null;
+    try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('Redis读取超时（已达到解析时间预算）');
+    if (/Redis读取失败/.test(String(error?.message || ''))) throw error;
+    throw new Error('Redis网络请求失败');
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function matchTodayStores(recognized, baseStores, learning) {
-  const base = baseStores.map(normalizeBase).filter(Boolean), byName = new Map(), byCode = new Map(), byLearning = new Map();
+  // getBaseStores 已完成标准化；保留原 index，避免重复 normalizeBase 导致线路顺序与去重键失效。
+  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byLearning = new Map();
   for (const item of base) {
     const nameKey = matchKey(item.name);
     if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
@@ -270,13 +291,40 @@ function findMatch(raw, base, byName, byCode, used, byLearning) {
   return { type: 'new', score: best.score };
 }
 
+const baseMatchMeta = new WeakMap();
+
+function getBaseMatchMeta(item) {
+  let meta = baseMatchMeta.get(item);
+  if (meta) return meta;
+  const name = item?.name || '';
+  const key = matchKey(name);
+  meta = {
+    key,
+    businessCode: extractBusinessCode(name),
+    stableKey: stableStoreKey(name),
+    ngrams: ngramSet(key, 2)
+  };
+  baseMatchMeta.set(item, meta);
+  return meta;
+}
+
 function storeSimilarity(a, b) {
-  const ak = matchKey(a), bk = matchKey(b);
+  const ak = matchKey(a);
+  const bm = getBaseMatchMeta(b);
+  const bk = bm.key;
   if (!ak || !bk) return 0;
   if (ak === bk) return 1;
-  const codeA = extractBusinessCode(a), codeB = extractBusinessCode(b);
-  if (codeA && codeA === codeB) return 1;
-  const edit = normalizedEditSimilarity(ak, bk), ngram = characterNgramSimilarity(ak, bk), token = tokenOverlap(stableStoreKey(a), stableStoreKey(b));
+  const codeA = extractBusinessCode(a);
+  if (codeA && codeA === bm.businessCode) return 1;
+  const edit = normalizedEditSimilarity(ak, bk);
+  const aa = ngramSet(ak, 2), bb = bm.ngrams;
+  let ngram = 0;
+  if (aa.size && bb.size) {
+    let common = 0;
+    for (const value of aa) if (bb.has(value)) common++;
+    ngram = (2 * common) / (aa.size + bb.size);
+  }
+  const token = tokenOverlap(stableStoreKey(a), bm.stableKey);
   const containment = ak.includes(bk) || bk.includes(ak) ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length) : 0;
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
 }

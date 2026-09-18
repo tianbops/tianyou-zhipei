@@ -6,18 +6,6 @@
 <meta name="theme-color" content="#05070A">
 <title>Zhipei One · 智配 One</title>
 <link rel="stylesheet" href="css/style.css">
-<style>
-.parse-status .status-row{overflow:hidden;min-width:0;display:flex;align-items:center;gap:7px}
-.parse-status .status-icon{display:inline-flex;flex:0 0 auto;width:18px;height:18px;align-items:center;justify-content:center}
-.parse-status .status-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:statusSpin .75s linear infinite}
-@keyframes statusSpin{to{transform:rotate(360deg)}}
-.parse-status .status-row #statusText{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;text-overflow:clip;white-space:nowrap;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.parse-status .status-row #statusText::-webkit-scrollbar{display:none}
-.parse-status .status-error{display:none;min-width:0;margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.08);overflow-x:auto;overflow-y:hidden;white-space:nowrap;text-overflow:clip;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.parse-status .status-error.active{display:block}
-.parse-status .status-error::-webkit-scrollbar{display:none}
-.toast,#error-box{display:none!important}
-</style>
 </head>
 <body>
 <div id="error-box" role="alert" aria-live="polite"></div>
@@ -54,17 +42,16 @@
       <button class="upload-icon-btn" type="button" onclick="triggerUpload('file')" aria-label="文件"><span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg></span><span class="icon-label">文件</span></button>
     </div>
     <div class="divider-line"><hr><span>OCR文字 / 手动文字</span><hr></div>
-    <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon"><span class="status-spinner" aria-hidden="true"></span></span><span id="statusText">等待处理...</span></div><div id="statusError" class="status-error" aria-live="polite"></div><div class="progress-track"><div id="progressBar"></div></div></div>
+    <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon" aria-hidden="true"></span><span id="statusText">等待处理...</span></div><div id="statusError" class="status-error" aria-live="polite"></div><div class="progress-track"><div id="progressBar"></div></div></div>
     <div class="input-area"><textarea id="manualOrderInput" rows="10" placeholder="上传图片后，这里显示识别文字。请核对后再开始解析，也可直接粘贴运单文字。" autocomplete="off"></textarea></div>
     <div class="quick-actions"><button type="button" onclick="pasteFromClipboard()">📋 粘贴</button><button type="button" onclick="clearManualInput()">🗑️ 清空</button><button type="button" onclick="parseManualInput()">🔍 解析</button></div>
-    <div class="sheet-footer"><button class="btn-cancel" type="button" onclick="toggleUpload()">取消</button><button class="btn-confirm" id="confirmBtn" type="button" onclick="submitManualOrder()">确认录入</button></div>
+    <div class="sheet-footer"><button class="btn-cancel" type="button" onclick="cancelParse();toggleUpload()">取消</button><button class="btn-confirm" id="confirmBtn" type="button" onclick="submitManualOrder()">确认录入</button></div>
   </div>
 </div>
 <script src="js/auth.js"></script>
+<script src="js/home_status.js"></script>
 <script src="js/home.js"></script>
 <script src="js/paddle_ocr.js"></script>
 <script src="js/home_confirm.js"></script>
-<script src="js/order_parse_fix.js"></script>
-<script src="js/home_status.js"></script>
 </body>
 </html>
