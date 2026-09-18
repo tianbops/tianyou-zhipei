@@ -97,7 +97,18 @@ function extractRouteRegion(source) {
 
 function removeHeaderFields(value) {
   const text = String(value || '').replace(/总\s*\n\s*(数量|重量|体积)/g, '总$1').replace(/总\s*数\s*量/g, '总数量').replace(/总\s*重\s*量/g, '总重量').replace(/总\s*体\s*积/g, '总体积');
-  return text.split('\n').filter(line => !isHeaderLine(line)).join('\n').trim();
+  const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+  const result = [];
+  const valueOnly = /^[\d,.]+\s*(?:kg|KG|千克|公斤|吨|t|m3|m²|m³|立方米)(?:\s*\([^)]*\))?$/i;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (isHeaderLine(line)) {
+      if (/^(?:总数量|总重量|总体积)$/.test(line.replace(/\s/g, '')) && valueOnly.test(lines[i + 1] || '')) i++;
+      continue;
+    }
+    result.push(line);
+  }
+  return result.join('\n').trim();
 }
 
 function findLastHeaderEnd(lines) {
