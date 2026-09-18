@@ -150,8 +150,7 @@
 
   function resultToText(result) {
     const items = Array.isArray(result?.items) ? sortItems(result.items) : [];
-    return normalizeText(items.filter(item => String(item?.text ?? '').trim()).map(item => item.text).join('
-'));
+    return normalizeText(items.filter(item => String(item?.text ?? '').trim()).map(item => item.text).join('\n'));
   }
 
   function putText(text) {
