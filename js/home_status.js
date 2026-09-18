@@ -1,65 +1,13 @@
-/* Zhipei One - 首页状态提示统一显示 */
+/* 天友智配One - 统一处理状态UI */
 (() => {
-  'use strict';
-
-  const $ = (id) => document.getElementById(id);
-
-  function setError(message) {
-    const text = String(message || '').trim();
-    const row = $('statusError');
-    if (!row) return;
-    row.textContent = text ? `⚠️ ${text}` : '';
-    row.classList.toggle('active', !!text);
-  }
-
-  function clearError() {
-    setError('');
-  }
-
-  window.setHomeStatusError = setError;
-  window.clearHomeStatusError = clearError;
-
-  function observeStatus() {
-    const box = $('parseStatus');
-    if (!box) return;
-    const observer = new MutationObserver(() => {
-      const icon = String($('statusIcon')?.textContent || '').trim();
-      if (icon === '✅' || icon === '⏳') clearError();
-    });
-    observer.observe(box, { childList: true, characterData: true, subtree: true });
-  }
-
-  function observeToast() {
-    const sync = () => {
-      const toast = $('homeToast');
-      if (!toast) return;
-      const message = String(toast.textContent || '').trim();
-      if (toast.classList.contains('show') && message) setError(message);
-      toast.classList.remove('show');
-    };
-
-    const bodyObserver = new MutationObserver(sync);
-    bodyObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-    sync();
-  }
-
-  function observePageError() {
-    const box = $('error-box');
-    if (!box) return;
-    const observer = new MutationObserver(() => {
-      const message = String(box.textContent || '').replace(/^页面错误：/, '').trim();
-      if (message) {
-        setError(message);
-        box.classList.remove('show');
-      }
-    });
-    observer.observe(box, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    observeStatus();
-    observeToast();
-    observePageError();
-    window.homeToast = (message) => setError(message);
-  }, { once: true });
+'use strict';
+const $=id=>document.getElementById(id);
+const MESSAGES={idle:'等待处理...',loading:'正在处理...',success:'处理完成',error:'处理失败',cancelled:'已取消'};
+function setError(message){const row=$('statusError');if(!row)return;const text=String(message||'').trim();row.textContent=text?'⚠️ '+text:'';row.classList.toggle('active',!!text);}
+function clearError(){setError('');}
+function render(status='idle',progress=0,message=''){const box=$('parseStatus');if(!box)return;const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';box.classList.add('active');box.classList.remove('loading','success','error','cancelled');if(state!=='idle')box.classList.add(state);const icon=$('statusIcon');if(icon){icon.className='status-icon';if(state!=='idle')icon.classList.add(state);icon.innerHTML=state==='loading'?'<span class="status-spinner" aria-hidden="true"></span>':'';}if($('statusText'))$('statusText').textContent=message||MESSAGES[state];if($('progressBar'))$('progressBar').style.width=Math.max(0,Math.min(100,Number(progress)||0))+'%';if(state==='error')setError(message);else clearError();}
+window.renderUnifiedStatus=render;
+window.setHomeStatusError=setError;
+window.clearHomeStatusError=clearError;
+window.homeToast=(message,type='')=>{if(type==='success')render('success',100,message);else if(type==='warning'||type==='error')render('error',100,message);else setError(message);};
 })();
