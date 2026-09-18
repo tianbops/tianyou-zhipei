@@ -45,7 +45,7 @@ async function parseOrderText(text){
     clearTimeout(timer);parseAbortController=null;parseInFlight=false;
   }
 }
-window.cancelParse=()=>{if(parseAbortController){parseAbortController.abort();toast('已取消解析','warning');}};
+window.cancelParse=async()=>{if(parseAbortController)parseAbortController.abort();if(window.cancelOCR)await window.cancelOCR();toast('已取消解析','warning');};
 
 window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(overlay)overlay.classList.toggle('active')};
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
