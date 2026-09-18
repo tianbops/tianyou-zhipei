@@ -9,5 +9,4 @@ function render(status='idle',progress=0,message=''){const box=$('parseStatus');
 window.renderUnifiedStatus=render;
 window.setHomeStatusError=setError;
 window.clearHomeStatusError=clearError;
-window.homeToast=(message,type='')=>{if(type==='success')render('success',100,message);else if(type==='warning'||type==='error')render('error',100,message);else setError(message);};
 })();
