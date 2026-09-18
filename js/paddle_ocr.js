@@ -21,19 +21,14 @@
 
   function normalizeText(value) {
     return String(value ?? '')
-      .replace(/\r
-?/g, '
-')
+      .replace(/\r\n?/g, '\n')
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      .split('
-')
+      .split('\n')
       .map(line => line.trim())
       .filter(Boolean)
-      .join('
-')
+      .join('\n')
       .trim();
   }
-
   function setStatus(text, progress = 0, done = false, error = false) {
     window.renderUnifiedStatus?.(error ? 'error' : done ? 'success' : 'loading', progress, text);
   }
