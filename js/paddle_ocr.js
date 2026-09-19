@@ -277,27 +277,33 @@
   warmingUp = true;
   loadEngine().catch(() => {}).finally(() => { warmingUp = false; });
 
-  window.triggerUpload = function(type) {
-    if (busy) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    if (type === 'camera') input.setAttribute('capture', 'environment');
-    if (type === 'album' || type === 'file') input.multiple = true;
-    input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0';
-
+  function bindUploadInput(id, type) {
+    const input = $(id);
+    if (!input) return;
     input.addEventListener('change', () => {
       const files = Array.from(input.files || []);
-      if (!files.length) {
-        setTimeout(() => input.remove(), 1000);
-        return;
-      }
+      if (!files.length) return;
       processFiles(files).catch(error => {
-        if (error?.code !== 'OCR_CANCELLED') console.error('[PaddleOCR batch]', error);
+        if (error?.code !== 'OCR_CANCELLED') {
+          console.error('[PaddleOCR batch]', error);
+          setStatus(error?.message || '图片读取失败，请重试', 100, false, true);
+        }
+      }).finally(() => {
+        input.value = '';
       });
-      setTimeout(() => input.remove(), 1000);
-    }, { once: true });
+    });
+  }
 
-    document.body.appendChild(input);
+  bindUploadInput('ocrCameraInput', 'camera');
+  bindUploadInput('ocrAlbumInput', 'album');
+  bindUploadInput('ocrFileInput', 'file');
+
+  window.triggerUpload = function(type) {
+    if (busy) return;
+    const input = type === 'camera' ? $('ocrCameraInput') : type === 'album' ? $('ocrAlbumInput') : $('ocrFileInput');
+    if (!input) {
+      setStatus('上传功能未加载，请刷新页面重试', 100, false, true);
+      return;
+    }
     input.click();
   };
