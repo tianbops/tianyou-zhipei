@@ -222,6 +222,8 @@
       .filter(file => file && String(file.type).startsWith('image/'))
       .filter((file, index, arr) => arr.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
     if (!list.length) throw new Error('请选择有效的运单图片');
+    const MAX_BATCH_FILES = 12;
+    if (list.length > MAX_BATCH_FILES) throw new Error('一次最多导入12张运单图片，请分批导入');
     const results = [], failed = [];
     for (let index = 0; index < list.length; index += 1) {
       if (cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
@@ -231,10 +233,13 @@
       } catch (error) {
         if (/已取消/.test(String(error?.message || ''))) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
         failed.push({ file: list[index], error });
+        if (list.length > 1) {
+          window.renderUnifiedStatus?.('loading', Math.min(95, Math.round(((index + 1) / list.length) * 90)), '第 ' + (index + 1) + '/' + list.length + ' 张未成功，继续读取下一张…');
+        }
       }
     }
     if (!results.length) throw failed[0]?.error || new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
-    const combined = results.map(item => item.rawText).join('\\n\\n');
+    const combined = results.map(item => item.rawText).filter(Boolean).join('\\n\\n');
     putText(combined);
     const totalLines = results.reduce((sum, item) => sum + (Number(item.itemCount) || 0), 0);
     if (list.length > 1) {
