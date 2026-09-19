@@ -24,12 +24,19 @@ function render(status='idle',progress=0,message=''){
   }
   if($('progressBar'))$('progressBar').style.width=Math.max(0,Math.min(100,Number(progress)||0))+'%';
   if(state==='error')setError(message);else clearError();
+  if(state!=='success')renderDetail([]);
 }
 function renderDetail(details){
   const row=$('statusDetail');
   if(!row)return;
+  row.textContent='';
   const items=Array.isArray(details)?details.filter(Boolean):[];
-  row.innerHTML=items.map(item=>`<span class="detail-line">${item}</span>`).join('');
+  items.forEach(item=>{
+    const line=document.createElement('span');
+    line.className='detail-line';
+    line.textContent=String(item);
+    row.appendChild(line);
+  });
   row.classList.toggle('active',items.length>0);
 }
 window.renderStatusDetail=renderDetail;
