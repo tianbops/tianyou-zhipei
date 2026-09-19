@@ -175,18 +175,44 @@
 
     const run = async () => {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
-      setStatus('正在准备运单图片…', 15);
+      setStatus('正在读取运单图片…', 5);
       const blob = await prepareImage(file);
-      setStatus('正在准备文字识别…', 25);
+      setStatus('正在整理图片内容…', 22);
       const ocr = await loadEngine();
-      setStatus('正在读取运单文字…', 55);
+      setStatus('正在准备文字读取…', 38);
+
+      // 识别引擎本身没有可靠的逐字进度回调，因此不伪造“实时百分比”。
+      // 进入实际读取后，进度平稳推进并封顶，直到引擎真正返回结果才继续。
+      setStatus('正在读取运单文字，耗时较长，正在稳定处理…', 52);
+      let recognitionProgress = 52;
+      let progressTimer = null;
+      const recognitionStartedAt = Date.now();
+      const advanceRecognition = () => {
+        const elapsed = Date.now() - recognitionStartedAt;
+        // 越接近超时越慢，最高只到88%，避免假装已经完成。
+        const ratio = Math.min(1, elapsed / 90000);
+        const target = 52 + (88 - 52) * (1 - Math.pow(1 - ratio, 2));
+        if (target > recognitionProgress) {
+          recognitionProgress = target;
+          setStatus('正在读取运单文字，耗时较长，正在稳定处理…', recognitionProgress);
+        }
+        if (recognitionProgress < 88) progressTimer = setTimeout(advanceRecognition, 700);
+      };
+      progressTimer = setTimeout(advanceRecognition, 700);
 
       const remaining = Math.max(1, deadline - Date.now());
-      const [result] = await Promise.race([
-        ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('读取运单时间较长，请重新尝试')), remaining))
-      ]);
+      let result;
+      try {
+        [result] = await Promise.race([
+          ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('读取运单时间较长，请重新尝试')), remaining))
+        ]);
+      } finally {
+        if (progressTimer) clearTimeout(progressTimer);
+      }
       if (currentOperation !== operationId || cancelRequested) throw new Error('已取消');
+      setStatus('正在整理读取结果…', 94);
+      await new Promise(resolve => requestAnimationFrame(resolve));
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
 
