@@ -3,7 +3,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const MESSAGES={idle:'等待处理…',loading:'正在处理…',success:'处理完成',error:'处理失败',cancelled:'已取消'};
-function setError(message){const text=String(message||'').trim();if($('statusText')&&text)$('statusText').textContent=text;const row=$('statusError');if(row){row.textContent='';row.classList.remove('active');}}
+function setError(message){const text=String(message||'').trim();if($('statusText')&&text)$('statusText').textContent=text;$('statusText').setAttribute('data-text',text);}
 function clearError(){setError('');}
 function render(status='idle',progress=0,message=''){
   const box=$('parseStatus');
@@ -22,7 +22,7 @@ function render(status='idle',progress=0,message=''){
     const text=String(message||MESSAGES[state]).trim();
     $('statusText').textContent=text;
   }
-  if($('progressBar'))$('progressBar').style.width=Math.max(0,Math.min(100,Number(progress)||0))+'%';
+  if($('statusText'))$('statusText').style.setProperty('--status-progress',Math.max(0,Math.min(100,Number(progress)||0))+'%');
   if(state==='error')setError(message);else clearError();
   if(state!=='success')renderDetail([]);
 }
