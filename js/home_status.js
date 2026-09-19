@@ -2,8 +2,8 @@
 (() => {
 'use strict';
 const $=id=>document.getElementById(id);
-const MESSAGES={idle:'等待处理...',loading:'正在处理...',success:'处理完成',error:'处理失败',cancelled:'已取消'};
-function setError(message){const row=$('statusError');if(!row)return;const text=String(message||'').trim();row.textContent=text?'处理提示：'+text:'';row.classList.toggle('active',!!text);}
+const MESSAGES={idle:'等待处理…',loading:'正在处理…',success:'处理完成',error:'处理失败',cancelled:'已取消'};
+function setError(message){const text=String(message||'').trim();if($('statusText')&&text)$('statusText').textContent=text;const row=$('statusError');if(row){row.textContent='';row.classList.remove('active');}}
 function clearError(){setError('');}
 function render(status='idle',progress=0,message=''){
   const box=$('parseStatus');
