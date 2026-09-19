@@ -6,13 +6,24 @@ window.Auth = {
   authPromise: null,
 
   async loginWithCredentials(_type, account, password) {
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-      credentials: 'same-origin',
-      body: JSON.stringify({ username: String(account || '').trim(), password: String(password || '') })
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    let response;
+    try {
+      response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        credentials: 'same-origin',
+        signal: controller.signal,
+        body: JSON.stringify({ username: String(account || '').trim(), password: String(password || '') })
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') throw Object.assign(new Error('登录请求超时，请稍后重试'), { status: 408 });
+      throw Object.assign(new Error('登录请求失败：' + (error?.message || '网络异常')), { status: 0 });
+    } finally {
+      clearTimeout(timer);
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.success) {
       const error = new Error(data?.error || `登录失败（HTTP ${response.status}）`);
