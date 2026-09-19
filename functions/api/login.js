@@ -112,14 +112,25 @@ function parseRecord(value) {
   }
 }
 
+const LOGIN_REDIS_TIMEOUT_MS = 10000;
 async function redisGet(env, key) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error('Redis 读取失败');
-  const data = await response.json().catch(() => ({}));
-  return data.result || null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOGIN_REDIS_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error('Redis 读取失败');
+    const data = await response.json().catch(() => ({}));
+    return data.result || null;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('登录服务连接超时，请稍后重试');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function redisReady(env) {
