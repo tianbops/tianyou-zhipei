@@ -42,7 +42,28 @@ function renderDetail(details){
 }
 window.renderStatusDetail=renderDetail;
 window.clearStatusDetail=()=>renderDetail([]);
-window.renderUnifiedStatus=render;
+let progressTimer=null;
+function animateProgressTo(target){
+  const el=$('statusText');
+  if(!el)return;
+  const next=Math.max(0,Math.min(100,Number(target)||0));
+  const current=parseFloat(getComputedStyle(el).getPropertyValue('--status-progress'))||0;
+  if(progressTimer)cancelAnimationFrame(progressTimer);
+  const start=performance.now();
+  const duration=Math.max(700,Math.min(2200,Math.abs(next-current)*18));
+  const tick=now=>{
+    const p=Math.min(1,(now-start)/duration);
+    const eased=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    const value=current+(next-current)*eased;
+    el.style.setProperty('--status-progress',value.toFixed(2)+'%');
+    if(p<1)progressTimer=requestAnimationFrame(tick);
+  };
+  progressTimer=requestAnimationFrame(tick);
+}
+window.renderUnifiedStatus=(status='idle',progress=0,message='')=>{
+  render(status,0,message);
+  animateProgressTo(progress);
+};
 window.setHomeStatusError=setError;
 window.clearHomeStatusError=clearError;
 })();
