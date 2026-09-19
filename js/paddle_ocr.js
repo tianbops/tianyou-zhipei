@@ -32,8 +32,8 @@
       .join('\n')
       .trim();
   }
-  function setStatus(text, progress = 0, done = false, error = false) {
-    window.renderUnifiedStatus?.(error ? 'error' : done ? 'success' : 'loading', progress, text);
+  function setStatus(text, progress = 0, done = false, error = false, cancelled = false) {
+    window.renderUnifiedStatus?.(cancelled ? 'cancelled' : error ? 'error' : done ? 'success' : 'loading', progress, text);
   }
 
   function isPlaceholder(text) {
@@ -221,7 +221,7 @@
     ++operationId;
     await disposeEngine();
     busy = false;
-    setStatus('已取消OCR识别', 100, false, true);
+    setStatus('已取消OCR识别', 100, false, false, true);
     return true;
   };
 
