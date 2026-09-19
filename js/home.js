@@ -62,12 +62,31 @@ window.parseManualInput=async()=>{if(parseInFlight)return toast('解析正在进
 const detailLines=[];
 if(parsedOrders.length){
   detailLines.push('修改详情');
-  detailLines.push(`门店：${uniqueCount} 家`);
-  if(rawCount!==uniqueCount)detailLines.push(`原始记录：${rawCount} 条`);
-  if(data.newStoreCount)detailLines.push(`新增门店：${data.newStoreCount} 家`);
-  if(data.duplicateCount)detailLines.push(`合并重复：${data.duplicateCount} 条`);
-  if(data.reviewCount)detailLines.push(`待确认：${data.reviewCount} 家`);
-  if(data.totalWeight)detailLines.push(`总重量：${data.totalWeight}`);
+  let changed=false;
+  parsedOrders.forEach(item=>{
+    const baseName=String(item?.baseName||item?.name||'').trim();
+    const rawNames=Array.isArray(item?.rawNames)?item.rawNames.filter(Boolean):[];
+    const uniqueRaw=[...new Set(rawNames.map(value=>String(value).trim()).filter(Boolean))];
+    if(item?.matched && baseName && uniqueRaw.some(value=>value!==baseName)){
+      uniqueRaw.filter(value=>value!==baseName).forEach(value=>{
+        detailLines.push(`更正门店名称：${value} → ${baseName}`);
+        changed=true;
+      });
+    }
+    if(uniqueRaw.length>1 && item?.matched){
+      detailLines.push(`合并门店：${uniqueRaw.join('、')} → ${baseName||item.name}`);
+      changed=true;
+    }
+    if(item?.isNew){
+      detailLines.push(`新增门店：${item.name}`);
+      changed=true;
+    }
+    if(item?.needsReview){
+      detailLines.push(`待确认门店：${item.name}`);
+      changed=true;
+    }
+  });
+  if(!changed)detailLines.push('未发现门店名称或重复记录需要修改');
   window.renderStatusDetail?.(detailLines);
 }else{window.clearStatusDetail?.();}if(data.warning)toast(data.warning,'warning');return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消解析');return[]}window.renderUnifiedStatus('error',0,e.message||'解析失败');toast(e.message||'解析失败','warning');error(e.message||'解析失败');return[]}};
 async function refreshHomeOrder(){try{await loadServerOrder(currentDate());updateSummary()}catch(e){console.error('刷新当日任务失败',e)}}
