@@ -166,7 +166,7 @@
     input.scrollTop = 0;
   }
 
-  async function process(file) {
+  async function process(file, options = {}) {
     if (busy) return;
     busy = true;
     cancelRequested = false;
@@ -175,11 +175,11 @@
 
     const run = async () => {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
-      setStatus('正在准备运单图片…', 15);
+      setStatus(options.batch ? ('正在读取第 ' + options.index + '/' + options.total + ' 张运单…') : '正在准备运单图片…', 15);
       const blob = await prepareImage(file);
-      setStatus('正在准备文字识别…', 25);
+      setStatus(options.batch ? ('正在识别第 ' + options.index + '/' + options.total + ' 张运单…') : '正在准备文字识别…', 25);
       const ocr = await loadEngine();
-      setStatus('正在读取运单文字…', 55);
+      setStatus(options.batch ? ('正在读取第 ' + options.index + '/' + options.total + ' 张运单…') : '正在读取运单文字…', 55);
 
       const remaining = Math.max(1, deadline - Date.now());
       const [result] = await Promise.race([
@@ -189,30 +189,27 @@
       if (currentOperation !== operationId || cancelRequested) throw new Error('已取消');
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
-
-      putText(text);
       const count = Array.isArray(result?.items) ? result.items.length : 0;
-      setStatus(`已读取运单文字${count ? `，共 ${count} 行` : ''}`, 100, true);
+      if (!options.batch) {
+        putText(text);
+        setStatus('已读取运单文字' + (count ? '，共 ' + count + ' 行' : ''), 100, true);
+      }
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     };
 
     try {
-      const result = await Promise.race([
+      return await Promise.race([
         run(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('OCR读取/识别超过2分钟，请检查图片质量或OCR处理链路')), OCR_TIMEOUT_MS))
       ]);
-      return result;
     } catch (error) {
       if (/OCR识别已取消/.test(String(error?.message || ''))) {
-        ++operationId;
-        disposeEngine().catch(() => {});
+        ++operationId; disposeEngine().catch(() => {});
       } else if (/读取运单时间较长/.test(String(error?.message || ''))) {
-        cancelRequested = true;
-        ++operationId;
-        disposeEngine().catch(() => {});
+        cancelRequested = true; ++operationId; disposeEngine().catch(() => {});
       }
       console.error('[PaddleOCR]', error);
-      setStatus(error?.message || 'OCR识别失败', 100, false, true);
+      if (!options.batch) setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
     } finally {
       busy = false;
@@ -220,6 +217,32 @@
     }
   }
 
+  async function processFiles(files) {
+    const list = Array.from(files || [])
+      .filter(file => file && String(file.type).startsWith('image/'))
+      .filter((file, index, arr) => arr.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
+    if (!list.length) throw new Error('请选择有效的运单图片');
+    const results = [], failed = [];
+    for (let index = 0; index < list.length; index += 1) {
+      if (cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+      try {
+        const result = await process(list[index], { batch: list.length > 1, index: index + 1, total: list.length });
+        if (result?.rawText) results.push(result);
+      } catch (error) {
+        if (/已取消/.test(String(error?.message || ''))) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+        failed.push({ file: list[index], error });
+      }
+    }
+    if (!results.length) throw failed[0]?.error || new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
+    const combined = results.map(item => item.rawText).join('\\n\\n');
+    putText(combined);
+    const totalLines = results.reduce((sum, item) => sum + (Number(item.itemCount) || 0), 0);
+    if (list.length > 1) {
+      const message = failed.length ? ('已读取 ' + results.length + '/' + list.length + ' 张运单，' + failed.length + ' 张未成功') : ('已读取 ' + results.length + ' 张运单');
+      setStatus(message, 100, true);
+    }
+    return { rawText: combined, source: 'paddleocr-browser-batch', itemCount: totalLines, fileCount: list.length, successCount: results.length, failedCount: failed.length, failedFiles: failed.map(item => item.file?.name || '未命名图片') };
+  }
 
   async function disposeEngine() {
     const engine = engineInstance;
@@ -255,15 +278,21 @@
     input.type = 'file';
     input.accept = 'image/*';
     if (type === 'camera') input.setAttribute('capture', 'environment');
+    if (type === 'album' || type === 'file') input.multiple = true;
     input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0';
 
     input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      if (file) process(file).catch(() => {});
+      const files = Array.from(input.files || []);
+      if (!files.length) {
+        setTimeout(() => input.remove(), 1000);
+        return;
+      }
+      processFiles(files).catch(error => {
+        if (error?.code !== 'OCR_CANCELLED') console.error('[PaddleOCR batch]', error);
+      });
       setTimeout(() => input.remove(), 1000);
     }, { once: true });
 
     document.body.appendChild(input);
     input.click();
   };
-})();
