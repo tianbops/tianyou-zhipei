@@ -19,13 +19,21 @@ function render(status='idle',progress=0,message=''){
     icon.innerHTML=state==='loading'?'<span class="status-spinner" aria-hidden="true"></span>':'';
   }
   if($('statusText')){
-    // 状态栏优先保持短提示，避免移动端页面被长文本撑开
     const text=String(message||MESSAGES[state]).trim();
-    $('statusText').textContent=text.length>60?text.slice(0,60)+'...':text;
+    $('statusText').textContent=text;
   }
   if($('progressBar'))$('progressBar').style.width=Math.max(0,Math.min(100,Number(progress)||0))+'%';
   if(state==='error')setError(message);else clearError();
 }
+function renderDetail(details){
+  const row=$('statusDetail');
+  if(!row)return;
+  const items=Array.isArray(details)?details.filter(Boolean):[];
+  row.innerHTML=items.map(item=>`<span class="detail-line">${item}</span>`).join('');
+  row.classList.toggle('active',items.length>0);
+}
+window.renderStatusDetail=renderDetail;
+window.clearStatusDetail=()=>renderDetail([]);
 window.renderUnifiedStatus=render;
 window.setHomeStatusError=setError;
 window.clearHomeStatusError=clearError;
