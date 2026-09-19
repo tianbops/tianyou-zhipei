@@ -171,7 +171,9 @@
     busy = true;
     cancelRequested = false;
     const currentOperation = ++operationId;
-    try {
+    const deadline = Date.now() + OCR_TIMEOUT_MS;
+
+    const run = async () => {
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
       setStatus('正在准备运单图片…', 15);
       const blob = await prepareImage(file);
@@ -179,9 +181,10 @@
       const ocr = await loadEngine();
       setStatus('正在本地识别运单文字…', 55);
 
+      const remaining = Math.max(1, deadline - Date.now());
       const [result] = await Promise.race([
         ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('OCR识别超过2分钟，请检查图片质量或OCR处理链路')), OCR_TIMEOUT_MS))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('OCR读取/识别超过2分钟，请检查图片质量或OCR处理链路')), remaining))
       ]);
       if (currentOperation !== operationId || cancelRequested) throw new Error('OCR识别已取消');
       const text = resultToText(result);
@@ -191,8 +194,20 @@
       const count = Array.isArray(result?.items) ? result.items.length : 0;
       setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
+    };
+
+    try {
+      const result = await Promise.race([
+        run(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('OCR读取/识别超过2分钟，请检查图片质量或OCR处理链路')), OCR_TIMEOUT_MS))
+      ]);
+      return result;
     } catch (error) {
       if (/OCR识别已取消/.test(String(error?.message || ''))) {
+        ++operationId;
+        disposeEngine().catch(() => {});
+      } else if (/超过2分钟/.test(String(error?.message || ''))) {
+        cancelRequested = true;
         ++operationId;
         disposeEngine().catch(() => {});
       }
