@@ -49,9 +49,9 @@
 
   async function loadSdk() {
     if (sdkPromise) return sdkPromise;
-    if (!warmingUp) setStatus('正在加载本地OCR组件…', 28);
+    if (!warmingUp) setStatus('正在准备识别功能…', 28);
     sdkPromise = import(OCR_SDK_URL).then(module => {
-      if (!module?.PaddleOCR) throw new Error('OCR组件加载失败，请检查网络连接后重试');
+      if (!module?.PaddleOCR) throw new Error('识别功能加载失败，请检查网络后重试');
       return module.PaddleOCR;
     }).catch(error => {
       sdkPromise = null;
@@ -63,7 +63,7 @@
   async function loadEngine() {
     if (enginePromise) return enginePromise;
     const PaddleOCR = await loadSdk();
-    if (!warmingUp) setStatus('正在加载中文OCR模型中…', 35);
+    if (!warmingUp) setStatus('正在准备文字识别…', 35);
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
@@ -177,22 +177,22 @@
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
       setStatus('正在准备运单图片…', 15);
       const blob = await prepareImage(file);
-      setStatus('正在启动本地 PaddleOCR…', 25);
+      setStatus('正在准备文字识别…', 25);
       const ocr = await loadEngine();
-      setStatus('正在本地识别运单文字…', 55);
+      setStatus('正在读取运单文字…', 55);
 
       const remaining = Math.max(1, deadline - Date.now());
       const [result] = await Promise.race([
         ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('OCR读取/识别超过2分钟，请检查图片质量或OCR处理链路')), remaining))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('读取运单时间较长，请重新尝试')), remaining))
       ]);
-      if (currentOperation !== operationId || cancelRequested) throw new Error('OCR识别已取消');
+      if (currentOperation !== operationId || cancelRequested) throw new Error('已取消');
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
 
       putText(text);
       const count = Array.isArray(result?.items) ? result.items.length : 0;
-      setStatus(`本地OCR识别完成，共识别 ${count} 行文字`, 100, true);
+      setStatus(`已读取运单文字${count ? `，共 ${count} 行` : ''}`, 100, true);
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     };
 
@@ -206,7 +206,7 @@
       if (/OCR识别已取消/.test(String(error?.message || ''))) {
         ++operationId;
         disposeEngine().catch(() => {});
-      } else if (/超过2分钟/.test(String(error?.message || ''))) {
+      } else if (/读取运单时间较长/.test(String(error?.message || ''))) {
         cancelRequested = true;
         ++operationId;
         disposeEngine().catch(() => {});
@@ -236,7 +236,7 @@
     ++operationId;
     await disposeEngine();
     busy = false;
-    setStatus('已取消OCR识别', 100, false, false, true);
+    setStatus('已取消', 100, false, false, true);
     return true;
   };
 
