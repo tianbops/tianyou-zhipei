@@ -460,8 +460,9 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
     const candidates = collectSimilarityCandidates(raw, byNameLength, byNgram);
     const scores = new Map();
     const rawFeatures = getRawMatchFeatures(raw, keyFeatureCache);
+    const orderedCandidates = orderSimilarityCandidates(rawFeatures, candidates);
     let bestScore = 0;
-    for (const item of candidates) {
+    for (const item of orderedCandidates) {
       const baseMeta = getBaseMatchMeta(item);
       const cheap = cheapSimilarityUpperBound(rawFeatures, baseMeta);
       // edit 相似度的最大值为 1，因此 cheap 是最终分数的安全上界。
@@ -566,6 +567,26 @@ function collectSimilarityCandidates(raw, byNameLength, byNgram) {
     }
   }
   return [...selected];
+}
+
+function orderSimilarityCandidates(features, candidates) {
+  if (!features?.key || candidates.length < 2) return candidates;
+  const ranked = candidates.map((item, index) => {
+    const meta = getBaseMatchMeta(item);
+    let ngram = 0, token = 0, containment = 0;
+    for (let i = 0; i < meta.keys.length; i++) {
+      const key = meta.keys[i];
+      ngram = Math.max(ngram, characterNgramSimilarityFromSets(features.ngrams, meta.ngramSets[i]));
+      token = Math.max(token, tokenOverlapFromSets(features.tokens, meta.tokenSets[i]));
+      if (key.includes(features.key) || features.key.includes(key)) {
+        containment = Math.max(containment, Math.min(features.key.length, key.length) / Math.max(features.key.length, key.length));
+      }
+    }
+    const cheap = 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08;
+    return { item, cheap, index };
+  });
+  ranked.sort((a, b) => b.cheap - a.cheap || a.index - b.index);
+  return ranked.map(entry => entry.item);
 }
 
 function storeSimilarity(a, b) {
