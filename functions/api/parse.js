@@ -281,10 +281,12 @@ function matchTodayStores(recognized, baseStores, learning) {
   // 同一批OCR中重复门店可能先后触发两次 findDirectMatch；按归一化名称复用结果。
   // 仅存在于本次请求内，不跨用户、线路或请求共享。
   const directMatchCache = new Map();
+  const directFeatureCache = new Map();
   const matchStats = { learned: 0, businessCode: 0, exact: 0, similarity: 0, review: 0, new: 0, duplicate: 0 };
   let duplicateCount = 0;
   for (const raw of recognized) {
-    const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
+    const directFeatures = getDirectMatchFeatures(raw, directFeatureCache);
+    const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength, directFeatures);
     if (direct && used.has(direct.item.index)) {
       const canonical = canonicalByBaseIndex.get(direct.item.index);
       if (canonical) {
@@ -294,7 +296,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache);
+    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache, directFeatureCache);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -418,12 +420,26 @@ function isDeletionDistanceAtMost(shorter, longer, maxDeletes) {
   return deletes <= maxDeletes;
 }
 
-function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength) {
-  const learned = byLearning.get(matchKey(raw));
-  if (learned) return { type: 'match', item: learned, mode: 'learned', score: 1 };
-  const businessCode = extractBusinessCode(raw);
-  if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
+function getDirectMatchFeatures(raw, cache) {
   const key = matchKey(raw);
+  if (!key) return { key: '', businessCode: '', weakKey: '' };
+  const cached = cache?.get(key);
+  if (cached) return cached;
+  const features = {
+    key,
+    businessCode: extractBusinessCode(raw),
+    weakKey: key.replace(/^(?:i|ii)类/, '')
+  };
+  cache?.set(key, features);
+  return features;
+}
+
+function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength, features = getDirectMatchFeatures(raw)) {
+  const key = features.key;
+  const learned = byLearning.get(key);
+  if (learned) return { type: 'match', item: learned, mode: 'learned', score: 1 };
+  const businessCode = features.businessCode;
+  if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
   const omission = findUniqueOneCharOmissionMatch(raw, byName, byNameLength);
   if (omission) return { type: 'match', item: omission, mode: 'similarity', score: 0.995 };
@@ -433,17 +449,18 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   if (substitution) return { type: 'match', item: substitution, mode: 'similarity', score: 0.99 };
   const shortOmission = findUniqueShortOmissionMatch(raw, byName, byNameLength);
   if (shortOmission) return { type: 'match', item: shortOmission, mode: 'similarity', score: 0.985 };
-  const weakKey = weakMatchKey(raw);
+  const weakKey = directFeatures.weakKey;
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   return null;
 }
 
-function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache) {
-  const directKey = matchKey(raw);
+function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache, directFeatureCache) {
+  const directFeatures = getDirectMatchFeatures(raw, directFeatureCache);
+  const directKey = directFeatures.key;
   let direct = directKey ? directMatchCache.get(directKey) : undefined;
   if (direct === undefined) {
-    direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
+    direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength, directFeatures);
     if (directKey) directMatchCache.set(directKey, direct || null);
   }
   if (direct && !used.has(direct.item.index)) return direct;
