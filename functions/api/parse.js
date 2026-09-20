@@ -625,14 +625,17 @@ function canSimilarityBeatBest(rawKey, bm, nonEdit, bestScore) {
   if (requiredEditSimilarity <= 0) return true;
   if (requiredEditSimilarity >= 1) return false;
 
-  const maxLen = Math.max(rawKey.length, bm.key.length);
-  const strictDistanceLimit = (1 - requiredEditSimilarity) * maxLen;
-  const maxDistance = Math.ceil(strictDistanceLimit - 1e-12) - 1;
-  if (maxDistance < 0) return false;
-
+  // bm.keys 可能包含不同长度的名称变体；每个 key 必须使用自己的长度计算
+  // 编辑距离上界，不能统一使用 bm.key，否则可能错误剪枝。
   for (const key of bm.keys) {
-    const distance = levenshteinAtMost(rawKey, key, maxDistance);
-    if (distance !== null) return true;
+    const maxLen = Math.max(rawKey.length, key.length);
+    const strictDistanceLimit = (1 - requiredEditSimilarity) * maxLen;
+    const maxDistance = Math.ceil(strictDistanceLimit - 1e-12) - 1;
+    if (maxDistance < 0) continue;
+
+    // 长度差本身已经超过允许编辑距离时，无需进入 DP。
+    if (Math.abs(rawKey.length - key.length) > maxDistance) continue;
+    if (levenshteinAtMost(rawKey, key, maxDistance) !== null) return true;
   }
   return false;
 }
