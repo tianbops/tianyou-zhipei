@@ -275,6 +275,8 @@ function matchTodayStores(recognized, baseStores, learning) {
   }
 
   const matched = [], review = [], news = [], used = new Set(), canonicalByBaseIndex = new Map();
+  // 仅在本次请求内复用OCR门店候选与相似度计算；不跨用户、线路或请求缓存，避免数据串线。
+  const similarityCache = new Map();
   const matchStats = { learned: 0, businessCode: 0, exact: 0, similarity: 0, review: 0, new: 0, duplicate: 0 };
   let duplicateCount = 0;
   for (const raw of recognized) {
@@ -288,7 +290,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram);
+    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -433,7 +435,7 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   return null;
 }
 
-function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram) {
+function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache) {
   const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
   if (direct && !used.has(direct.item.index)) return direct;
 
@@ -451,12 +453,20 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
     return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   }
 
-  const candidates = collectSimilarityCandidates(raw, byNameLength, byNgram);
+  const cacheKey = matchKey(raw);
+  let cached = cacheKey ? similarityCache.get(cacheKey) : null;
+  if (!cached) {
+    const candidates = collectSimilarityCandidates(raw, byNameLength, byNgram);
+    const scores = new Map();
+    for (const item of candidates) scores.set(item.index, storeSimilarity(raw, item.name));
+    cached = { candidates, scores };
+    if (cacheKey) similarityCache.set(cacheKey, cached);
+  }
   let best = null;
   const alternatives = [];
-  for (const item of candidates) {
+  for (const item of cached.candidates) {
     if (used.has(item.index)) continue;
-    const score = storeSimilarity(raw, item.name);
+    const score = cached.scores.get(item.index) ?? 0;
     if (!best || score > best.score) best = { item, score };
     if (score > 0.56) {
       alternatives.push({ item, score });
