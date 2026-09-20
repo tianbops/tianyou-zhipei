@@ -230,7 +230,6 @@ async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
 }
 
 function matchTodayStores(recognized, baseStores, learning) {
-  // getBaseStores 已完成标准化；保留原 index，避免重复 normalizeBase 导致线路顺序与去重键失效。
   const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byWeakName = new Map(), byLearning = new Map();
   for (const item of base) {
     for (const candidateName of getBaseMatchNames(item)) {
@@ -295,20 +294,53 @@ function findUniqueOneCharOmissionMatch(raw, byName) {
     if (baseKey.length !== rawKey.length + 1) continue;
     let i = 0, j = 0, skipped = false;
     while (i < rawKey.length && j < baseKey.length) {
-      if (rawKey[i] === baseKey[j]) {
-        i++; j++;
-      } else if (!skipped) {
-        skipped = true;
-        j++;
-      } else {
-        skipped = false;
-        break;
-      }
+      if (rawKey[i] === baseKey[j]) { i++; j++; }
+      else if (!skipped) { skipped = true; j++; }
+      else { skipped = false; break; }
     }
     if (skipped || j === baseKey.length) candidates.push(item);
     if (candidates.length > 1) return null;
   }
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+function findUniqueOneCharInsertionMatch(raw, byName) {
+  const rawKey = matchKey(raw);
+  if (!rawKey || rawKey.length < 7) return null;
+  const candidates = [];
+  for (const [baseKey, item] of byName.entries()) {
+    if (baseKey.length !== rawKey.length - 1) continue;
+    if (isOneCharEdit(rawKey, baseKey)) candidates.push(item);
+    if (candidates.length > 1) return null;
+  }
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function findUniqueOneCharSubstitutionMatch(raw, byName) {
+  const rawKey = matchKey(raw);
+  if (!rawKey || rawKey.length < 7) return null;
+  const candidates = [];
+  for (const [baseKey, item] of byName.entries()) {
+    if (baseKey.length !== rawKey.length) continue;
+    if (isOneCharEdit(rawKey, baseKey)) candidates.push(item);
+    if (candidates.length > 1) return null;
+  }
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function isOneCharEdit(a, b) {
+  if (a === b) return false;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    edits++;
+    if (edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
 }
 
 function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
@@ -318,9 +350,12 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
   const key = matchKey(raw);
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
-  // 兼容 OCR 单字符漏字：仅在当前线路基准库中存在唯一候选时直接匹配。
   const omission = findUniqueOneCharOmissionMatch(raw, byName);
   if (omission) return { type: 'match', item: omission, mode: 'similarity', score: 0.995 };
+  const insertion = findUniqueOneCharInsertionMatch(raw, byName);
+  if (insertion) return { type: 'match', item: insertion, mode: 'similarity', score: 0.995 };
+  const substitution = findUniqueOneCharSubstitutionMatch(raw, byName);
+  if (substitution) return { type: 'match', item: substitution, mode: 'similarity', score: 0.99 };
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
@@ -336,7 +371,6 @@ function findMatch(raw, base, byName, byCode, used, byLearning, byWeakName) {
     if (candidate) return { type: 'match', item: candidate, mode: 'businessCode', score: 1 };
   }
   const candidates = base.filter(item => !used.has(item.index)).map(item => ({ item, score: storeSimilarity(raw, item.name) })).sort((a, b) => b.score - a.score);
-  // 相似度只作为候选排序，不允许在存在明显歧义时直接吞掉新门店。
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate && !used.has(weakCandidate.index)) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
@@ -348,18 +382,18 @@ function findMatch(raw, base, byName, byCode, used, byLearning, byWeakName) {
   return { type: 'new', score: best.score };
 }
 
-// Cloudflare Workers 数据可能来自不同结构；使用 Map 避免非对象键触发 “Invalid value used as weak map key”。
 const baseMatchMeta = new Map();
-
 function getBaseMatchMeta(item) {
   let meta = baseMatchMeta.get(item);
   if (meta) return meta;
-  const name = item?.name || '';
-  const key = matchKey(name);
+  const names = getBaseMatchNames(item);
+  const keys = names.map(matchKey).filter(Boolean);
+  const key = keys[0] || '';
   meta = {
     key,
-    businessCode: extractBusinessCode(name),
-    stableKey: stableStoreKey(name),
+    keys,
+    businessCodes: [...new Set(names.map(extractBusinessCode).filter(Boolean))],
+    stableKeys: [...new Set(names.map(stableStoreKey).filter(Boolean))],
     ngrams: ngramSet(key, 2)
   };
   baseMatchMeta.set(item, meta);
@@ -371,19 +405,13 @@ function storeSimilarity(a, b) {
   const bm = getBaseMatchMeta(b);
   const bk = bm.key;
   if (!ak || !bk) return 0;
-  if (ak === bk) return 1;
+  if (bm.keys.includes(ak)) return 1;
   const codeA = extractBusinessCode(a);
-  if (codeA && codeA === bm.businessCode) return 1;
-  const edit = normalizedEditSimilarity(ak, bk);
-  const aa = ngramSet(ak, 2), bb = bm.ngrams;
-  let ngram = 0;
-  if (aa.size && bb.size) {
-    let common = 0;
-    for (const value of aa) if (bb.has(value)) common++;
-    ngram = (2 * common) / (aa.size + bb.size);
-  }
-  const token = tokenOverlap(stableStoreKey(a), bm.stableKey);
-  const containment = ak.includes(bk) || bk.includes(ak) ? Math.min(ak.length, bk.length) / Math.max(ak.length, bk.length) : 0;
+  if (codeA && bm.businessCodes.includes(codeA)) return 1;
+  const edit = Math.max(...bm.keys.map(key => normalizedEditSimilarity(ak, key)), 0);
+  const ngram = Math.max(...bm.keys.map(key => characterNgramSimilarity(ak, key, 2)), 0);
+  const token = Math.max(...bm.stableKeys.map(key => tokenOverlap(stableStoreKey(a), key)), 0);
+  const containment = Math.max(...bm.keys.map(key => key.includes(ak) || ak.includes(key) ? Math.min(ak.length, key.length) / Math.max(ak.length, key.length) : 0), 0);
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
 }
 
@@ -402,15 +430,10 @@ function levenshtein(a, b) { if (a === b) return 0; if (!a.length) return b.leng
 function getBaseMatchNames(item) {
   if (!item || typeof item !== 'object') return item ? [String(item)] : [];
   const values = [
-    item.name,
-    item.storeName,
-    item.title,
-    item.customerName,
-    item['门店名称'],
-    item.originalName,
-    item.displayName,
-    item['原始名称'],
-    item['显示名称']
+    item.name, item.storeName, item.title, item.customerName, item['门店名称'],
+    item.originalName, item.displayName, item['原始名称'], item['显示名称'],
+    ...(Array.isArray(item.aliases) ? item.aliases : []),
+    ...(Array.isArray(item.aliasNames) ? item.aliasNames : [])
   ];
   return [...new Set(values.map(value => cleanStoreName(value)).filter(Boolean))];
 }
@@ -418,7 +441,7 @@ function getBaseMatchNames(item) {
 function normalizeBase(store, index) {
   if (typeof store === 'string') return { name: cleanStoreName(store), code: String(index + 1).padStart(2, '0'), index };
   if (!store) return null;
-  const name = cleanStoreName(store.name || store.storeName || store.title || store.customerName || store['门店名称'] || '');
+  const name = cleanStoreName(store.name || store.storeName || store.title || store.customerName || store['门店名称'] || store.originalName || store.displayName || '');
   return name ? { ...store, name, code: String(store.code || index + 1).trim(), index } : null;
 }
 
@@ -434,12 +457,7 @@ function extractBusinessCode(value) {
 function matchKey(value) {
   const romanMap = { 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V', 'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X' };
   return cleanStoreName(value).replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => romanMap[roman] || roman)
-    .replace(/[∥〢丨]/g, 'II').replace(/谊品鲜/g, '谊品生鲜').replace(/客户中心/g, '客服中心')
-    // 常见 OCR 漏字：本次“半山华府”被识别为“半华府”，按同一门店匹配。
-    .replace(/半华府/g, '半山华府')
-    // 针对已验证的常见OCR漏字做定向标准化，不改变其他门店名称。
-    .replace(/钱妈/g, '钱大妈')
-    .replace(/卫健康委员会/g, '卫生健康委员会')
+    .replace(/[∥〢丨]/g, 'II')
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
     .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
