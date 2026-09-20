@@ -462,9 +462,11 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
     const rawFeatures = getRawMatchFeatures(raw, keyFeatureCache);
     const orderedCandidates = orderSimilarityCandidates(rawFeatures, candidates);
     let bestScore = 0;
-    for (const item of orderedCandidates) {
-      const baseMeta = getBaseMatchMeta(item);
-      const cheap = cheapSimilarityUpperBound(rawFeatures, baseMeta);
+    for (const entry of orderedCandidates) {
+      const item = entry.item;
+      const baseMeta = entry.meta;
+      const nonEdit = entry.nonEdit;
+      const cheap = entry.cheap;
       // edit 相似度的最大值为 1，因此 cheap 是最终分数的安全上界。
       // 只有在当前最佳分数已经更高时才跳过 Levenshtein，保证结果不变。
       if (bestScore >= 0.84 && cheap <= bestScore) continue;
@@ -474,14 +476,13 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
       // 低于 0.84 时仍走原始精确计算，避免影响 review / margin 判定。
       let score;
       if (bestScore >= 0.84) {
-        const nonEdit = getNonEditSimilarityFromMeta(rawFeatures, baseMeta);
         if (canSimilarityBeatBest(rawFeatures.key, baseMeta, nonEdit, bestScore)) {
           score = similarityFromParts(rawFeatures, baseMeta, nonEdit);
         } else {
           continue;
         }
       } else {
-        score = storeSimilarityFromMeta(raw, baseMeta, keyFeatureCache);
+        score = similarityFromParts(rawFeatures, baseMeta, nonEdit);
       }
       scores.set(item.index, score);
       if (score > bestScore) bestScore = score;
@@ -570,23 +571,22 @@ function collectSimilarityCandidates(raw, byNameLength, byNgram) {
 }
 
 function orderSimilarityCandidates(features, candidates) {
-  if (!features?.key || candidates.length < 2) return candidates;
+  if (!features?.key || candidates.length < 2) {
+    return candidates.map(item => {
+      const meta = getBaseMatchMeta(item);
+      const nonEdit = getNonEditSimilarityFromMeta(features, meta);
+      const cheap = 0.38 + nonEdit.ngram * 0.34 + nonEdit.token * 0.20 + nonEdit.containment * 0.08;
+      return { item, meta, nonEdit, cheap, index: item.index };
+    });
+  }
   const ranked = candidates.map((item, index) => {
     const meta = getBaseMatchMeta(item);
-    let ngram = 0, token = 0, containment = 0;
-    for (let i = 0; i < meta.keys.length; i++) {
-      const key = meta.keys[i];
-      ngram = Math.max(ngram, characterNgramSimilarityFromSets(features.ngrams, meta.ngramSets[i]));
-      token = Math.max(token, tokenOverlapFromSets(features.tokens, meta.tokenSets[i]));
-      if (key.includes(features.key) || features.key.includes(key)) {
-        containment = Math.max(containment, Math.min(features.key.length, key.length) / Math.max(features.key.length, key.length));
-      }
-    }
-    const cheap = 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08;
-    return { item, cheap, index };
+    const nonEdit = getNonEditSimilarityFromMeta(features, meta);
+    const cheap = 0.38 + nonEdit.ngram * 0.34 + nonEdit.token * 0.20 + nonEdit.containment * 0.08;
+    return { item, meta, nonEdit, cheap, index };
   });
   ranked.sort((a, b) => b.cheap - a.cheap || a.index - b.index);
-  return ranked.map(entry => entry.item);
+  return ranked;
 }
 
 function storeSimilarity(a, b) {
