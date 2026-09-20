@@ -651,22 +651,21 @@ function levenshteinAtMost(a, b, maxDistance) {
   if (!bb.length) return aa.length <= maxDistance ? aa.length : null;
   if (Math.abs(aa.length - bb.length) > maxDistance) return null;
 
-  // 仅保留上一行和当前行的有效带区，避免为整行分配无用单元格。
+  // 两行数组复用；每轮只写有效带区及两侧哨兵，减少重复内存分配。
   let rows = aa, cols = bb;
   if (cols.length > rows.length) [rows, cols] = [cols, rows];
 
   const width = cols.length;
-  let previous = new Array(width + 1);
+  const sentinel = maxDistance + 1;
+  let previous = new Array(width + 1).fill(sentinel);
+  let current = new Array(width + 1).fill(sentinel);
   for (let j = 0; j <= width; j++) previous[j] = j;
 
   for (let i = 1; i <= rows.length; i++) {
     const from = Math.max(1, i - maxDistance);
     const to = Math.min(width, i + maxDistance);
-    const current = new Array(width + 1);
     current[0] = i;
-
-    // 带区左侧不可达；右侧默认保持超过上限，最终只需检查终点。
-    for (let j = 1; j < from; j++) current[j] = maxDistance + 1;
+    if (from > 1) current[from - 1] = sentinel;
 
     let rowMin = current[0];
     for (let j = from; j <= to; j++) {
@@ -677,9 +676,10 @@ function levenshteinAtMost(a, b, maxDistance) {
       current[j] = value;
       if (value < rowMin) rowMin = value;
     }
+    if (to < width) current[to + 1] = sentinel;
 
     if (rowMin > maxDistance) return null;
-    previous = current;
+    [previous, current] = [current, previous];
   }
   return previous[width] <= maxDistance ? previous[width] : null;
 }
