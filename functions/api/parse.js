@@ -278,6 +278,9 @@ function matchTodayStores(recognized, baseStores, learning) {
   // 仅在本次请求内复用OCR门店候选与相似度计算；不跨用户、线路或请求缓存，避免数据串线。
   const similarityCache = new Map();
   const keyFeatureCache = new Map();
+  // 同一批OCR中重复门店可能先后触发两次 findDirectMatch；按归一化名称复用结果。
+  // 仅存在于本次请求内，不跨用户、线路或请求共享。
+  const directMatchCache = new Map();
   const matchStats = { learned: 0, businessCode: 0, exact: 0, similarity: 0, review: 0, new: 0, duplicate: 0 };
   let duplicateCount = 0;
   for (const raw of recognized) {
@@ -291,7 +294,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache);
+    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -436,8 +439,13 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   return null;
 }
 
-function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache) {
-  const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
+function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache) {
+  const directKey = matchKey(raw);
+  let direct = directKey ? directMatchCache.get(directKey) : undefined;
+  if (direct === undefined) {
+    direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
+    if (directKey) directMatchCache.set(directKey, direct || null);
+  }
   if (direct && !used.has(direct.item.index)) return direct;
 
   const businessCode = extractBusinessCode(raw);
