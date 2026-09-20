@@ -328,19 +328,35 @@ function findUniqueOneCharSubstitutionMatch(raw, byName) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function isOneCharEdit(a, b) {
-  if (a === b) return false;
-  if (Math.abs(a.length - b.length) > 1) return false;
-  let i = 0, j = 0, edits = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) { i++; j++; continue; }
-    edits++;
-    if (edits > 1) return false;
-    if (a.length > b.length) i++;
-    else if (a.length < b.length) j++;
-    else { i++; j++; }
+// OCR偶发连续漏字：最多允许2个字符缺失，但必须在当前线路基准库中得到唯一候选。
+// 只处理“原文比基准短”的删除型误差，不把任意两字符改写都自动吞掉。
+function findUniqueShortOmissionMatch(raw, byName) {
+  const rawKey = matchKey(raw);
+  if (!rawKey || rawKey.length < 8) return null;
+  const candidates = [];
+  for (const [baseKey, item] of byName.entries()) {
+    const delta = baseKey.length - rawKey.length;
+    if (delta < 2 || delta > 2) continue;
+    if (isDeletionDistanceAtMost(rawKey, baseKey, 2)) candidates.push(item);
+    if (candidates.length > 1) return null;
   }
-  return edits + (a.length - i) + (b.length - j) <= 1;
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function isDeletionDistanceAtMost(shorter, longer, maxDeletes) {
+  if (longer.length <= shorter.length || longer.length - shorter.length > maxDeletes) return false;
+  let i = 0, j = 0, deletes = 0;
+  while (i < shorter.length && j < longer.length) {
+    if (shorter[i] === longer[j]) {
+      i++; j++;
+    } else {
+      deletes++;
+      j++;
+      if (deletes > maxDeletes) return false;
+    }
+  }
+  deletes += longer.length - j;
+  return deletes <= maxDeletes;
 }
 
 function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
@@ -356,6 +372,8 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   if (insertion) return { type: 'match', item: insertion, mode: 'similarity', score: 0.995 };
   const substitution = findUniqueOneCharSubstitutionMatch(raw, byName);
   if (substitution) return { type: 'match', item: substitution, mode: 'similarity', score: 0.99 };
+  const shortOmission = findUniqueShortOmissionMatch(raw, byName);
+  if (shortOmission) return { type: 'match', item: shortOmission, mode: 'similarity', score: 0.985 };
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
@@ -458,6 +476,8 @@ function matchKey(value) {
   const romanMap = { 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V', 'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X' };
   return cleanStoreName(value).replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => romanMap[roman] || roman)
     .replace(/[∥〢丨]/g, 'II')
+    // OCR可能把罗马数字 II 后的“类”识别成类似小写 l；仅在“II/l + 类”结构中做通用归一化。
+    .replace(/((?:ii|iii|iv|v|vi|vii|viii|ix|x))l(?=类)/gi, '$1')
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
     .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
