@@ -539,10 +539,13 @@ function collectSimilarityCandidates(raw, byNameLength, byNgram) {
     if (grams.length >= 2) {
       const gramHits = new Map();
       for (const gram of grams) {
-        for (const item of byNgram.get(gram) || []) gramHits.set(item, (gramHits.get(item) || 0) + 1);
+        for (const item of byNgram.get(gram) || []) {
+          if (selected.has(item)) gramHits.set(item, (gramHits.get(item) || 0) + 1);
+        }
       }
+      const minimumHits = Math.max(2, Math.ceil(grams.length * 0.18));
       const narrowed = [...gramHits.entries()]
-        .filter(([item, hits]) => selected.has(item) && hits >= Math.max(2, Math.ceil(grams.length * 0.18)))
+        .filter(([, hits]) => hits >= minimumHits)
         .sort((a, b) => b[1] - a[1])
         .map(([item]) => item);
       if (narrowed.length) return narrowed;
