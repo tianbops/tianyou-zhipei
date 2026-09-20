@@ -208,9 +208,17 @@ async function getBaseStores(env, route, deadline, userId) {
 }
 
 function getCachedBaseMatchIndex(userId, route, dataVersion, stores) {
-  const key = `${encodeKey(userId)}|${encodeKey(route)}|${Number(dataVersion) || 1}`;
+  const normalizedUserId = normalizeUserId(userId);
+  const normalizedRoute = normalizeRoute(route);
+  const version = Number(dataVersion) || 1;
+  const key = `${encodeKey(normalizedUserId)}|${encodeKey(normalizedRoute)}|${version}`;
   const cached = baseMatchIndexCache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    // LRU：命中时刷新顺序，避免高频线路被固定容量淘汰。
+    baseMatchIndexCache.delete(key);
+    baseMatchIndexCache.set(key, cached);
+    return cached;
+  }
   const index = buildBaseMatchIndex(stores);
   baseMatchIndexCache.set(key, index);
   if (baseMatchIndexCache.size > BASE_INDEX_CACHE_MAX) {
