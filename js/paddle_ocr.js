@@ -283,6 +283,7 @@
     const input = $(id);
     if (!input) return;
     input.addEventListener('change', () => {
+      window.closeUploadSource?.();
       const files = Array.from(input.files || []);
       if (!files.length) return;
       processFiles(files).catch(error => {
