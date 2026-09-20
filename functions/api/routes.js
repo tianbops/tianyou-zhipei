@@ -87,6 +87,15 @@ export async function onRequest({ request, env }) {
   }
 }
 
+
+function scopedBaseKey(userId, route) {
+  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`;
+}
+
+function encodeKey(value) {
+  return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_');
+}
+
 function normalizeStores(stores) {
   return stores
     .map((store, index) => ({
