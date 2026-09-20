@@ -5,8 +5,8 @@
 (() => {
   'use strict';
 
-  const MAX_SIDE = 3000;
-  const JPEG_QUALITY = 0.95;
+  const MAX_SIDE = 2800;
+  const JPEG_QUALITY = 0.90;
   const OCR_SCORE = 0.25;
   // P0测试：OCR单次提取最多等待2分钟，用于验证完整识别能力。
   const OCR_TIMEOUT_MS = 120000;
@@ -64,22 +64,34 @@
     if (enginePromise) return enginePromise;
     const PaddleOCR = await loadSdk();
     if (!warmingUp) setStatus('正在准备文字识别…', 35);
-    enginePromise = PaddleOCR.create({
+    const createOptions = {
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
-      // 手机端正式稳定模式：OCR直接在主线程运行，避免自定义Module Worker
-      // 在部分Android WebView/浏览器中出现 Failed to fetch。
-      // 先保证模型稳定加载和识别，再由后续维护阶段做运行时优化。
-      worker: false,
-      textDetectionBatchSize: 1,
-      textRecognitionBatchSize: 4,
+      // 优先使用独立 Worker，把 OpenCV/ONNX 推理移出主线程；失败时自动回退主线程。
+      // Worker 使用同源代理，避免第三方 CDN Worker 的跨域限制。
+      worker: {
+        createWorker: () => new Worker(OCR_WORKER_URL, { type: 'module' })
+      },
+      textDetectionBatchSize: 2,
+      textRecognitionBatchSize: 8,
       ortOptions: {
         backend: 'wasm',
         wasmPaths: 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/',
-        numThreads: 1,
+        numThreads: 2,
         simd: true,
         proxy: false
       }
+    };
+    enginePromise = PaddleOCR.create(createOptions).catch(async error => {
+      console.warn('[PaddleOCR worker] Worker模式加载失败，回退主线程:', error);
+      const fallback = await PaddleOCR.create({
+        ...createOptions,
+        worker: false,
+        textDetectionBatchSize: 1,
+        textRecognitionBatchSize: 4,
+        ortOptions: { ...createOptions.ortOptions, numThreads: 1 }
+      });
+      return fallback;
     }).then(engine => {
       engineInstance = engine;
       return engine;
