@@ -645,35 +645,39 @@ function canSimilarityBeatBest(rawKey, bm, nonEdit, bestScore) {
 function levenshteinAtMost(a, b, maxDistance) {
   const aa = String(a || ''), bb = String(b || '');
   if (aa === bb) return 0;
+  if (!Number.isFinite(maxDistance)) return normalizedEditDistance(aa, bb);
+  maxDistance = Math.max(0, Math.floor(maxDistance));
   if (!aa.length) return bb.length <= maxDistance ? bb.length : null;
   if (!bb.length) return aa.length <= maxDistance ? aa.length : null;
   if (Math.abs(aa.length - bb.length) > maxDistance) return null;
 
-  // 让较短字符串作为列，减少每一行需要处理的单元格数量。
+  // 仅保留上一行和当前行的有效带区，避免为整行分配无用单元格。
   let rows = aa, cols = bb;
   if (cols.length > rows.length) [rows, cols] = [cols, rows];
 
   const width = cols.length;
-  let previous = Array.from({ length: width + 1 }, (_, index) => index);
+  let previous = new Array(width + 1);
+  for (let j = 0; j <= width; j++) previous[j] = j;
+
   for (let i = 1; i <= rows.length; i++) {
-    const current = new Array(width + 1);
-    current[0] = i;
     const from = Math.max(1, i - maxDistance);
     const to = Math.min(width, i + maxDistance);
+    const current = new Array(width + 1);
+    current[0] = i;
+
+    // 带区左侧不可达；右侧默认保持超过上限，最终只需检查终点。
     for (let j = 1; j < from; j++) current[j] = maxDistance + 1;
 
     let rowMin = current[0];
     for (let j = from; j <= to; j++) {
-      const cost = rows[i - 1] === cols[j - 1] ? 0 : 1;
-      const value = Math.min(
-        current[j - 1] + 1,
-        previous[j] + 1,
-        previous[j - 1] + cost
-      );
+      const insert = current[j - 1] + 1;
+      const remove = previous[j] + 1;
+      const replace = previous[j - 1] + (rows[i - 1] === cols[j - 1] ? 0 : 1);
+      const value = Math.min(insert, remove, replace);
       current[j] = value;
       if (value < rowMin) rowMin = value;
     }
-    for (let j = to + 1; j <= width; j++) current[j] = maxDistance + 1;
+
     if (rowMin > maxDistance) return null;
     previous = current;
   }
