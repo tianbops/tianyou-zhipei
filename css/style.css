@@ -27,3 +27,5 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 
 
 .ocr-file-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+.source-option{font:inherit}.source-option input{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:auto;cursor:pointer}.source-option{appearance:none;-webkit-appearance:none}.fallback-file-input{position:fixed!important;left:-9999px!important;top:0!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
