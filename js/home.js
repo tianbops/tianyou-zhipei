@@ -50,11 +50,12 @@ async function parseOrderText(text){
 }
 window.cancelParse=async()=>{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')cancelOCR().catch(()=>{});toast('已取消规划','warning');};
 
-function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'plan';const button=$('primaryActionBtn');if(!button)return;button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'关闭':'规划路线';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false}
+function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'plan';const button=$('primaryActionBtn');if(!button)return;button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'规划路线';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false}
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.remove('ocr-text-open');sheet?.classList.add('waiting')}}
 window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
-window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder==='function')return window.submitManualOrder();return}if(primaryActionMode==='error'){window.toggleUpload?.();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
+window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder==='function')return window.submitManualOrder();return}if(primaryActionMode==='error'){window.restartUpload?.();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
 window.toggleOCRText=()=>{const sheet=document.querySelector('.upload-sheet');const toggle=$('ocrTextToggle');if(!sheet||!toggle)return;const open=sheet.classList.toggle('ocr-text-open');toggle.setAttribute('aria-expanded',open?'true':'false');toggle.querySelector('span').textContent=open?'⌄':'›';};
+window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
 window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');overlay.classList.toggle('active',opening);if(opening){window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.closeUploadSource?.();}};
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
@@ -63,7 +64,7 @@ window.goToRouteEdit=()=>navigateApp('pages/route_edit.html');
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
-window.clearManualInput=()=>{correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([])};
+window.clearManualInput=()=>{correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([])};
 let correctionDetails=[];
 function openCorrectionDetails(){
   const modal=$('correctionModal'),list=$('correctionList');
@@ -116,7 +117,6 @@ if(parsedOrders.length){
   correctionDetails=correctionLines.slice();
   setCorrectionSummary(correctionDetails.length);
   detailLines.length=0;
-  detailLines.push(`路线规划完成　${resultDate}`);
   detailLines.push(`今日配送：${uniqueCount}家　　${resultWeight}`);
   detailLines.push(`现在${uniqueCount}家，原始${rawCount}家${correctionCount?`，更正${correctionCount}家`:''}`);
   const reviewSummary=$('reviewSummary'),reviewCount=$('reviewCount');
