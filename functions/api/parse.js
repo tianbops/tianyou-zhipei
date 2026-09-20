@@ -19,7 +19,7 @@ export async function onRequest({ request, env }) {
     const startedAt = Date.now();
     const deadline = startedAt + 120000;
     const [base, learning] = await Promise.all([
-      getBaseStores(env, route, deadline),
+      getBaseStores(env, route, deadline, userId),
       getLearning(env, userId, route, deadline)
     ]);
     const dataReadyAt = Date.now();
@@ -192,9 +192,9 @@ function extractVolume(source) {
   return match ? `${match[1]}m³` : '';
 }
 
-async function getBaseStores(env, route, deadline) {
-  const data = await redisGet(env, `route:${normalizeRoute(route)}:base`, deadline);
-  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
+async function getBaseStores(env, route, deadline, userId) {
+  const data = await redisGet(env, scopedBaseKey(userId, route), deadline);
+  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到当前账号的${normalizeRoute(route)}独立基准数据库`);
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
@@ -203,6 +203,8 @@ async function getLearning(env, userId, route, deadline) {
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
+
+function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`; }
 
 function learningKey(userId, route) {
   return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
