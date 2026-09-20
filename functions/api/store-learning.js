@@ -23,7 +23,7 @@ export async function onRequest({ request, env }) {
     const items = input.map(normalizeInput).filter(item => item.rawName && item.baseName);
     if (!items.length) return json({ success: false, error: '缺少待学习门店信息' }, 400);
 
-    const base = await getBaseStores(env, route);
+    const base = await getBaseStores(env, route, userId);
     const validated = [];
     for (const item of items) {
       const target = resolveTarget(base, item);
@@ -105,6 +105,7 @@ async function getLearning(env, key, userId, route) {
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
+function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:base`; }
 function learningKey(userId, route) {
   return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
 }
