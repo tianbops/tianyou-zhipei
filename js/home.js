@@ -63,7 +63,27 @@ window.goToRouteEdit=()=>navigateApp('pages/route_edit.html');
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
-window.clearManualInput=()=>{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([])};
+window.clearManualInput=()=>{correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([])};
+let correctionDetails=[];
+function openCorrectionDetails(){
+  if(!correctionDetails.length)return;
+  let modal=$('correctionModal');
+  if(!modal){
+    modal=document.createElement('div');modal.id='correctionModal';modal.className='correction-modal';
+    modal.innerHTML='<div class="correction-panel" role="dialog" aria-modal="true" aria-labelledby="correctionTitle"><div class="correction-header"><div class="correction-title" id="correctionTitle">修正详情</div><button class="correction-close" type="button" aria-label="关闭">×</button></div><div class="correction-list" id="correctionList"></div></div>';
+    document.body.appendChild(modal);
+    modal.querySelector('.correction-close').onclick=()=>modal.classList.remove('active');
+    modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('active')});
+  }
+  const list=$('correctionList');list.textContent='';
+  correctionDetails.forEach(item=>{const row=document.createElement('div');row.className='correction-item';row.textContent=item;list.appendChild(row)});
+  modal.classList.add('active');
+}
+window.openCorrectionDetails=openCorrectionDetails;
+function setCorrectionSummary(count){
+  const row=$('reviewSummary'),num=$('reviewCount');
+  if(row&&num){num.textContent=String(count);row.hidden=count<=0;}
+}
 window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');if(parseInFlight)return auto?[]:toast('规划正在进行，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',10,auto?'正在根据运单生成路线…':'正在规划路线…');const data=await parseOrderText(text);window.renderUnifiedStatus('loading',78,'正在生成配送顺序…');parsedOrders=Array.isArray(data.stores)?data.stores:[];pendingMeta={date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;const message=parsedOrders.length?'路线规划完成':'没有识别到有效门店';window.onOrderParsed?.(data);setReviewText(data);window.renderUnifiedStatus(parsedOrders.length?'success':'error',100,message);
 const detailLines=[];
 if(parsedOrders.length){
@@ -99,20 +119,17 @@ if(parsedOrders.length){
     }
   });
   const resultWeight=String(data?.totalWeight||'').trim()||'未识别';
-  detailLines.unshift(`今日配送：${uniqueCount} 家`);
-  detailLines.unshift(`总商品量：${resultWeight}`);
+  const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
+  correctionDetails=correctionLines.slice();
+  setCorrectionSummary(correctionDetails.length);
+  detailLines.length=0;
+  detailLines.push(`路线规划完成　${resultDate}`);
+  detailLines.push(`今日配送：${uniqueCount}家　　${resultWeight}`);
+  detailLines.push(`现在${uniqueCount}家，原始${rawCount}家${correctionCount?`，更正${correctionCount}家`:''}`);
   const reviewSummary=$('reviewSummary'),reviewCount=$('reviewCount');
   if(reviewSummary&&reviewCount){reviewCount.textContent=String(correctionCount);reviewSummary.hidden=correctionCount===0;}
-  if(mergeCount||correctionCount){
-    detailLines.push(`信息统计：现在${uniqueCount}家，原始${rawCount}家${mergeCount?`，合并${mergeCount}家`:''}${correctionCount?`，更正${correctionCount}家`:''}`);
-    detailLines.push('修改详情');
-    if(mergeLines.length)detailLines.push(...mergeLines);
-    if(correctionLines.length)detailLines.push(...correctionLines);
-    window.renderStatusDetail?.(detailLines);
-  }else{
-    window.clearStatusDetail?.();
-  }
-}else{window.clearStatusDetail?.();$('reviewSummary')?.setAttribute('hidden','');}
+  window.renderStatusDetail?.(detailLines);
+}else{window.clearStatusDetail?.();correctionDetails=[];setCorrectionSummary(0);}
 if(parsedOrders.length)setPrimaryActionMode('confirm');return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;setPrimaryActionMode('retry');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
 const HOME_ORDER_CACHE_KEY='zsp_home_order_v1';
 function readCachedHomeOrder(){try{const raw=sessionStorage.getItem(HOME_ORDER_CACHE_KEY);if(!raw)return null;const item=JSON.parse(raw);if(item?.date!==currentDate()||!item?.order)return null;return item.order}catch(_){return null}}
