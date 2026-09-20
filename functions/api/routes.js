@@ -88,6 +88,11 @@ export async function onRequest({ request, env }) {
 }
 
 
+
+function normalizeUserId(value) {
+  return String(value || '').trim();
+}
+
 function scopedBaseKey(userId, route) {
   return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`;
 }
