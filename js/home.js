@@ -73,7 +73,8 @@ if(parsedOrders.length){
       mergeCount++;
       mergeLines.push(`合并名称：${rawNames.join('、')} → ${baseName||item.name}`);
     }
-    if(item?.matched&&baseName&&rawNames.some(value=>value!==baseName)){
+    // 已合并的多条原始名称只归入“合并”，不再重复计入“更正”。
+    if(rawNames.length<=1&&item?.matched&&baseName&&rawNames.some(value=>value!==baseName)){
       correctionCount++;
       const changedNames=rawNames.filter(value=>value!==baseName);
       correctionLines.push(`更正名称：${changedNames.join('、')} → ${baseName}`);
