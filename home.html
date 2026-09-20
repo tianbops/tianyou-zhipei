@@ -37,7 +37,7 @@
     <div class="sheet-handle" aria-hidden="true"></div>
     <div class="sheet-title">📤 上传运单</div>
     <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon" aria-hidden="true"></span><span id="statusText" data-text="等待处理...">等待处理...</span></div><div id="statusDetail" class="status-detail" aria-live="polite"></div></div>
-    <div class="input-area"><textarea id="manualOrderInput" rows="10" placeholder="上传运单后，这里显示识别文字，请核对后规划路线。" autocomplete="off" readonly></textarea></div>
+    <div class="input-area"><textarea id="manualOrderInput" rows="10" placeholder="上传运单后，这里显示识别文字，请核对后规划路线。" autocomplete="off"></textarea></div>
     <div class="quick-actions"><button class="btn-secondary" id="clearBtn" type="button" onclick="clearManualInput()">清空</button><button class="btn-secondary" id="reuploadBtn" type="button" onclick="openUploadSource()">重新上传</button></div>
     <div class="sheet-footer">
       <button class="btn-cancel" type="button" onclick="cancelParse();toggleUpload()">取消</button>
