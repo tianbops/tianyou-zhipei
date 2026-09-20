@@ -56,7 +56,9 @@ window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.cla
 window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder==='function')return window.submitManualOrder();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
 window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(overlay)overlay.classList.toggle('active')};
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
-function navigateApp(url){document.body.classList.add('is-leaving');requestAnimationFrame(()=>{location.href=url})}\nwindow.navigateApp=navigateApp;\nwindow.goToRouteEdit=()=>navigateApp('pages/route_edit.html');
+function navigateApp(url){document.body.classList.add('is-leaving');requestAnimationFrame(()=>{location.href=url})}
+window.navigateApp=navigateApp;
+window.goToRouteEdit=()=>navigateApp('pages/route_edit.html');
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
