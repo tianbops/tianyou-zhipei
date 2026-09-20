@@ -45,6 +45,15 @@ export async function onRequest({ request, env }) {
           dataVersion: Number(current?.dataVersion) || 1, migrationRequired: false, initialized: false });
       }
       const stores = normalizeStores(record?.stores);
+      const recordUserId = normalizeUserId(record?.userId);
+      const recordRoute = normalizeRoute(record?.route);
+      // 防止历史/手工写入的错误记录被当前账号误读；只有明确属于当前用户+当前线路的数据才可使用。
+      if (recordUserId && recordUserId !== userId) {
+        return json({ error: '线路基准数据库归属校验失败' }, 403);
+      }
+      if (recordRoute && recordRoute !== route) {
+        return json({ error: '线路基准数据库线路校验失败' }, 409);
+      }
       return json({ route, stores, source: 'server', updatedAt: record?.updatedAt || null,
         dataVersion: Number(record?.dataVersion) || 1, migrationRequired: false });
     }
