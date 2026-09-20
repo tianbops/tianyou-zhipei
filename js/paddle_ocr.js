@@ -279,6 +279,32 @@
   warmingUp = true;
   loadEngine().catch(() => {}).finally(() => { warmingUp = false; });
 
+  window.openFileManager = async function() {
+    window.closeUploadSource?.();
+    if (busy) return;
+    try {
+      if (typeof window.showOpenFilePicker === 'function') {
+        const handles = await window.showOpenFilePicker({
+          multiple: true,
+          excludeAcceptAllOption: true,
+          types: [{
+            description: '运单图片',
+            accept: { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }
+          }]
+        });
+        const files = [];
+        for (const handle of handles) files.push(await handle.getFile());
+        if (files.length) await processFiles(files);
+        return;
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      console.warn('[PaddleOCR file picker]', error);
+    }
+    const input = $('ocrFileInput');
+    if (input) input.click();
+  };
+
   function bindUploadInput(id, type) {
     const input = $(id);
     if (!input) return;
