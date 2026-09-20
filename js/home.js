@@ -51,10 +51,11 @@ async function parseOrderText(text){
 window.cancelParse=async()=>{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')cancelOCR().catch(()=>{});toast('已取消规划','warning');};
 
 function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':'plan';const button=$('primaryActionBtn');if(!button)return;button.textContent=primaryActionMode==='confirm'?'确认录入':'规划路线';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false}
-window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false')}}
+window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.remove('ocr-text-open');sheet?.classList.add('waiting')}}
 window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
 window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder==='function')return window.submitManualOrder();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
-window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(overlay)overlay.classList.toggle('active')};
+window.toggleOCRText=()=>{const sheet=document.querySelector('.upload-sheet');const toggle=$('ocrTextToggle');if(!sheet||!toggle)return;const open=sheet.classList.toggle('ocr-text-open');toggle.setAttribute('aria-expanded',open?'true':'false');toggle.querySelector('span').textContent=open?'⌄':'›';};
+window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');overlay.classList.toggle('active',opening);if(opening){window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.closeUploadSource?.();}};
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
