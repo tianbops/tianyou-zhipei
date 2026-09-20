@@ -29,7 +29,7 @@ async function saveOrder(request, env, session) {
   try {
     const existing = await redisGet(env, key);
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
-    const base = await loadBaseData(env, route);
+    const base = await loadBaseData(env, route, userId);
     const normalized = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route)).filter(item => item.name);
     const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || normalized.length;
     const uniqueOrders = dedupeOrders(normalized, base);
@@ -72,8 +72,8 @@ async function readOrder(request, env, session) {
   return json({ success: true, today: selected && normalizeDate(selected.date) === date ? selected : null, history });
 }
 
-async function loadBaseData(env, route) {
-  const raw = await redisGet(env, `route:${route}:base`), stores = Array.isArray(raw?.stores) ? raw.stores : [];
+async function loadBaseData(env, route, userId) {
+  const raw = await redisGet(env, scopedBaseKey(userId, route)), stores = Array.isArray(raw?.stores) ? raw.stores : [];
   return stores.map((store, index) => ({ ...store, routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1, nameKey: normalizeStoreName(store?.name || store?.storeName || store?.shopName || store?.['门店名称']), businessCode: extractBusinessCode(store?.name || store?.storeName || store?.shopName || store?.['门店名称']) })).filter(store => store.nameKey);
 }
 
