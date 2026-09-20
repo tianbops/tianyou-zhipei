@@ -14,4 +14,5 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 @media(max-width:430px){.app-container{padding-left:14px;padding-right:14px}.card{padding-left:14px;padding-right:14px}.card-header{align-items:flex-start}.base-actions{flex-shrink:0}}
 @media(max-width:380px){.base-actions{gap:5px}.add-btn{padding-left:10px;padding-right:10px}.dialog-box{padding:18px}.dialog-box h3{font-size:17px}}
 @media(max-height:700px){.app-container{padding-top:8px}.top-bar{height:48px}.card{margin-top:10px;padding-top:15px;padding-bottom:15px}.store-row{min-height:56px;padding:8px 0}.save-btn{height:50px;margin-top:18px}.dialog-box{max-height:calc(100vh - 16px);padding:18px}}
-body{animation:onePageEnter .2s ease-out both}@keyframes onePageEnter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}\n@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
