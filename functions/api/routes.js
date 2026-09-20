@@ -44,7 +44,10 @@ export async function onRequest({ request, env }) {
 
     if (request.method === 'PUT') {
       const body = await request.json().catch(() => ({}));
-      if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
+      const isLegacyMigration = body.migrateLegacy === true;
+      if (!isLegacyMigration && !Array.isArray(body.stores)) {
+        return json({ error: 'stores 必须是数组' }, 400);
+      }
 
       const lockKey = `lock:route-base:${encodeKey(userId)}:${encodeKey(route)}`;
       const lockValue = crypto.randomUUID();
@@ -55,7 +58,7 @@ export async function onRequest({ request, env }) {
       try {
         let stores;
         let dataVersion = 1;
-        if (body.migrateLegacy === true) {
+        if (isLegacyMigration) {
           const current = await redisGet(env, key);
           if (current.ok && current.result) return json({ error: '当前账号已经存在线路基准数据库，无需迁移' }, 409);
           const legacy = await redisGet(env, `route:${route}:base`);
@@ -71,7 +74,7 @@ export async function onRequest({ request, env }) {
         }
         const updatedAt = new Date().toISOString();
         const value = { userId, route, stores, dataVersion, updatedAt,
-          source: body.migrateLegacy === true ? 'legacy-migration' : 'route-editor' };
+          source: isLegacyMigration ? 'legacy-migration' : 'route-editor' };
         const saved = await redisSet(env, key, value);
         if (!saved.ok) return json({ error: '线路基准数据库保存失败' }, 500);
 
