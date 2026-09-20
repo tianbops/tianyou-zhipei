@@ -3,6 +3,9 @@
 // 基准库按线路独立；学习库进一步按用户ID+线路隔离，避免不同账号互相学习。
 import { authRequired } from './_auth.js';
 
+const baseMatchIndexCache = new Map();
+const BASE_INDEX_CACHE_MAX = 16;
+
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
   const session = await authRequired(request, env);
@@ -18,10 +21,11 @@ export async function onRequest({ request, env }) {
 
     const startedAt = Date.now();
     const deadline = startedAt + 120000;
-    const [base, learning] = await Promise.all([
-      getBaseStores(env, route, deadline),
+    const [baseRecord, learning] = await Promise.all([
+      getBaseStores(env, route, deadline, userId),
       getLearning(env, userId, route, deadline)
     ]);
+    const base = getCachedBaseMatchIndex(userId, route, baseRecord.dataVersion, baseRecord.stores);
     const dataReadyAt = Date.now();
     const parsed = parseDeterministic(text);
     const extractionDoneAt = Date.now();
@@ -192,10 +196,26 @@ function extractVolume(source) {
   return match ? `${match[1]}m³` : '';
 }
 
-async function getBaseStores(env, route, deadline) {
-  const data = await redisGet(env, `route:${normalizeRoute(route)}:base`, deadline);
-  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
-  return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
+async async function getBaseStores(env, route, deadline, userId) {
+  const data = await redisGet(env, scopedBaseKey(userId, route), deadline);
+  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到当前账号的${normalizeRoute(route)}独立基准数据库`);
+  return {
+    stores: data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean),
+    dataVersion: Number(data?.dataVersion) || 1
+  };
+}
+
+function getCachedBaseMatchIndex(userId, route, dataVersion, stores) {
+  const key = `${encodeKey(userId)}|${encodeKey(route)}|${Number(dataVersion) || 1}`;
+  const cached = baseMatchIndexCache.get(key);
+  if (cached) return cached;
+  const index = buildBaseMatchIndex(stores);
+  baseMatchIndexCache.set(key, index);
+  if (baseMatchIndexCache.size > BASE_INDEX_CACHE_MAX) {
+    const oldest = baseMatchIndexCache.keys().next().value;
+    if (oldest) baseMatchIndexCache.delete(oldest);
+  }
+  return index;
 }
 
 async function getLearning(env, userId, route, deadline) {
@@ -203,6 +223,8 @@ async function getLearning(env, userId, route, deadline) {
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
+
+function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`; }
 
 function learningKey(userId, route) {
   return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
