@@ -85,7 +85,7 @@ if(parsedOrders.length){
           .normalize('NFKC')
           .replace(/[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g,roman=>romanMap[roman]||roman)
           .replace(/((?:ii|iii|iv|v|vi|vii|viii|ix|x))l(?=类)/gi,'$1')
-          .replace(/[\\s\\u3000，,。；;：:（）()【】\\[\\]<>《》“”"'‘’·、/\\\\_\-]/g,'')
+          .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"'‘’·、\/\\_-]/g,'')
           .toLowerCase();
       };
       const substantive=changedNames.filter(value=>normalizeForCompare(value)!==normalizeForCompare(baseName));
