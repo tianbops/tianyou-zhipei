@@ -196,7 +196,7 @@ function extractVolume(source) {
   return match ? `${match[1]}m³` : '';
 }
 
-async async function getBaseStores(env, route, deadline, userId) {
+async function getBaseStores(env, route, deadline, userId) {
   const data = await redisGet(env, scopedBaseKey(userId, route), deadline);
   if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到当前账号的${normalizeRoute(route)}独立基准数据库`);
   return {
