@@ -13,7 +13,7 @@
 .history-date{font-size:16px;font-weight:700;color:#fff;letter-spacing:.2px;min-width:0}
 .history-view{flex:0 0 auto;width:auto;min-width:92px;height:38px;margin:0;padding:0 14px;border:0;border-radius:11px;background:#2457A6;color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:transform .1s,filter .15s,opacity .15s}
 .history-view:active{transform:scale(.985);filter:brightness(.95)}
-.history-delete-hint{font-size:11px;color:#B8C2CC;font-weight:500;white-space:nowrap;opacity:.8}.history-view.deleting{opacity:.55;cursor:wait}.history-view.deleting .history-delete-hint{color:#fff}
+
 .empty-tip{text-align:center;padding:40px 20px;color:#7F8B98;line-height:1.7}
 .date-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center;z-index:9999}
 .date-modal.active{display:flex}
