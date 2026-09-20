@@ -58,9 +58,10 @@
   function goBack(){closeDatePicker();location.href='../home.html'}
   $('datePickerBtn')?.addEventListener('click',openDatePicker);$('cancelDate')?.addEventListener('click',closeDatePicker);$('confirmDate')?.addEventListener('click',confirmDate);$('dateModal')?.addEventListener('click',e=>{if(e.target===$('dateModal'))closeDatePicker()});
   ['yearWheel','monthWheel','dayWheel'].forEach(id=>$(id)?.addEventListener('scroll',()=>{const box=$(id);clearTimeout(box._timer);box._timer=setTimeout(()=>{const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=wheelValue('dayWheel');if(id==='yearWheel'||id==='monthWheel')buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day')},90)}));
-  async function initHistory(){try{closeDatePicker();if(!(await Auth.checkAuth()))return;await loadHistoryDates()}catch(e){console.error(e)}}
-  document.addEventListener('DOMContentLoaded',initHistory);
-  window.addEventListener('pageshow',event=>{if(event.persisted||document.visibilityState==='visible')initHistory()});
+  let historyInitialized=false;
+  async function initHistory(force=false){if(historyInitialized&&!force)return;historyInitialized=true;try{closeDatePicker();if(!(await Auth.checkAuth())){historyInitialized=false;return}await loadHistoryDates()}catch(e){historyInitialized=false;console.error(e)}}
+  document.addEventListener('DOMContentLoaded',()=>initHistory(false));
+  window.addEventListener('pageshow',event=>{if(event.persisted)initHistory(true)});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDatePicker()});
   window.addEventListener('pagehide',closeDatePicker);
   function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
