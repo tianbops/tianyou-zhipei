@@ -298,8 +298,8 @@
   bindUploadInput('ocrAlbumInput', 'album');
   bindUploadInput('ocrFileInput', 'file');
 
-  // 文件入口必须在用户点击的同步手势中直接触发 input.click()。
-  // 不在 click 后先 await File System Access API，避免 Android 浏览器丢失用户激活导致“点击无反应”。
+  // 文件入口采用原生 input 覆盖按钮，避免异步调用丢失 Android 用户手势。
+  // 拍摄/相册/文件均由各自 input 的 change 事件统一进入 OCR 流程。
   window.triggerUpload = function(type) {
     if (busy) return;
     const input = type === 'camera' ? $('ocrCameraInput') : type === 'album' ? $('ocrAlbumInput') : $('ocrFileInput');
