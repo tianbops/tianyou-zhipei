@@ -51,7 +51,7 @@
       <div class="source-menu-options">
         <label class="source-option"><input id="ocrCameraInput" type="file" accept="image/*" capture="environment"><span>📷</span><strong>拍摄</strong></label>
         <label class="source-option"><input id="ocrAlbumInput" type="file" accept="image/*" multiple><span>🖼️</span><strong>相册</strong></label>
-        <label class="source-option"><input id="ocrFileInput" type="file" multiple><span>📁</span><strong>文件</strong></label>
+        <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()"><span>📁</span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
       </div>
       <button class="source-menu-cancel" type="button" onclick="closeUploadSource()">取消</button>
     </div>
