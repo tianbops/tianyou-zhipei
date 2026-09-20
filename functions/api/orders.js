@@ -116,6 +116,7 @@ function extractBusinessCode(value) { const match = String(value || '').toUpperC
 function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[【】\[\]]/g, '').toLowerCase().replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/谊品鲜/g, '谊品生鲜'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
+function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:base`; }
 function scopedKey(userId, route, suffix) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:orders:${suffix}`; }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/,'').replace(/\.$/,'') || '0'}t`; }
 function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d+)?/); return !m || Number(m[0]) === 0; }
