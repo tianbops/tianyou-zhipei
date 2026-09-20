@@ -16,16 +16,28 @@ export async function onRequest({ request, env }) {
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
 
-    const deadline = Date.now() + 120000;
+    const startedAt = Date.now();
+    const deadline = startedAt + 120000;
     const [base, learning] = await Promise.all([
       getBaseStores(env, route, deadline),
       getLearning(env, userId, route, deadline)
     ]);
+    const dataReadyAt = Date.now();
     const parsed = parseDeterministic(text);
+    const extractionDoneAt = Date.now();
     const result = matchTodayStores(parsed.stores, base, learning);
-    if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再解析' }, 422);
+    const planningDoneAt = Date.now();
+    if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再规划路线' }, 422);
 
     const diagnostics = buildDiagnostics(result, parsed.stores.length);
+    const timings = {
+      totalMs: planningDoneAt - startedAt,
+      databaseMs: dataReadyAt - startedAt,
+      extractionMs: extractionDoneAt - dataReadyAt,
+      planningMs: planningDoneAt - extractionDoneAt,
+      recognizedCount: parsed.stores.length,
+      baseStoreCount: base.length
+    };
     return json({
       success: true,
       data: {
@@ -36,7 +48,7 @@ export async function onRequest({ request, env }) {
         matchedCount: result.matchedCount, newStoreCount: result.newStoreCount,
         reviewCount: result.reviewCount, duplicateCount: result.duplicateCount,
         learnedCount: result.learnedCount, recognizedCount: parsed.stores.length,
-        matchStats: result.matchStats, diagnostics,
+        matchStats: result.matchStats, diagnostics, timings,
         warning: diagnostics.length ? diagnostics[0] : ''
       }
     });
@@ -271,7 +283,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, base, byName, byCode, used, byLearning, byWeakName, byNameLength);
+    const hit = findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -392,28 +404,50 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   return null;
 }
 
-function findMatch(raw, base, byName, byCode, used, byLearning, byWeakName, byNameLength) {
+function findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength) {
   const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
   if (direct && !used.has(direct.item.index)) return direct;
+
   const businessCode = extractBusinessCode(raw);
   if (businessCode) {
-    const candidate = base.find(item => extractBusinessCode(item.name) === businessCode && !used.has(item.index));
-    if (candidate) return { type: 'match', item: candidate, mode: 'businessCode', score: 1 };
+    const candidate = byCode.get(businessCode);
+    if (candidate && !used.has(candidate.index)) {
+      return { type: 'match', item: candidate, mode: 'businessCode', score: 1 };
+    }
   }
+
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
-  if (weakCandidate && !used.has(weakCandidate.index)) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
-  let best = null, second = null;
+  if (weakCandidate && !used.has(weakCandidate.index)) {
+    return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
+  }
+
+  let best = null;
+  const alternatives = [];
   for (const item of base) {
     if (used.has(item.index)) continue;
     const score = storeSimilarity(raw, item.name);
-    if (!best || score > best.score) { second = best; best = { item, score }; }
-    else if (!second || score > second.score) second = { item, score };
+    if (!best || score > best.score) best = { item, score };
+    if (score > 0.56) {
+      alternatives.push({ item, score });
+      alternatives.sort((a, b) => b.score - a.score);
+      if (alternatives.length > 3) alternatives.pop();
+    }
   }
   if (!best) return { type: 'new', score: 0 };
-  const margin = second ? best.score - second.score : best.score;
-  if (best.score >= 0.84 || (best.score >= 0.76 && margin >= 0.045) || (best.score >= 0.70 && margin >= 0.10)) return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
-  if (best.score >= 0.56) return { type: 'review', item: best.item, score: best.score, alternatives: candidates.slice(0, 3).map(x => x.item) };
+
+  const margin = alternatives.length > 1 ? best.score - alternatives[1].score : best.score;
+  if (best.score >= 0.84 || (best.score >= 0.76 && margin >= 0.045) || (best.score >= 0.70 && margin >= 0.10)) {
+    return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
+  }
+  if (best.score >= 0.56) {
+    return {
+      type: 'review',
+      item: best.item,
+      score: best.score,
+      alternatives: alternatives.map(candidate => candidate.item)
+    };
+  }
   return { type: 'new', score: best.score };
 }
 
