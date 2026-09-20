@@ -25,7 +25,7 @@ export async function onRequest({ request, env }) {
 
     const date = normalizeDate(body.date) || businessDate();
     const noBase = body.baseDatabaseAvailable === false;
-    const base = noBase ? [] : await loadBase(env, route);
+    const base = noBase ? [] : await loadBase(env, route, userId);
     const inputCount = body.orders.length;
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
     const duplicateCount = countDuplicates(canonical);
@@ -76,8 +76,8 @@ export async function onRequest({ request, env }) {
   }
 }
 
-async function loadBase(env, route) {
-  const raw = await redisGet(env, `route:${route}:base`);
+async function loadBase(env, route, userId) {
+  const raw = await redisGet(env, scopedBaseKey(userId, route));
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${route}独立基准数据库`);
   return stores.map((store, index) => ({
@@ -238,6 +238,7 @@ async function getLearning(env, keyName) {
   return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
+function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:base`; }
 function scopedKey(userId, route, suffix) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:orders:${suffix}`; }
 function scopedLearningKey(userId, route, suffix = '') { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:learning${suffix ? `:${suffix}` : ''}`; }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
