@@ -32,7 +32,7 @@ to{opacity:0;transform:translateY(-4px)}}to{opacity:1;transform:none}}
 .source-option{font:inherit}.source-option input{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:auto;cursor:pointer}.source-option{appearance:none;-webkit-appearance:none}.fallback-file-input{position:fixed!important;left:-9999px!important;top:0!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
 
 /* 上传运单一体化 UI V1 */
-.upload-overlay{background:rgba(0,0,0,.68);padding:12px 12px calc(12px + env(safe-area-inset-bottom))}
+.upload-overlay{background:rgba(0,0,0,.68);padding:16px 12px;align-items:center;justify-content:center}
 .upload-sheet{max-height:min(88vh,760px);padding:18px 16px calc(16px + env(safe-area-inset-bottom));border-radius:24px;background:#18212B;box-shadow:0 -12px 40px rgba(0,0,0,.38)}
 .sheet-handle{margin-bottom:10px}
 .sheet-title{font-size:17px;font-weight:700;margin-bottom:14px}
@@ -82,7 +82,7 @@ to{opacity:0;transform:translateY(-4px)}}to{opacity:1;transform:none}}
 
 /* 上传页修正详情弹层与结果信息 V1.1 */
 .review-summary{cursor:pointer}
-.correction-modal{position:fixed;inset:0;z-index:10020;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.68);padding:12px}
+.correction-modal{position:fixed;inset:0;z-index:10020;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.68);padding:16px}
 .correction-modal.active{display:flex}
 .correction-panel{width:min(100%,520px);max-height:min(78vh,620px);overflow:hidden;border-radius:22px;background:#18212B;border:1px solid rgba(255,255,255,.07);box-shadow:0 18px 50px rgba(0,0,0,.45)}
 .correction-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06)}
@@ -91,3 +91,7 @@ to{opacity:0;transform:translateY(-4px)}}to{opacity:1;transform:none}}
 .correction-list{padding:14px 18px 18px;overflow:auto;max-height:calc(min(78vh,620px) - 68px)}
 .correction-item{padding:11px 0;border-bottom:1px solid rgba(255,255,255,.055);font-size:13px;line-height:20px;color:#D8E0E7}
 .correction-item:last-child{border-bottom:0}
+
+/* 弹窗统一居中 */
+.upload-overlay.active,.correction-modal.active{align-items:center;justify-content:center}
+.upload-sheet{margin:0 auto}
