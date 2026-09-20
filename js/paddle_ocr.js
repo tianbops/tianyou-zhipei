@@ -67,16 +67,18 @@
     enginePromise = PaddleOCR.create({
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
-      worker: {
-        createWorker: () => new Worker(OCR_WORKER_URL, { type: 'module' })
-      },
+      // 手机端正式稳定模式：OCR直接在主线程运行，避免自定义Module Worker
+      // 在部分Android WebView/浏览器中出现 Failed to fetch。
+      // 先保证模型稳定加载和识别，再由后续维护阶段做运行时优化。
+      worker: false,
       textDetectionBatchSize: 1,
-      textRecognitionBatchSize: 6,
+      textRecognitionBatchSize: 4,
       ortOptions: {
         backend: 'wasm',
         wasmPaths: 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/',
-        numThreads: 2,
-        simd: true
+        numThreads: 1,
+        simd: true,
+        proxy: false
       }
     }).then(engine => {
       engineInstance = engine;
