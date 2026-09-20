@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <meta name="theme-color" content="#05070A">
 <title>Zhipei One · 智配 One</title>
-<link rel="stylesheet" href="css/style.css?v=20260921-1">
+<link rel="stylesheet" href="css/style.css?v=20260921-2">
 </head>
 <body>
 
@@ -35,16 +35,12 @@
 <div class="upload-overlay" id="uploadOverlay">
   <div class="upload-sheet">
     <div class="sheet-handle" aria-hidden="true"></div>
-    <div class="sheet-title">上传运单</div>
     <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon" aria-hidden="true"></span><span id="statusText" data-text="等待处理...">等待处理...</span></div><div id="statusDetail" class="status-detail" aria-live="polite"></div></div>
     <div class="input-area"><div class="detail-toggle" id="ocrTextToggle" role="button" tabindex="0" aria-expanded="false" onclick="toggleOCRText()">规划详情 <span>›</span></div><textarea id="manualOrderInput" rows="10" placeholder="上传运单后，这里显示识别文字，请核对后规划路线。" autocomplete="off"></textarea></div>
     <div class="review-summary" id="reviewSummary" hidden role="button" tabindex="0" onclick="openCorrectionDetails()">修正详情 <span id="reviewCount">0</span> 项 <span>›</span></div>
     <div class="sheet-footer">
       <button class="btn-cancel" type="button" onclick="cancelParse();toggleUpload()">取消</button>
       <button class="btn-primary-action" id="primaryActionBtn" type="button" onclick="handlePrimaryAction()">规划路线</button>
-    </div>
-    <div class="upload-bottom">
-      <button class="upload-main-btn" type="button" onclick="openUploadSource()">＋ 上传运单</button>
     </div>
     <div class="upload-source-menu active" id="uploadSourceMenu" aria-hidden="false">
       <div class="source-menu-title">上传运单</div>
