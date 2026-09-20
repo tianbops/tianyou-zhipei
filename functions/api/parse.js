@@ -230,11 +230,16 @@ async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
 }
 
 function matchTodayStores(recognized, baseStores, learning) {
-  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byWeakName = new Map(), byLearning = new Map();
+  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byBaseCode = new Map(), byNameLength = new Map(), byWeakName = new Map(), byLearning = new Map();
   for (const item of base) {
     for (const candidateName of getBaseMatchNames(item)) {
       const nameKey = matchKey(candidateName);
       if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
+      if (nameKey) {
+        const bucket = byNameLength.get(nameKey.length) || [];
+        if (!bucket.includes(item)) bucket.push(item);
+        byNameLength.set(nameKey.length, bucket);
+      }
       const weakKey = weakMatchKey(candidateName);
       if (weakKey) {
         const existing = byWeakName.get(weakKey);
@@ -243,10 +248,12 @@ function matchTodayStores(recognized, baseStores, learning) {
       }
       const businessCode = extractBusinessCode(candidateName);
       if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
+      const baseCode = String(item.code || '').trim();
+      if (baseCode && !byBaseCode.has(baseCode)) byBaseCode.set(baseCode, item);
     }
   }
   for (const [aliasKey, record] of Object.entries(learning?.aliases || {})) {
-    const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && base.find(item => String(item.code) === String(record.baseCode)));
+    const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && byBaseCode.get(String(record.baseCode)));
     if (target && !byLearning.has(aliasKey)) byLearning.set(aliasKey, target);
   }
 
@@ -254,7 +261,7 @@ function matchTodayStores(recognized, baseStores, learning) {
   const matchStats = { learned: 0, businessCode: 0, exact: 0, similarity: 0, review: 0, new: 0, duplicate: 0 };
   let duplicateCount = 0;
   for (const raw of recognized) {
-    const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName);
+    const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
     if (direct && used.has(direct.item.index)) {
       const canonical = canonicalByBaseIndex.get(direct.item.index);
       if (canonical) {
@@ -264,7 +271,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, base, byName, byCode, used, byLearning, byWeakName);
+    const hit = findMatch(raw, base, byName, byCode, used, byLearning, byWeakName, byNameLength);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -286,12 +293,13 @@ function matchTodayStores(recognized, baseStores, learning) {
   return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, learnedCount: matchStats.learned, uniqueStoreCount: stores.length, matchStats };
 }
 
-function findUniqueOneCharOmissionMatch(raw, byName) {
+function findUniqueOneCharOmissionMatch(raw, byName, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
-  for (const [baseKey, item] of byName.entries()) {
-    if (baseKey.length !== rawKey.length + 1) continue;
+  const bucket = byNameLength.get(rawKey.length + 1) || [];
+  for (const item of bucket) {
+    const baseKey = matchKey(item.name);
     let i = 0, j = 0, skipped = false;
     while (i < rawKey.length && j < baseKey.length) {
       if (rawKey[i] === baseKey[j]) { i++; j++; }
@@ -304,24 +312,26 @@ function findUniqueOneCharOmissionMatch(raw, byName) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function findUniqueOneCharInsertionMatch(raw, byName) {
+function findUniqueOneCharInsertionMatch(raw, byName, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
-  for (const [baseKey, item] of byName.entries()) {
-    if (baseKey.length !== rawKey.length - 1) continue;
+  const bucket = byNameLength.get(rawKey.length - 1) || [];
+  for (const item of bucket) {
+    const baseKey = matchKey(item.name);
     if (isOneCharEdit(rawKey, baseKey)) candidates.push(item);
     if (candidates.length > 1) return null;
   }
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function findUniqueOneCharSubstitutionMatch(raw, byName) {
+function findUniqueOneCharSubstitutionMatch(raw, byName, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
-  for (const [baseKey, item] of byName.entries()) {
-    if (baseKey.length !== rawKey.length) continue;
+  const bucket = byNameLength.get(rawKey.length) || [];
+  for (const item of bucket) {
+    const baseKey = matchKey(item.name);
     if (isOneCharEdit(rawKey, baseKey)) candidates.push(item);
     if (candidates.length > 1) return null;
   }
@@ -330,11 +340,13 @@ function findUniqueOneCharSubstitutionMatch(raw, byName) {
 
 // OCR偶发连续漏字：最多允许2个字符缺失，但必须在当前线路基准库中得到唯一候选。
 // 只处理“原文比基准短”的删除型误差，不把任意两字符改写都自动吞掉。
-function findUniqueShortOmissionMatch(raw, byName) {
+function findUniqueShortOmissionMatch(raw, byName, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 8) return null;
   const candidates = [];
-  for (const [baseKey, item] of byName.entries()) {
+  const bucket = byNameLength.get(rawKey.length + 2) || [];
+  for (const item of bucket) {
+    const baseKey = matchKey(item.name);
     const delta = baseKey.length - rawKey.length;
     if (delta < 2 || delta > 2) continue;
     if (isDeletionDistanceAtMost(rawKey, baseKey, 2)) candidates.push(item);
@@ -359,20 +371,20 @@ function isDeletionDistanceAtMost(shorter, longer, maxDeletes) {
   return deletes <= maxDeletes;
 }
 
-function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
+function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength) {
   const learned = byLearning.get(matchKey(raw));
   if (learned) return { type: 'match', item: learned, mode: 'learned', score: 1 };
   const businessCode = extractBusinessCode(raw);
   if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
   const key = matchKey(raw);
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
-  const omission = findUniqueOneCharOmissionMatch(raw, byName);
+  const omission = findUniqueOneCharOmissionMatch(raw, byName, byNameLength);
   if (omission) return { type: 'match', item: omission, mode: 'similarity', score: 0.995 };
-  const insertion = findUniqueOneCharInsertionMatch(raw, byName);
+  const insertion = findUniqueOneCharInsertionMatch(raw, byName, byNameLength);
   if (insertion) return { type: 'match', item: insertion, mode: 'similarity', score: 0.995 };
-  const substitution = findUniqueOneCharSubstitutionMatch(raw, byName);
+  const substitution = findUniqueOneCharSubstitutionMatch(raw, byName, byNameLength);
   if (substitution) return { type: 'match', item: substitution, mode: 'similarity', score: 0.99 };
-  const shortOmission = findUniqueShortOmissionMatch(raw, byName);
+  const shortOmission = findUniqueShortOmissionMatch(raw, byName, byNameLength);
   if (shortOmission) return { type: 'match', item: shortOmission, mode: 'similarity', score: 0.985 };
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
@@ -380,27 +392,32 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   return null;
 }
 
-function findMatch(raw, base, byName, byCode, used, byLearning, byWeakName) {
-  const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName);
+function findMatch(raw, base, byName, byCode, used, byLearning, byWeakName, byNameLength) {
+  const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
   if (direct && !used.has(direct.item.index)) return direct;
   const businessCode = extractBusinessCode(raw);
   if (businessCode) {
     const candidate = base.find(item => extractBusinessCode(item.name) === businessCode && !used.has(item.index));
     if (candidate) return { type: 'match', item: candidate, mode: 'businessCode', score: 1 };
   }
-  const candidates = base.filter(item => !used.has(item.index)).map(item => ({ item, score: storeSimilarity(raw, item.name) })).sort((a, b) => b.score - a.score);
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate && !used.has(weakCandidate.index)) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
-  const best = candidates[0];
+  let best = null, second = null;
+  for (const item of base) {
+    if (used.has(item.index)) continue;
+    const score = storeSimilarity(raw, item.name);
+    if (!best || score > best.score) { second = best; best = { item, score }; }
+    else if (!second || score > second.score) second = { item, score };
+  }
   if (!best) return { type: 'new', score: 0 };
-  const second = candidates[1], margin = second ? best.score - second.score : best.score;
+  const margin = second ? best.score - second.score : best.score;
   if (best.score >= 0.84 || (best.score >= 0.76 && margin >= 0.045) || (best.score >= 0.70 && margin >= 0.10)) return { type: 'match', item: best.item, mode: 'similarity', score: best.score };
   if (best.score >= 0.56) return { type: 'review', item: best.item, score: best.score, alternatives: candidates.slice(0, 3).map(x => x.item) };
   return { type: 'new', score: best.score };
 }
 
-const baseMatchMeta = new Map();
+const baseMatchMeta = new WeakMap();
 function getBaseMatchMeta(item) {
   let meta = baseMatchMeta.get(item);
   if (meta) return meta;
