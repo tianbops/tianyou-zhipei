@@ -29,12 +29,29 @@ async function saveOrder(request, env, session) {
   try {
     const existing = await redisGet(env, key);
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
-    const base = await loadBaseData(env, route, userId);
-    const normalized = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route)).filter(item => item.name);
-    const rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || normalized.length;
-    const uniqueOrders = dedupeOrders(normalized, base);
-    const duplicateCount = Math.max(0, normalized.length - uniqueOrders.length);
-    const orders = sortByRouteBase(uniqueOrders, base);
+    // 订单详情页的“更换车辆”只是修改当日车辆，不应重新按当前基准库计算订单。
+    // 历史/今日订单必须继续使用原批次已经确认的门店顺序与匹配结果。
+    const isVehicleOnlyUpdate = String(body.source || '') === 'order-detail'
+      && existing?.orderBatchId
+      && orderBatchId === existing.orderBatchId
+      && Array.isArray(existing.orders)
+      && existing.orders.length > 0;
+
+    let orders;
+    let rawOrderCount;
+    let duplicateCount;
+    if (isVehicleOnlyUpdate) {
+      orders = existing.orders;
+      rawOrderCount = positiveInt(existing.rawOrderCount) || orders.length;
+      duplicateCount = Number(existing.duplicateCount) || 0;
+    } else {
+      const base = await loadBaseData(env, route, userId);
+      const normalized = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route)).filter(item => item.name);
+      rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || normalized.length;
+      const uniqueOrders = dedupeOrders(normalized, base);
+      duplicateCount = Math.max(0, normalized.length - uniqueOrders.length);
+      orders = sortByRouteBase(uniqueOrders, base);
+    }
     const incomingWeight = normalizeWeight(body.totalWeight ?? body.weight);
     const totalWeight = incomingWeight && !isZeroWeight(incomingWeight) ? incomingWeight : normalizeWeight(existing?.totalWeight);
     const todayData = {
@@ -50,6 +67,26 @@ async function saveOrder(request, env, session) {
     await redisSet(env, key, todayData);
     const saved = await readAfterWrite(env, key, orderBatchId, orders.length);
     if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
+
+    // 车辆变更属于同一笔运单的资料更新，历史记录也必须同步，
+    // 保证“今日订单”和“历史订单”不会出现车辆不一致。
+    if (isVehicleOnlyUpdate) {
+      const historyKey = scopedKey(userId, route, `history:${date}`);
+      const historyData = await redisGet(env, historyKey);
+      if (Array.isArray(historyData)) {
+        const updatedHistory = historyData.map(item =>
+          item?.orderBatchId === orderBatchId
+            ? {
+                ...item,
+                vehicle: saved.vehicle,
+                updatedAt: saved.updatedAt
+              }
+            : item
+        );
+        await redisSet(env, historyKey, updatedHistory);
+      }
+    }
+
     await redisSet(env, latestKey, { date, orderBatchId, updatedAt: saved.updatedAt });
     return json({ success: true, data: saved });
   } finally { await releaseLock(env, lockKey, lockToken).catch(() => {}); }
