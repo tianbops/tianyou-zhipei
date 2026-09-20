@@ -260,6 +260,10 @@
       const message = failed.length ? ('已读取 ' + results.length + '/' + list.length + ' 张运单，' + failed.length + ' 张未成功') : ('已读取 ' + results.length + ' 张运单');
       setStatus(message, 100, true);
     }
+    // OCR完成后直接进入规划，用户无需再次点击“规划路线”；识别文字仍原样保留在输入框。
+    if (typeof window.parseManualInput === 'function') {
+      await window.parseManualInput({ auto: true, source: 'ocr' });
+    }
     return { rawText: combined, source: 'paddleocr-browser-batch', itemCount: totalLines, fileCount: list.length, successCount: results.length, failedCount: failed.length, failedFiles: failed.map(item => item.file?.name || '未命名图片') };
   }
 
