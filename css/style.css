@@ -79,3 +79,15 @@ to{opacity:0;transform:translateY(-4px)}}to{opacity:1;transform:none}}
 .upload-sheet.cancelled .sheet-footer{display:flex}
 .upload-sheet.cancelled .upload-source-menu{display:none}
 @media(max-height:700px){.upload-sheet{max-height:92vh;padding-top:14px}.parse-status{max-height:70px}#manualOrderInput{max-height:26vh}}
+
+/* 上传页修正详情弹层与结果信息 V1.1 */
+.review-summary{cursor:pointer}
+.correction-modal{position:fixed;inset:0;z-index:10020;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.68);padding:12px}
+.correction-modal.active{display:flex}
+.correction-panel{width:min(100%,520px);max-height:min(78vh,620px);overflow:hidden;border-radius:22px;background:#18212B;border:1px solid rgba(255,255,255,.07);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.correction-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06)}
+.correction-title{font-size:16px;font-weight:700;color:#fff}
+.correction-close{width:34px;height:34px;border:0;border-radius:10px;background:rgba(255,255,255,.05);color:#B8C2CC;font-size:20px}
+.correction-list{padding:14px 18px 18px;overflow:auto;max-height:calc(min(78vh,620px) - 68px)}
+.correction-item{padding:11px 0;border-bottom:1px solid rgba(255,255,255,.055);font-size:13px;line-height:20px;color:#D8E0E7}
+.correction-item:last-child{border-bottom:0}
