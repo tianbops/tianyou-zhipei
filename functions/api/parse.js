@@ -487,13 +487,17 @@ function getBaseMatchMeta(item) {
   if (meta) return meta;
   const names = getBaseMatchNames(item);
   const keys = names.map(matchKey).filter(Boolean);
-  const key = keys[0] || '';
+  const stableKeys = [...new Set(names.map(stableStoreKey).filter(Boolean))];
+  const tokenSets = keys.map(value => meaningfulTokens(value));
+  const ngramSets = keys.map(value => ngramSet(value, 2));
   meta = {
-    key,
+    key: keys[0] || '',
     keys,
     businessCodes: [...new Set(names.map(extractBusinessCode).filter(Boolean))],
-    stableKeys: [...new Set(names.map(stableStoreKey).filter(Boolean))],
-    ngrams: ngramSet(key, 2)
+    stableKeys,
+    stableKeySet: new Set(stableKeys),
+    ngramSets,
+    tokenSets
   };
   baseMatchMeta.set(item, meta);
   return meta;
@@ -503,12 +507,11 @@ function collectSimilarityCandidates(raw, byNameLength, byNgram) {
   const key = matchKey(raw);
   if (!key) return [];
   const selected = new Set();
-  const lengthMin = Math.max(1, key.length - 2);
-  const lengthMax = key.length + 2;
-  for (let length = lengthMin; length <= lengthMax; length++) {
+  const minLength = Math.max(1, key.length - 2);
+  const maxLength = key.length + 2;
+  for (let length = minLength; length <= maxLength; length++) {
     for (const item of byNameLength.get(length) || []) selected.add(item);
   }
-  // 对较长名称优先用共享二元片段缩小候选；短名称保持长度桶，避免因信息不足漏匹配。
   if (key.length >= 8 && byNgram?.size) {
     const grams = [...ngramSet(key, 2)];
     if (grams.length >= 2) {
@@ -529,16 +532,30 @@ function collectSimilarityCandidates(raw, byNameLength, byNgram) {
 function storeSimilarity(a, b) {
   const ak = matchKey(a);
   const bm = getBaseMatchMeta(b);
-  const bk = bm.key;
-  if (!ak || !bk) return 0;
+  if (!ak || !bm.key) return 0;
   if (bm.keys.includes(ak)) return 1;
   const codeA = extractBusinessCode(a);
   if (codeA && bm.businessCodes.includes(codeA)) return 1;
-  const edit = Math.max(...bm.keys.map(key => normalizedEditSimilarity(ak, key)), 0);
-  const ngram = Math.max(...bm.keys.map(key => characterNgramSimilarity(ak, key, 2)), 0);
-  const token = Math.max(...bm.stableKeys.map(key => tokenOverlap(stableStoreKey(a), key)), 0);
-  const containment = Math.max(...bm.keys.map(key => key.includes(ak) || ak.includes(key) ? Math.min(ak.length, key.length) / Math.max(ak.length, key.length) : 0), 0);
+
+  const rawTokens = meaningfulTokens(a);
+  let edit = 0, ngram = 0, token = 0, containment = 0;
+  for (let index = 0; index < bm.keys.length; index++) {
+    const key = bm.keys[index];
+    edit = Math.max(edit, normalizedEditSimilarity(ak, key));
+    ngram = Math.max(ngram, characterNgramSimilarity(ak, key, 2));
+    token = Math.max(token, tokenOverlapFromSets(rawTokens, bm.tokenSets[index]));
+    if (key.includes(ak) || ak.includes(key)) {
+      containment = Math.max(containment, Math.min(ak.length, key.length) / Math.max(ak.length, key.length));
+    }
+  }
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
+}
+
+function tokenOverlapFromSets(a, b) {
+  if (!a.size || !b.size) return 0;
+  let common = 0;
+  for (const token of a) if (b.has(token)) common++;
+  return common / Math.max(a.size, b.size);
 }
 
 function weakMatchKey(value) {
