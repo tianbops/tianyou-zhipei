@@ -19,14 +19,13 @@ export async function onRequest({ request, env }) {
     const startedAt = Date.now();
     const deadline = startedAt + 120000;
     const [base, learning] = await Promise.all([
-      getBaseStores(env, route, deadline, userId),
+      getBaseStores(env, route, deadline),
       getLearning(env, userId, route, deadline)
     ]);
     const dataReadyAt = Date.now();
     const parsed = parseDeterministic(text);
     const extractionDoneAt = Date.now();
-    const baseIndex = getBaseMatchIndex(base);
-  const result = matchTodayStores(parsed.stores, baseIndex, learning);
+    const result = matchTodayStores(parsed.stores, base, learning);
     const planningDoneAt = Date.now();
     if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再规划路线' }, 422);
 
@@ -37,7 +36,7 @@ export async function onRequest({ request, env }) {
       extractionMs: extractionDoneAt - dataReadyAt,
       planningMs: planningDoneAt - extractionDoneAt,
       recognizedCount: parsed.stores.length,
-      baseStoreCount: safeBase.length
+      baseStoreCount: base.length
     };
     return json({
       success: true,
@@ -193,9 +192,9 @@ function extractVolume(source) {
   return match ? `${match[1]}m³` : '';
 }
 
-async function getBaseStores(env, route, deadline, userId) {
-  const data = await redisGet(env, scopedBaseKey(userId, route), deadline);
-  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到当前账号的${normalizeRoute(route)}独立基准数据库`);
+async function getBaseStores(env, route, deadline) {
+  const data = await redisGet(env, `route:${normalizeRoute(route)}:base`, deadline);
+  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${normalizeRoute(route)}独立基准数据库`);
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
@@ -204,8 +203,6 @@ async function getLearning(env, userId, route, deadline) {
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
-
-function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`; }
 
 function learningKey(userId, route) {
   return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
@@ -244,44 +241,44 @@ async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
   }
 }
 
-function getBaseMatchIndex(baseStores) {
-  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [];
-  return buildBaseMatchIndex(base);
-}
-
 function buildBaseMatchIndex(base) {
-  const safeByName = new Map(), safeByCode = new Map(), safeByBaseCode = new Map(), safeByNameLength = new Map(), safeByWeakName = new Map(), safeByNgram = new Map(), byLearning = new Map();
+  const byName = new Map(), byCode = new Map(), byBaseCode = new Map(), byNameLength = new Map(), byWeakName = new Map(), byNgram = new Map();
   for (const item of base) {
     for (const candidateName of getBaseMatchNames(item)) {
       const nameKey = matchKey(candidateName);
-      if (nameKey && !safeByName.has(nameKey)) safeByName.set(nameKey, item);
+      if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
       if (nameKey) {
-        const bucket = safeByNameLength.get(nameKey.length) || [];
+        const bucket = byNameLength.get(nameKey.length) || [];
         if (!bucket.includes(item)) bucket.push(item);
-        safeByNameLength.set(nameKey.length, bucket);
+        byNameLength.set(nameKey.length, bucket);
       }
       const weakKey = weakMatchKey(candidateName);
       if (weakKey) {
-        const existing = safeByWeakName.get(weakKey);
-        if (existing === undefined) safeByWeakName.set(weakKey, item);
-        else if (existing !== item) safeByWeakName.set(weakKey, null);
+        const existing = byWeakName.get(weakKey);
+        if (existing === undefined) byWeakName.set(weakKey, item);
+        else if (existing !== item) byWeakName.set(weakKey, null);
       }
       const businessCode = extractBusinessCode(candidateName);
-      if (businessCode && !safeByCode.has(businessCode)) safeByCode.set(businessCode, item);
+      if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
       const baseCode = String(item.code || '').trim();
-      if (baseCode && !safeByBaseCode.has(baseCode)) safeByBaseCode.set(baseCode, item);
+      if (baseCode && !byBaseCode.has(baseCode)) byBaseCode.set(baseCode, item);
       for (const gram of ngramSet(nameKey, 2)) {
-        const gramBucket = safeByNgram.get(gram) || [];
+        const gramBucket = byNgram.get(gram) || [];
         if (!gramBucket.includes(item)) gramBucket.push(item);
-        safeByNgram.set(gram, gramBucket);
+        byNgram.set(gram, gramBucket);
       }
     }
   }
-  return { base, safeByName, safeByCode, safeByBaseCode, safeByNameLength, safeByWeakName, safeByNgram };
+  return { base, byName, byCode, byBaseCode, byNameLength, byWeakName, byNgram };
 }
 
+function matchTodayStores(recognized, baseStores, learning) {
+  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [];
+  const baseIndex = buildBaseMatchIndex(base);
+  const { byName, byCode, byBaseCode, byNameLength, byWeakName, byNgram } = baseIndex;
+  const byLearning = new Map();
   for (const [aliasKey, record] of Object.entries(learning?.aliases || {})) {
-    const target = (record?.baseKey && safeByName.get(record.baseKey)) || (record?.baseCode && safeByBaseCode.get(String(record.baseCode)));
+    const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && byBaseCode.get(String(record.baseCode)));
     if (target && !byLearning.has(aliasKey)) byLearning.set(aliasKey, target);
   }
 
@@ -297,7 +294,7 @@ function buildBaseMatchIndex(base) {
   let duplicateCount = 0;
   for (const raw of recognized) {
     const directFeatures = getDirectMatchFeatures(raw, directFeatureCache);
-    const direct = findDirectMatch(raw, safeByName, safeByCode, byLearning, safeByWeakName, safeByNameLength, directFeatures);
+    const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength, directFeatures);
     if (direct && used.has(direct.item.index)) {
       const canonical = canonicalByBaseIndex.get(direct.item.index);
       if (canonical) {
@@ -307,7 +304,7 @@ function buildBaseMatchIndex(base) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, safeByName, safeByCode, used, byLearning, safeByWeakName, safeByNameLength, safeByNgram, similarityCache, keyFeatureCache, directMatchCache, directFeatureCache);
+    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache, directFeatureCache);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -329,11 +326,11 @@ function buildBaseMatchIndex(base) {
   return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, learnedCount: matchStats.learned, uniqueStoreCount: stores.length, matchStats };
 }
 
-function findUniqueOneCharOmissionMatch(raw, safeByName, safeByNameLength) {
+function findUniqueOneCharOmissionMatch(raw, byName, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
-  const bucket = safeByNameLength.get(rawKey.length + 1) || [];
+  const bucket = byNameLength.get(rawKey.length + 1) || [];
   for (const item of bucket) {
     const baseKey = matchKey(item.name);
     let i = 0, j = 0, skipped = false;
@@ -348,11 +345,11 @@ function findUniqueOneCharOmissionMatch(raw, safeByName, safeByNameLength) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function findUniqueOneCharInsertionMatch(raw, safeByNameLength) {
+function findUniqueOneCharInsertionMatch(raw, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
-  const bucket = safeByNameLength.get(rawKey.length - 1) || [];
+  const bucket = byNameLength.get(rawKey.length - 1) || [];
   for (const item of bucket) {
     const baseKey = matchKey(item.name);
     if (isOneCharEdit(rawKey, baseKey)) candidates.push(item);
@@ -361,11 +358,11 @@ function findUniqueOneCharInsertionMatch(raw, safeByNameLength) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function findUniqueOneCharSubstitutionMatch(raw, safeByNameLength) {
+function findUniqueOneCharSubstitutionMatch(raw, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
-  const bucket = safeByNameLength.get(rawKey.length) || [];
+  const bucket = byNameLength.get(rawKey.length) || [];
   for (const item of bucket) {
     const baseKey = matchKey(item.name);
     if (isOneCharEdit(rawKey, baseKey)) candidates.push(item);
@@ -400,11 +397,11 @@ function isOneCharEdit(a, b) {
 
 // OCR偶发连续漏字：最多允许2个字符缺失，但必须在当前线路基准库中得到唯一候选。
 // 只处理“原文比基准短”的删除型误差，不把任意两字符改写都自动吞掉。
-function findUniqueShortOmissionMatch(raw, safeByName, safeByNameLength) {
+function findUniqueShortOmissionMatch(raw, byName, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 8) return null;
   const candidates = [];
-  const bucket = safeByNameLength.get(rawKey.length + 2) || [];
+  const bucket = byNameLength.get(rawKey.length + 2) || [];
   for (const item of bucket) {
     const baseKey = matchKey(item.name);
     const delta = baseKey.length - rawKey.length;
@@ -445,47 +442,47 @@ function getDirectMatchFeatures(raw, cache) {
   return features;
 }
 
-function findDirectMatch(raw, safeByName, safeByCode, byLearning, safeByWeakName, safeByNameLength, features = getDirectMatchFeatures(raw)) {
+function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength, features = getDirectMatchFeatures(raw)) {
   const key = features.key;
   const learned = byLearning.get(key);
   if (learned) return { type: 'match', item: learned, mode: 'learned', score: 1 };
   const businessCode = features.businessCode;
-  if (businessCode && safeByCode.has(businessCode)) return { type: 'match', item: safeByCode.get(businessCode), mode: 'businessCode', score: 1 };
-  if (key && safeByName.has(key)) return { type: 'match', item: safeByName.get(key), mode: 'exact', score: 1 };
-  const omission = findUniqueOneCharOmissionMatch(raw, safeByName, safeByNameLength);
+  if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
+  if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
+  const omission = findUniqueOneCharOmissionMatch(raw, byName, byNameLength);
   if (omission) return { type: 'match', item: omission, mode: 'similarity', score: 0.995 };
-  const insertion = findUniqueOneCharInsertionMatch(raw, safeByNameLength);
+  const insertion = findUniqueOneCharInsertionMatch(raw, byNameLength);
   if (insertion) return { type: 'match', item: insertion, mode: 'similarity', score: 0.995 };
-  const substitution = findUniqueOneCharSubstitutionMatch(raw, safeByNameLength);
+  const substitution = findUniqueOneCharSubstitutionMatch(raw, byNameLength);
   if (substitution) return { type: 'match', item: substitution, mode: 'similarity', score: 0.99 };
-  const shortOmission = findUniqueShortOmissionMatch(raw, safeByName, safeByNameLength);
+  const shortOmission = findUniqueShortOmissionMatch(raw, byName, byNameLength);
   if (shortOmission) return { type: 'match', item: shortOmission, mode: 'similarity', score: 0.985 };
   const weakKey = features.weakKey;
-  const weakCandidate = weakKey ? safeByWeakName.get(weakKey) : null;
+  const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   return null;
 }
 
-function findMatch(raw, safeByName, safeByCode, used, byLearning, safeByWeakName, safeByNameLength, safeByNgram, similarityCache, keyFeatureCache, directMatchCache, directFeatureCache) {
+function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache, directMatchCache, directFeatureCache) {
   const directFeatures = getDirectMatchFeatures(raw, directFeatureCache);
   const directKey = directFeatures.key;
   let direct = directKey ? directMatchCache.get(directKey) : undefined;
   if (direct === undefined) {
-    direct = findDirectMatch(raw, safeByName, safeByCode, byLearning, safeByWeakName, safeByNameLength, directFeatures);
+    direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength, directFeatures);
     if (directKey) directMatchCache.set(directKey, direct || null);
   }
   if (direct && !used.has(direct.item.index)) return direct;
 
   const businessCode = extractBusinessCode(raw);
   if (businessCode) {
-    const candidate = safeByCode.get(businessCode);
+    const candidate = byCode.get(businessCode);
     if (candidate && !used.has(candidate.index)) {
       return { type: 'match', item: candidate, mode: 'businessCode', score: 1 };
     }
   }
 
   const weakKey = weakMatchKey(raw);
-  const weakCandidate = weakKey ? safeByWeakName.get(weakKey) : null;
+  const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate && !used.has(weakCandidate.index)) {
     return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   }
@@ -493,7 +490,7 @@ function findMatch(raw, safeByName, safeByCode, used, byLearning, safeByWeakName
   const cacheKey = matchKey(raw);
   let cached = cacheKey ? similarityCache.get(cacheKey) : null;
   if (!cached) {
-    const candidates = collectSimilarityCandidates(raw, safeByNameLength, safeByNgram);
+    const candidates = collectSimilarityCandidates(raw, byNameLength, byNgram);
     const scores = new Map();
     const rawFeatures = getRawMatchFeatures(raw, keyFeatureCache);
     const orderedCandidates = orderSimilarityCandidates(rawFeatures, candidates);
@@ -577,21 +574,21 @@ function getBaseMatchMeta(item) {
   return meta;
 }
 
-function collectSimilarityCandidates(raw, safeByNameLength, safeByNgram) {
+function collectSimilarityCandidates(raw, byNameLength, byNgram) {
   const key = matchKey(raw);
   if (!key) return [];
   const selected = new Set();
   const minLength = Math.max(1, key.length - 2);
   const maxLength = key.length + 2;
   for (let length = minLength; length <= maxLength; length++) {
-    for (const item of safeByNameLength.get(length) || []) selected.add(item);
+    for (const item of byNameLength.get(length) || []) selected.add(item);
   }
-  if (key.length >= 8 && safeByNgram?.size) {
+  if (key.length >= 8 && byNgram?.size) {
     const grams = [...ngramSet(key, 2)];
     if (grams.length >= 2) {
       const gramHits = new Map();
       for (const gram of grams) {
-        for (const item of safeByNgram.get(gram) || []) {
+        for (const item of byNgram.get(gram) || []) {
           if (selected.has(item)) gramHits.set(item, (gramHits.get(item) || 0) + 1);
         }
       }
