@@ -174,6 +174,12 @@ window.Auth = {
     if (!button) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    // 确认录入后是“直接 replace → 运单详情”，历史栈中的上一页可能是登录页。
+    // 因此运单详情的返回必须明确回首页，不能调用 history.back() 导致回到登录页。
+    if (location.pathname.includes('/pages/order_detail.html')) {
+      window.location.replace('../home.html');
+      return;
+    }
     const referrer = document.referrer;
     if (referrer && isAppPage(referrer) && window.history.length > 1) {
       window.history.back();
