@@ -39,7 +39,7 @@
     <div class="input-area"><div class="detail-toggle" id="ocrTextToggle" role="button" tabindex="0" aria-expanded="false" onclick="toggleOCRText()">规划详情 <span>›</span></div><textarea id="manualOrderInput" rows="10" placeholder="上传运单后，这里显示识别文字，请核对后规划路线。" autocomplete="off"></textarea></div>
     <div class="review-summary" id="reviewSummary" hidden role="button" tabindex="0" onclick="openCorrectionDetails()">修正详情 <span id="reviewCount">0</span> 项 <span>›</span></div>
     <div class="sheet-footer">
-      <button class="btn-cancel" type="button" onclick="cancelParse();toggleUpload()">取消</button>
+      <button class="btn-cancel" type="button" onclick="clearManualInput();cancelParse();toggleUpload()">取消</button>
       <button class="btn-primary-action" id="primaryActionBtn" type="button" onclick="handlePrimaryAction()">规划路线</button>
     </div>
     <div class="upload-source-menu active" id="uploadSourceMenu" aria-hidden="false">
@@ -49,7 +49,7 @@
         <label class="source-option"><input id="ocrAlbumInput" type="file" accept="image/*" multiple><span>🖼️</span><strong>相册</strong></label>
         <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()"><span>📁</span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
       </div>
-      <button class="source-menu-cancel" type="button" onclick="toggleUpload()">取消</button>
+      <button class="source-menu-cancel" type="button" onclick="clearManualInput();cancelParse();toggleUpload()">取消</button>
     </div>
   </div>
 </div>
@@ -61,7 +61,7 @@
 </div>
 <script src="js/auth.js?v=20260920-5"></script>
 <script src="js/home_status.js?v=20260921-1"></script>
-<script src="js/home.js?v=20260921-3"></script>
+<script src="js/home.js?v=20260921-4"></script>
 <script src="js/paddle_ocr.js?v=20260920-5"></script>
 <script src="js/home_confirm.js?v=20260920-2"></script>
 </body>
