@@ -77,10 +77,17 @@ if(parsedOrders.length){
     // 只统计实质名称变化；OCR换行、空格、括号/标点差异不计入“更正”。
     if(rawNames.length<=1&&item?.matched&&baseName&&rawNames.some(value=>value!==baseName)){
       const changedNames=rawNames.filter(value=>value!==baseName);
-      const normalizeForCompare=value=>String(value||'')
-        .replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g,roman=>({ 'Ⅱ':'II','Ⅲ':'III','Ⅳ':'IV','Ⅴ':'V','Ⅵ':'VI','Ⅶ':'VII','Ⅷ':'VIII','Ⅸ':'IX','Ⅹ':'X' }[roman]||roman))
-        .replace(/((?:ii|iii|iv|v|vi|vii|viii|ix|x))l(?=类)/gi,'$1')
-        .replace(/[s　，,。；;：:（）()【】\[\]<>《》“”"'‘’·\-_/]/g,'').toLowerCase();
+      // “更正”只统计业务名称变化。OCR造成的空格、换行、全半角标点、
+      // 中英文括号、常见罗马数字/字母误识别等，只属于识别格式差异，不计入名称更正。
+      const normalizeForCompare=value=>{
+        const romanMap={ 'Ⅰ':'I','Ⅱ':'II','Ⅲ':'III','Ⅳ':'IV','Ⅴ':'V','Ⅵ':'VI','Ⅶ':'VII','Ⅷ':'VIII','Ⅸ':'IX','Ⅹ':'X' };
+        return String(value||'')
+          .normalize('NFKC')
+          .replace(/[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g,roman=>romanMap[roman]||roman)
+          .replace(/((?:ii|iii|iv|v|vi|vii|viii|ix|x))l(?=类)/gi,'$1')
+          .replace(/[\\s\\u3000，,。；;：:（）()【】\\[\\]<>《》“”"'‘’·、/\\\\_\-]/g,'')
+          .toLowerCase();
+      };
       const substantive=changedNames.filter(value=>normalizeForCompare(value)!==normalizeForCompare(baseName));
       if(substantive.length){
         correctionCount++;
