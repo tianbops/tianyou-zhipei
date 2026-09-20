@@ -294,10 +294,11 @@ function buildBaseMatchIndex(base) {
   return { base, byName, byCode, byBaseCode, byNameLength, byWeakName, byNgram };
 }
 
-function matchTodayStores(recognized, baseStores, learning) {
-  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [];
-  const baseIndex = buildBaseMatchIndex(base);
-  const { byName, byCode, byBaseCode, byNameLength, byWeakName, byNgram } = baseIndex;
+function matchTodayStores(recognized, baseMatchIndex, learning) {
+  const baseIndex = baseMatchIndex && Array.isArray(baseMatchIndex.base)
+    ? baseMatchIndex
+    : buildBaseMatchIndex(Array.isArray(baseMatchIndex) ? baseMatchIndex.filter(Boolean) : []);
+  const { base, byName, byCode, byBaseCode, byNameLength, byWeakName, byNgram } = baseIndex;
   const byLearning = new Map();
   for (const [aliasKey, record] of Object.entries(learning?.aliases || {})) {
     const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && byBaseCode.get(String(record.baseCode)));
