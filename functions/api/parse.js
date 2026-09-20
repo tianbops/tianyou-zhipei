@@ -25,9 +25,9 @@ export async function onRequest({ request, env }) {
       getBaseStores(env, route, deadline, userId),
       getLearning(env, userId, route, deadline)
     ]);
+    const dataReadyAt = Date.now();
     const base = getCachedBaseMatchIndex(userId, route, baseRecord.dataVersion, baseRecord.stores);
     const indexReadyAt = Date.now();
-    const dataReadyAt = indexReadyAt;
     const parsed = parseDeterministic(text);
     const extractionDoneAt = Date.now();
     const result = matchTodayStores(parsed.stores, base, learning);
@@ -39,7 +39,7 @@ export async function onRequest({ request, env }) {
       totalMs: planningDoneAt - startedAt,
       databaseMs: dataReadyAt - startedAt,
       indexMs: indexReadyAt - dataReadyAt,
-      extractionMs: extractionDoneAt - dataReadyAt,
+      extractionMs: extractionDoneAt - indexReadyAt,
       planningMs: planningDoneAt - extractionDoneAt,
       recognizedCount: parsed.stores.length,
       baseStoreCount: base.length
