@@ -25,7 +25,7 @@ function fallbackParse(text){const stores=fallbackStoresFromText(text);if(!store
 let parseAbortController=null,parseInFlight=false,parseCancelled=false;
 async function parseOrderText(text){
   const route=currentRoute();if(!route)throw Error('未指定配送线路');
-  if(parseInFlight)throw Error('解析正在进行，请勿重复点击');
+  if(parseInFlight)throw Error('规划正在进行，请勿重复点击');
   parseInFlight=true;parseCancelled=false;parseAbortController=new AbortController();
   const PARSE_TIMEOUT_MS=120000; // P0测试：门店提取与基准库比对最多等待2分钟
   const timer=setTimeout(()=>parseAbortController?.abort(),PARSE_TIMEOUT_MS);
@@ -35,20 +35,20 @@ async function parseOrderText(text){
     if(!response.ok||!data.success){
       const message=String(data?.error||'');
       if(/未找到.*独立基准数据库/.test(message))return fallbackParse(text);
-      throw Error(message||`解析接口错误（${response.status}）`);
+      throw Error(message||`规划接口错误（${response.status}）`);
     }
     return data.data;
   }catch(e){
     if(e?.name==='AbortError'){
-      if(parseCancelled)throw Object.assign(new Error('已取消解析'),{code:'PARSE_CANCELLED'});
-      throw Error('解析超过2分钟，请检查网络后重试');
+      if(parseCancelled)throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});
+      throw Error('规划超过2分钟，请检查网络后重试');
     }
     throw e;
   }finally{
     clearTimeout(timer);parseAbortController=null;parseInFlight=false;
   }
 }
-window.cancelParse=async()=>{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')cancelOCR().catch(()=>{});toast('已取消解析','warning');};
+window.cancelParse=async()=>{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')cancelOCR().catch(()=>{});toast('已取消规划','warning');};
 
 function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':'plan';const button=$('primaryActionBtn');if(!button)return;button.textContent=primaryActionMode==='confirm'?'确认录入':'规划路线';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false}
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false')}}
