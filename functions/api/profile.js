@@ -24,16 +24,9 @@ export async function onRequest({ request, env }) {
     if (vehicle.length > 30) return json({ success: false, error: '车辆信息不能超过30个字符' }, 400);
 
     const currentRoute = normalizeRoute(user.route);
-    if (route !== currentRoute) {
-      const routeKey = `user:route:${encodeURIComponent(route)}`;
-      const claim = await redisSetNx(env, routeKey, session.id);
-      if (!claim) return json({ success: false, error: '该线路已被其他用户绑定，请选择其他线路' }, 409);
-      if (currentRoute) await redisDelete(env, `user:route:${encodeURIComponent(currentRoute)}`);
-    }
 
     const updated = { ...user, name, route, vehicle, updatedAt: new Date().toISOString(), sessionVersion: Number(user.sessionVersion || 1) + 1 };
     if (!await redisSet(env, `user:${session.id}`, updated)) {
-      if (route !== currentRoute) await redisDelete(env, `user:route:${encodeURIComponent(route)}`);
       return json({ success: false, error: '资料保存失败，请稍后重试' }, 500);
     }
 
