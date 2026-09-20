@@ -285,19 +285,28 @@ function matchTodayStores(recognized, baseStores, learning) {
   return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, learnedCount: matchStats.learned, uniqueStoreCount: stores.length, matchStats };
 }
 
-function findUniqueStoreAnchor(raw, byName) {
+function findUniqueOneCharOmissionMatch(raw, byName) {
   const rawKey = matchKey(raw);
-  if (!rawKey) return null;
-  const anchors = ['活花卉东路店'];
-  for (const anchor of anchors) {
-    const anchorKey = matchKey(anchor);
-    if (!rawKey.includes(anchorKey)) continue;
-    const candidates = [...byName.entries()]
-      .filter(([key]) => key.includes(anchorKey))
-      .map(([, item]) => item);
-    if (candidates.length === 1) return candidates[0];
+  if (!rawKey || rawKey.length < 7) return null;
+  const candidates = [];
+  for (const [baseKey, item] of byName.entries()) {
+    if (baseKey.length !== rawKey.length + 1) continue;
+    let i = 0, j = 0, skipped = false;
+    while (i < rawKey.length && j < baseKey.length) {
+      if (rawKey[i] === baseKey[j]) {
+        i++; j++;
+      } else if (!skipped) {
+        skipped = true;
+        j++;
+      } else {
+        skipped = false;
+        break;
+      }
+    }
+    if (skipped || j === baseKey.length) candidates.push(item);
+    if (candidates.length > 1) return null;
   }
-  return null;
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
@@ -307,9 +316,10 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
   const key = matchKey(raw);
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
-  // 已验证的“Ⅱ类/II类”门店：若类别前缀造成弱键冲突，再用唯一门店锚点回查基准库。
-  const anchor = findUniqueStoreAnchor(raw, byName);
-  if (anchor) return { type: 'match', item: anchor, mode: 'exact', score: 0.995 };
+  // 兼容 OCR 单字符漏字：仅在基准库中存在唯一的“只差一个字符”门店时直接匹配。
+  // 例如基准库“II类天友生活花卉东路店”，OCR 读成“Ⅱ类天友活花卉东路店”。
+  const omission = findUniqueOneCharOmissionMatch(raw, byName);
+  if (omission) return { type: 'match', item: omission, mode: 'similarity', score: 0.995 };
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
