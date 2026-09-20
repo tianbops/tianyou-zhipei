@@ -20,11 +20,24 @@ export async function onRequest({ request, env }) {
     if (request.method === 'GET') {
       const result = await redisGet(env, key);
       if (!result.ok) return json({ error: '线路基准数据库读取失败' }, 502);
+      const hasCurrentValue = result.result !== null && result.result !== undefined && result.result !== '';
       const record = parseRecord(result.result);
-      if (!record) {
+
+      // 只有“真正不存在”时才允许初始化/进入旧库迁移流程。
+      // 如果账号独立库已经存在但格式损坏，必须明确报错，绝不能静默当成空库，
+      // 否则前端可能显示“暂无门店”，并在下一次保存时覆盖真实数据。
+      if (hasCurrentValue && (!record || typeof record !== 'object' || Array.isArray(record))) {
+        return json({ error: '线路基准数据库格式异常，请先修复该账号的数据' }, 500);
+      }
+
+      if (!hasCurrentValue) {
         const legacy = await redisGet(env, `route:${route}:base`);
         if (!legacy.ok) return json({ error: '线路基准数据库读取失败' }, 502);
+        const legacyHasValue = legacy.result !== null && legacy.result !== undefined && legacy.result !== '';
         const legacyRecord = parseRecord(legacy.result);
+        if (legacyHasValue && (!legacyRecord || typeof legacyRecord !== 'object' || Array.isArray(legacyRecord))) {
+          return json({ error: '旧版线路基准数据库格式异常，无法迁移' }, 500);
+        }
         const hasLegacy = Array.isArray(legacyRecord?.stores) && legacyRecord.stores.length > 0;
         if (hasLegacy) {
           return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0, migrationRequired: true });
@@ -40,11 +53,18 @@ export async function onRequest({ request, env }) {
         }
         // 并发情况下，其他请求可能已先创建/保存真实基准库；重新读取，绝不覆盖对方数据。
         const current = parseRecord(created.result);
-        const currentStores = normalizeStores(current?.stores);
-        return json({ route, stores: currentStores, source: 'server', updatedAt: current?.updatedAt || null,
-          dataVersion: Number(current?.dataVersion) || 1, migrationRequired: false, initialized: false });
+        if (!current || typeof current !== 'object' || Array.isArray(current)) {
+          return json({ error: '线路基准数据库初始化后格式异常，请稍后重试' }, 500);
+        }
+        const currentStores = normalizeStores(current.stores);
+        return json({ route, stores: currentStores, source: 'server', updatedAt: current.updatedAt || null,
+          dataVersion: Number(current.dataVersion) || 1, migrationRequired: false, initialized: false });
       }
-      const stores = normalizeStores(record?.stores);
+
+      if (!Array.isArray(record.stores)) {
+        return json({ error: '线路基准数据库格式异常：stores 必须是数组' }, 500);
+      }
+      const stores = normalizeStores(record.stores);
       const recordUserId = normalizeUserId(record?.userId);
       const recordRoute = normalizeRoute(record?.route);
       // 防止历史/手工写入的错误记录被当前账号误读；只有明确属于当前用户+当前线路的数据才可使用。
@@ -180,15 +200,25 @@ async function releaseLock(env, key, value) {
 }
 
 async function redisGet(env, key) {
-  const response = await fetch(
-    `${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`,
-    {
-      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-      cache: 'no-store'
-    }
-  );
-  const data = await response.json().catch(() => ({}));
-  return { ok: response.ok, result: data.result };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(
+      `${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`,
+      {
+        headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+        cache: 'no-store',
+        signal: controller.signal
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    return { ok: response.ok, result: data.result };
+  } catch (error) {
+    if (error?.name === 'AbortError') return { ok: false, result: null, timeout: true };
+    return { ok: false, result: null, error: error?.message || 'network error' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function redisSetIfAbsent(env, key, value) {
