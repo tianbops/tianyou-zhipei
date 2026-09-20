@@ -233,16 +233,18 @@ function matchTodayStores(recognized, baseStores, learning) {
   // getBaseStores 已完成标准化；保留原 index，避免重复 normalizeBase 导致线路顺序与去重键失效。
   const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byWeakName = new Map(), byLearning = new Map();
   for (const item of base) {
-    const nameKey = matchKey(item.name);
-    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
-    const weakKey = weakMatchKey(item.name);
-    if (weakKey) {
-      const existing = byWeakName.get(weakKey);
-      if (existing === undefined) byWeakName.set(weakKey, item);
-      else if (existing !== item) byWeakName.set(weakKey, null);
+    for (const candidateName of getBaseMatchNames(item)) {
+      const nameKey = matchKey(candidateName);
+      if (nameKey && !byName.has(nameKey)) byName.set(nameKey, item);
+      const weakKey = weakMatchKey(candidateName);
+      if (weakKey) {
+        const existing = byWeakName.get(weakKey);
+        if (existing === undefined) byWeakName.set(weakKey, item);
+        else if (existing !== item) byWeakName.set(weakKey, null);
+      }
+      const businessCode = extractBusinessCode(candidateName);
+      if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
     }
-    const businessCode = extractBusinessCode(item.name);
-    if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
   }
   for (const [aliasKey, record] of Object.entries(learning?.aliases || {})) {
     const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && base.find(item => String(item.code) === String(record.baseCode)));
@@ -316,8 +318,7 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
   const key = matchKey(raw);
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
-  // 兼容 OCR 单字符漏字：仅在基准库中存在唯一的“只差一个字符”门店时直接匹配。
-  // 例如基准库“II类天友生活花卉东路店”，OCR 读成“Ⅱ类天友活花卉东路店”。
+  // 兼容 OCR 单字符漏字：仅在当前线路基准库中存在唯一候选时直接匹配。
   const omission = findUniqueOneCharOmissionMatch(raw, byName);
   if (omission) return { type: 'match', item: omission, mode: 'similarity', score: 0.995 };
   const weakKey = weakMatchKey(raw);
@@ -397,6 +398,22 @@ function characterNgramSimilarity(a, b, n = 2) { const aa = ngramSet(a, n), bb =
 function ngramSet(value, n) { const text = String(value || ''); const set = new Set(); if (text.length <= n) { if (text) set.add(text); return set; } for (let i = 0; i <= text.length - n; i++) set.add(text.slice(i, i + n)); return set; }
 function normalizedEditSimilarity(a, b) { const aa = String(a || ''), bb = String(b || ''); if (aa === bb) return 1; if (!aa || !bb) return 0; return 1 - levenshtein(aa, bb) / Math.max(aa.length, bb.length); }
 function levenshtein(a, b) { if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length; let previous = Array.from({ length: b.length + 1 }, (_, i) => i); for (let i = 1; i <= a.length; i++) { const current = [i]; for (let j = 1; j <= b.length; j++) { const cost = a[i - 1] === b[j - 1] ? 0 : 1; current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + cost); } previous = current; } return previous[b.length]; }
+
+function getBaseMatchNames(item) {
+  if (!item || typeof item !== 'object') return item ? [String(item)] : [];
+  const values = [
+    item.name,
+    item.storeName,
+    item.title,
+    item.customerName,
+    item['门店名称'],
+    item.originalName,
+    item.displayName,
+    item['原始名称'],
+    item['显示名称']
+  ];
+  return [...new Set(values.map(value => cleanStoreName(value)).filter(Boolean))];
+}
 
 function normalizeBase(store, index) {
   if (typeof store === 'string') return { name: cleanStoreName(store), code: String(index + 1).padStart(2, '0'), index };
