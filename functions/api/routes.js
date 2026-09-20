@@ -13,37 +13,56 @@ export async function onRequest({ request, env }) {
   const session = await authRequired(request, env, { route });
   if (!session) return json({ error: '未登录或无权访问该线路数据' }, 401);
 
-  const key = `route:${route}:base`;
+  const userId = normalizeUserId(session.id);
+  if (!userId) return json({ error: '用户身份信息不完整，无法访问线路基准数据库' }, 403);
+  const key = scopedBaseKey(userId, route);
   try {
     if (request.method === 'GET') {
       const result = await redisGet(env, key);
       if (!result.ok) return json({ error: '线路基准数据库读取失败' }, 502);
-
       const record = parseRecord(result.result);
+      if (!record) {
+        const legacy = await redisGet(env, `route:${route}:base`);
+        if (!legacy.ok) return json({ error: '线路基准数据库读取失败' }, 502);
+        const legacyRecord = parseRecord(legacy.result);
+        return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0,
+          migrationRequired: Array.isArray(legacyRecord?.stores) && legacyRecord.stores.length > 0 });
+      }
       const stores = Array.isArray(record?.stores) ? normalizeStores(record.stores) : [];
-
-      return json({
-        route,
-        stores,
-        source: 'server',
-        updatedAt: record?.updatedAt || null
-      });
+      return json({ route, stores, source: 'server', updatedAt: record?.updatedAt || null,
+        dataVersion: Number(record?.dataVersion) || 1, migrationRequired: false });
     }
 
     if (request.method === 'PUT') {
       const body = await request.json().catch(() => ({}));
       if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
 
-      const lockKey = `lock:route-base:${route}`;
+      const lockKey = `lock:route-base:${encodeKey(userId)}:${encodeKey(route)}`;
       const lockValue = crypto.randomUUID();
       if (!(await acquireLock(env, lockKey, lockValue, LOCK_TTL_SECONDS))) {
         return json({ error: '该线路基准库正在被修改，请稍后重试' }, 409);
       }
 
       try {
-        const stores = normalizeStores(body.stores);
+        let stores;
+        let dataVersion = 1;
+        if (body.migrateLegacy === true) {
+          const current = await redisGet(env, key);
+          if (current.ok && current.result) return json({ error: '当前账号已经存在线路基准数据库，无需迁移' }, 409);
+          const legacy = await redisGet(env, `route:${route}:base`);
+          const legacyRecord = parseRecord(legacy.result);
+          if (!Array.isArray(legacyRecord?.stores) || !legacyRecord.stores.length) return json({ error: '未找到可迁移的旧版线路基准数据库' }, 404);
+          stores = normalizeStores(legacyRecord.stores);
+          dataVersion = Math.max(1, Number(legacyRecord?.dataVersion) || 1);
+        } else {
+          stores = normalizeStores(body.stores);
+          const current = await redisGet(env, key);
+          const currentRecord = parseRecord(current.result);
+          dataVersion = Math.max(1, Number(currentRecord?.dataVersion) || 0) + 1;
+        }
         const updatedAt = new Date().toISOString();
-        const value = { route, stores, updatedAt, source: 'route-editor' };
+        const value = { userId, route, stores, dataVersion, updatedAt,
+          source: body.migrateLegacy === true ? 'legacy-migration' : 'route-editor' };
         const saved = await redisSet(env, key, value);
         if (!saved.ok) return json({ error: '线路基准数据库保存失败' }, 500);
 
@@ -53,7 +72,8 @@ export async function onRequest({ request, env }) {
           stores,
           storeCount: stores.length,
           source: 'server',
-          updatedAt
+          updatedAt,
+          dataVersion
         });
       } finally {
         await releaseLock(env, lockKey, lockValue).catch(() => {});
