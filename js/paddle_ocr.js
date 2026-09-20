@@ -298,14 +298,3 @@
   bindUploadInput('ocrAlbumInput', 'album');
   bindUploadInput('ocrFileInput', 'file');
 
-  // 文件入口采用原生 input 覆盖按钮，避免异步调用丢失 Android 用户手势。
-  // 拍摄/相册/文件均由各自 input 的 change 事件统一进入 OCR 流程。
-  window.triggerUpload = function(type) {
-    if (busy) return;
-    const input = type === 'camera' ? $('ocrCameraInput') : type === 'album' ? $('ocrAlbumInput') : $('ocrFileInput');
-    if (!input) {
-      setStatus('上传功能未加载，请刷新页面重试', 100, false, true);
-      return;
-    }
-    input.click();
-  };
