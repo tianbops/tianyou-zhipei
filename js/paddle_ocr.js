@@ -298,12 +298,4 @@
   bindUploadInput('ocrAlbumInput', 'album');
   bindUploadInput('ocrFileInput', 'file');
 
-
-      });
-    });
-  }
-
-  bindUploadInput('ocrCameraInput', 'camera');
-  bindUploadInput('ocrAlbumInput', 'album');
-  bindUploadInput('ocrFileInput', 'file');
 })();
