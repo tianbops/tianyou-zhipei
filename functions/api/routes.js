@@ -25,8 +25,17 @@ export async function onRequest({ request, env }) {
         const legacy = await redisGet(env, `route:${route}:base`);
         if (!legacy.ok) return json({ error: '线路基准数据库读取失败' }, 502);
         const legacyRecord = parseRecord(legacy.result);
-        return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0,
-          migrationRequired: Array.isArray(legacyRecord?.stores) && legacyRecord.stores.length > 0 });
+        const hasLegacy = Array.isArray(legacyRecord?.stores) && legacyRecord.stores.length > 0;
+        if (hasLegacy) {
+          return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0, migrationRequired: true });
+        }
+        const now = new Date().toISOString();
+        const initialized = {
+          userId, route, stores: [], dataVersion: 1, updatedAt: now, source: 'auto-init'
+        };
+        const created = await redisSet(env, key, initialized);
+        if (!created.ok) return json({ error: '线路基准数据库初始化失败' }, 500);
+        return json({ route, stores: [], source: 'server', updatedAt: now, dataVersion: 1, migrationRequired: false, initialized: true });
       }
       const stores = Array.isArray(record?.stores) ? normalizeStores(record.stores) : [];
       return json({ route, stores, source: 'server', updatedAt: record?.updatedAt || null,
