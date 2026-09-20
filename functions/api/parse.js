@@ -449,7 +449,7 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   if (substitution) return { type: 'match', item: substitution, mode: 'similarity', score: 0.99 };
   const shortOmission = findUniqueShortOmissionMatch(raw, byName, byNameLength);
   if (shortOmission) return { type: 'match', item: shortOmission, mode: 'similarity', score: 0.985 };
-  const weakKey = directFeatures.weakKey;
+  const weakKey = features.weakKey;
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   return null;
