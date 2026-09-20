@@ -33,9 +33,16 @@ export async function onRequest({ request, env }) {
         const initialized = {
           userId, route, stores: [], dataVersion: 1, updatedAt: now, source: 'auto-init'
         };
-        const created = await redisSet(env, key, initialized);
+        const created = await redisSetIfAbsent(env, key, initialized);
         if (!created.ok) return json({ error: '线路基准数据库初始化失败' }, 500);
-        return json({ route, stores: [], source: 'server', updatedAt: now, dataVersion: 1, migrationRequired: false, initialized: true });
+        if (created.created) {
+          return json({ route, stores: [], source: 'server', updatedAt: now, dataVersion: 1, migrationRequired: false, initialized: true });
+        }
+        // 并发情况下，其他请求可能已先创建/保存真实基准库；重新读取，绝不覆盖对方数据。
+        const current = parseRecord(created.result);
+        const currentStores = normalizeStores(current?.stores);
+        return json({ route, stores: currentStores, source: 'server', updatedAt: current?.updatedAt || null,
+          dataVersion: Number(current?.dataVersion) || 1, migrationRequired: false, initialized: false });
       }
       const stores = normalizeStores(record?.stores);
       return json({ route, stores, source: 'server', updatedAt: record?.updatedAt || null,
@@ -173,6 +180,25 @@ async function redisGet(env, key) {
   );
   const data = await response.json().catch(() => ({}));
   return { ok: response.ok, result: data.result };
+}
+
+async function redisSetIfAbsent(env, key, value) {
+  const response = await fetch(
+    `${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}/NX`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+      cache: 'no-store'
+    }
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) return { ok: false, created: false, result: null };
+  if (data.result === 'OK') return { ok: true, created: true, result: value };
+  if (data.result === null) {
+    const current = await redisGet(env, key);
+    return { ok: current.ok, created: false, result: current.result };
+  }
+  return { ok: false, created: false, result: data.result };
 }
 
 async function redisSet(env, key, value) {
