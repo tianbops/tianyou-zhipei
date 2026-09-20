@@ -291,7 +291,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache);
+    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -436,7 +436,7 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   return null;
 }
 
-function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache) {
+function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram, similarityCache, keyFeatureCache) {
   const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
   if (direct && !used.has(direct.item.index)) return direct;
 
@@ -466,7 +466,7 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
       const cheap = cheapSimilarityUpperBound(rawFeatures, baseMeta);
       // edit 相似度的最大值为 1，因此 cheap 是最终分数的安全上界。
       // 只有在当前最佳分数已经更高时才跳过 Levenshtein，保证结果不变。
-      if (bestScore > 0 && cheap <= bestScore) continue;
+      if (bestScore >= 0.84 && cheap <= bestScore) continue;
       const score = storeSimilarityFromMeta(raw, baseMeta, keyFeatureCache);
       scores.set(item.index, score);
       if (score > bestScore) bestScore = score;
