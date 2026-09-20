@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const $=id=>document.getElementById(id);
-const MESSAGES={idle:'等待处理…',loading:'正在处理…',success:'处理完成',error:'处理失败',cancelled:'已取消'};
+const MESSAGES={idle:'准备好开始今天的配送任务',loading:'正在处理…',success:'路线规划完成',error:'运单识别失败',cancelled:'已取消'};
 function setError(message){const text=String(message||'').trim();if($('statusText')&&text){$('statusText').textContent=text;$('statusText').setAttribute('data-text',text);}}
 function clearError(){setError('');}
 function render(status='idle',progress=0,message=''){
@@ -10,6 +10,8 @@ function render(status='idle',progress=0,message=''){
   if(!box)return;
   const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';
   box.classList.add('active');
+  const sheet=box.closest('.upload-sheet');
+  if(sheet){sheet.classList.remove('waiting','processing','success','error','cancelled');sheet.classList.add(state==='idle'?'waiting':state==='loading'?'processing':state);}
   box.classList.remove('loading','success','error','cancelled');
   if(state!=='idle')box.classList.add(state);
   const icon=$('statusIcon');
