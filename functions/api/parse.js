@@ -242,7 +242,7 @@ async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
 }
 
 function matchTodayStores(recognized, baseStores, learning) {
-  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byBaseCode = new Map(), byNameLength = new Map(), byWeakName = new Map(), byLearning = new Map();
+  const base = Array.isArray(baseStores) ? baseStores.filter(Boolean) : [], byName = new Map(), byCode = new Map(), byBaseCode = new Map(), byNameLength = new Map(), byWeakName = new Map(), byNgram = new Map(), byLearning = new Map();
   for (const item of base) {
     for (const candidateName of getBaseMatchNames(item)) {
       const nameKey = matchKey(candidateName);
@@ -262,6 +262,11 @@ function matchTodayStores(recognized, baseStores, learning) {
       if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
       const baseCode = String(item.code || '').trim();
       if (baseCode && !byBaseCode.has(baseCode)) byBaseCode.set(baseCode, item);
+      for (const gram of ngramSet(nameKey, 2)) {
+        const gramBucket = byNgram.get(gram) || [];
+        if (!gramBucket.includes(item)) gramBucket.push(item);
+        byNgram.set(gram, gramBucket);
+      }
     }
   }
   for (const [aliasKey, record] of Object.entries(learning?.aliases || {})) {
@@ -283,7 +288,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength);
+    const hit = findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength, byNgram);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -428,7 +433,7 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   return null;
 }
 
-function findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength) {
+function findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength, byNgram) {
   const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
   if (direct && !used.has(direct.item.index)) return direct;
 
@@ -446,9 +451,10 @@ function findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWe
     return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   }
 
+  const candidates = collectSimilarityCandidates(raw, base, byNameLength, byNgram);
   let best = null;
   const alternatives = [];
-  for (const item of base) {
+  for (const item of candidates) {
     if (used.has(item.index)) continue;
     const score = storeSimilarity(raw, item.name);
     if (!best || score > best.score) best = { item, score };
@@ -491,6 +497,33 @@ function getBaseMatchMeta(item) {
   };
   baseMatchMeta.set(item, meta);
   return meta;
+}
+
+function collectSimilarityCandidates(raw, base, byNameLength, byNgram) {
+  const key = matchKey(raw);
+  if (!key) return [];
+  const selected = new Set();
+  const lengthMin = Math.max(1, key.length - 2);
+  const lengthMax = key.length + 2;
+  for (let length = lengthMin; length <= lengthMax; length++) {
+    for (const item of byNameLength.get(length) || []) selected.add(item);
+  }
+  // 对较长名称优先用共享二元片段缩小候选；短名称保持长度桶，避免因信息不足漏匹配。
+  if (key.length >= 8 && byNgram?.size) {
+    const grams = [...ngramSet(key, 2)];
+    if (grams.length >= 2) {
+      const gramHits = new Map();
+      for (const gram of grams) {
+        for (const item of byNgram.get(gram) || []) gramHits.set(item, (gramHits.get(item) || 0) + 1);
+      }
+      const narrowed = [...gramHits.entries()]
+        .filter(([item, hits]) => selected.has(item) && hits >= Math.max(2, Math.ceil(grams.length * 0.18)))
+        .sort((a, b) => b[1] - a[1])
+        .map(([item]) => item);
+      if (narrowed.length) return narrowed;
+    }
+  }
+  return [...selected].filter(item => base.includes(item));
 }
 
 function storeSimilarity(a, b) {
