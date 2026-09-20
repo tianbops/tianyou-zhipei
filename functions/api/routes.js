@@ -37,7 +37,7 @@ export async function onRequest({ request, env }) {
         if (!created.ok) return json({ error: '线路基准数据库初始化失败' }, 500);
         return json({ route, stores: [], source: 'server', updatedAt: now, dataVersion: 1, migrationRequired: false, initialized: true });
       }
-      const stores = Array.isArray(record?.stores) ? normalizeStores(record.stores) : [];
+      const stores = normalizeStores(record?.stores);
       return json({ route, stores, source: 'server', updatedAt: record?.updatedAt || null,
         dataVersion: Number(record?.dataVersion) || 1, migrationRequired: false });
     }
@@ -111,6 +111,7 @@ function encodeKey(value) {
 }
 
 function normalizeStores(stores) {
+  if (!Array.isArray(stores)) return [];
   return stores
     .map((store, index) => ({
       ...store,
