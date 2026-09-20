@@ -95,3 +95,33 @@ to{opacity:0;transform:translateY(-4px)}}to{opacity:1;transform:none}}
 /* 弹窗统一居中 */
 .upload-overlay.active,.correction-modal.active{align-items:center;justify-content:center}
 .upload-sheet{margin:0 auto}
+
+/* 状态框信息层次与规划详情联动 */
+.parse-status{display:flex;flex-direction:column;justify-content:center;gap:0;min-height:40px}
+.parse-status.detail-hidden{display:none!important}
+.status-row{width:100%;display:flex;align-items:center;min-height:20px}
+.status-row #statusText{flex:1;min-width:0}
+.status-detail{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:nowrap}
+.status-detail .detail-line{flex:1 1 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status-detail .detail-line:nth-child(2){text-align:right}
+.status-detail .detail-line:nth-child(3){text-align:right}
+.status-detail .detail-line:nth-child(1):only-child{text-align:left}
+.status-detail .detail-line:nth-child(1):nth-last-child(2){text-align:left}
+.status-detail .detail-line:nth-child(2):nth-last-child(1){text-align:right}
+.status-detail:has(.detail-line:nth-child(3)) .detail-line:nth-child(2){text-align:center}
+.status-detail:has(.detail-line:nth-child(3)) .detail-line:nth-child(3){text-align:right}
+.status-detail:has(.detail-line:nth-child(2)):not(:has(.detail-line:nth-child(3))) .detail-line:nth-child(1){text-align:left}
+.status-detail:has(.detail-line:nth-child(2)):not(:has(.detail-line:nth-child(3))) .detail-line:nth-child(2){text-align:right}
+.function-list{display:flex;flex-direction:column;gap:16px;margin-top:28px}
+.function-btn{margin-bottom:0}
+.upload-source-menu{margin-top:10px}
+.source-menu-options{gap:12px}
+.source-menu-cancel{margin-top:14px}
+.sheet-footer{margin-top:14px}
+.detail-toggle{margin-top:12px}
+.review-summary{margin-top:12px}
+@media(max-width:430px){
+  .function-list{gap:18px}
+  .upload-sheet{padding-top:18px}
+  .status-detail{gap:8px}
+}
