@@ -298,44 +298,10 @@
   bindUploadInput('ocrAlbumInput', 'album');
   bindUploadInput('ocrFileInput', 'file');
 
-  async function openSystemFilePicker() {
-    // Chrome 132+ Android 支持 File System Access API；优先使用真正的系统文件选择器。
-    if (typeof window.showOpenFilePicker === 'function') {
-      try {
-        const handles = await window.showOpenFilePicker({
-          multiple: true,
-          excludeAcceptAllOption: false,
-          types: [{
-            description: '运单图片',
-            accept: {
-              'image/jpeg': ['.jpg', '.jpeg'],
-              'image/png': ['.png'],
-              'image/webp': ['.webp'],
-              'image/heic': ['.heic'],
-              'image/heif': ['.heif']
-            }
-          }]
-        });
-        const files = [];
-        for (const handle of handles) files.push(await handle.getFile());
-        if (files.length) {
-          await processFiles(files);
-        }
-        return true;
-      } catch (error) {
-        if (error?.name === 'AbortError') return true;
-        console.warn('[PaddleOCR] system file picker unavailable, fallback to input:', error);
-      }
-    }
-    return false;
-  }
-
-  window.triggerUpload = async function(type) {
+  // 文件入口必须在用户点击的同步手势中直接触发 input.click()。
+  // 不在 click 后先 await File System Access API，避免 Android 浏览器丢失用户激活导致“点击无反应”。
+  window.triggerUpload = function(type) {
     if (busy) return;
-    if (type === 'file') {
-      const opened = await openSystemFilePicker();
-      if (opened) return;
-    }
     const input = type === 'camera' ? $('ocrCameraInput') : type === 'album' ? $('ocrAlbumInput') : $('ocrFileInput');
     if (!input) {
       setStatus('上传功能未加载，请刷新页面重试', 100, false, true);
