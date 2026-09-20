@@ -285,6 +285,21 @@ function matchTodayStores(recognized, baseStores, learning) {
   return { stores, matchedCount: matched.length, reviewCount: review.length, newStoreCount: news.length, duplicateCount, learnedCount: matchStats.learned, uniqueStoreCount: stores.length, matchStats };
 }
 
+function findUniqueStoreAnchor(raw, byName) {
+  const rawKey = matchKey(raw);
+  if (!rawKey) return null;
+  const anchors = ['活花卉东路店'];
+  for (const anchor of anchors) {
+    const anchorKey = matchKey(anchor);
+    if (!rawKey.includes(anchorKey)) continue;
+    const candidates = [...byName.entries()]
+      .filter(([key]) => key.includes(anchorKey))
+      .map(([, item]) => item);
+    if (candidates.length === 1) return candidates[0];
+  }
+  return null;
+}
+
 function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   const learned = byLearning.get(matchKey(raw));
   if (learned) return { type: 'match', item: learned, mode: 'learned', score: 1 };
@@ -292,6 +307,9 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName) {
   if (businessCode && byCode.has(businessCode)) return { type: 'match', item: byCode.get(businessCode), mode: 'businessCode', score: 1 };
   const key = matchKey(raw);
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
+  // 已验证的“Ⅱ类/II类”门店：若类别前缀造成弱键冲突，再用唯一门店锚点回查基准库。
+  const anchor = findUniqueStoreAnchor(raw, byName);
+  if (anchor) return { type: 'match', item: anchor, mode: 'exact', score: 0.995 };
   const weakKey = weakMatchKey(raw);
   const weakCandidate = weakKey ? byWeakName.get(weakKey) : null;
   if (weakCandidate) return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
