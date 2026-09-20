@@ -73,6 +73,7 @@ to{opacity:0;transform:translateY(-4px)}}to{opacity:1;transform:none}}
 .upload-sheet.success .upload-source-menu,.upload-sheet.error .upload-source-menu{display:none}
 .upload-sheet.success .sheet-footer{display:flex}
 .upload-sheet.error .sheet-footer{display:flex}
+.upload-sheet.error .quick-actions{display:none}
 .upload-sheet.success .btn-primary-action{visibility:visible}
 .upload-sheet.error .btn-primary-action{visibility:visible}
 .upload-sheet.cancelled .sheet-footer{display:flex}
