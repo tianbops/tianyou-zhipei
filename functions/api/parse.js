@@ -277,6 +277,7 @@ function matchTodayStores(recognized, baseStores, learning) {
   const matched = [], review = [], news = [], used = new Set(), canonicalByBaseIndex = new Map();
   // 仅在本次请求内复用OCR门店候选与相似度计算；不跨用户、线路或请求缓存，避免数据串线。
   const similarityCache = new Map();
+  const keyFeatureCache = new Map();
   const matchStats = { learned: 0, businessCode: 0, exact: 0, similarity: 0, review: 0, new: 0, duplicate: 0 };
   let duplicateCount = 0;
   for (const raw of recognized) {
@@ -540,25 +541,40 @@ function collectSimilarityCandidates(raw, byNameLength, byNgram) {
 }
 
 function storeSimilarity(a, b) {
-  const ak = matchKey(a);
-  const bm = getBaseMatchMeta(b);
-  if (!ak || !bm.key) return 0;
-  if (bm.keys.includes(ak)) return 1;
-  const codeA = extractBusinessCode(a);
-  if (codeA && bm.businessCodes.includes(codeA)) return 1;
+  return storeSimilarityFromMeta(a, getBaseMatchMeta(b));
+}
 
-  const rawTokens = meaningfulTokens(a);
+function storeSimilarityFromMeta(a, bm, keyFeatureCache) {
+  const features = getRawMatchFeatures(a, keyFeatureCache);
+  if (!features.key || !bm.key) return 0;
+  if (bm.keys.includes(features.key)) return 1;
+  if (features.businessCode && bm.businessCodes.includes(features.businessCode)) return 1;
+
   let edit = 0, ngram = 0, token = 0, containment = 0;
   for (let index = 0; index < bm.keys.length; index++) {
     const key = bm.keys[index];
-    edit = Math.max(edit, normalizedEditSimilarity(ak, key));
-    ngram = Math.max(ngram, characterNgramSimilarity(ak, key, 2));
-    token = Math.max(token, tokenOverlapFromSets(rawTokens, bm.tokenSets[index]));
-    if (key.includes(ak) || ak.includes(key)) {
-      containment = Math.max(containment, Math.min(ak.length, key.length) / Math.max(ak.length, key.length));
+    edit = Math.max(edit, normalizedEditSimilarity(features.key, key));
+    ngram = Math.max(ngram, characterNgramSimilarity(features.key, key, 2));
+    token = Math.max(token, tokenOverlapFromSets(features.tokens, bm.tokenSets[index]));
+    if (key.includes(features.key) || features.key.includes(key)) {
+      containment = Math.max(containment, Math.min(features.key.length, key.length) / Math.max(features.key.length, key.length));
     }
   }
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
+}
+
+function getRawMatchFeatures(value, cache) {
+  const key = matchKey(value);
+  if (!key) return { key: '', businessCode: '', tokens: new Set() };
+  const cached = cache?.get(key);
+  if (cached) return cached;
+  const features = {
+    key,
+    businessCode: extractBusinessCode(value),
+    tokens: meaningfulTokens(key)
+  };
+  cache?.set(key, features);
+  return features;
 }
 
 function tokenOverlapFromSets(a, b) {
