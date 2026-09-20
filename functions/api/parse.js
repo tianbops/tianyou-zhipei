@@ -288,7 +288,7 @@ function matchTodayStores(recognized, baseStores, learning) {
         duplicateCount++; matchStats.duplicate++; continue;
       }
     }
-    const hit = findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength, byNgram);
+    const hit = findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram);
     if (hit.type === 'match') {
       used.add(hit.item.index);
       const item = toMatched(hit.item, hit.mode, hit.score, raw);
@@ -433,7 +433,7 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   return null;
 }
 
-function findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWeakName, byNameLength, byNgram) {
+function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLength, byNgram) {
   const direct = findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLength);
   if (direct && !used.has(direct.item.index)) return direct;
 
@@ -451,7 +451,7 @@ function findMatch(raw, base, byName, byCode, byBaseCode, used, byLearning, byWe
     return { type: 'match', item: weakCandidate, mode: 'exact', score: 0.99 };
   }
 
-  const candidates = collectSimilarityCandidates(raw, base, byNameLength, byNgram);
+  const candidates = collectSimilarityCandidates(raw, byNameLength, byNgram);
   let best = null;
   const alternatives = [];
   for (const item of candidates) {
@@ -499,7 +499,7 @@ function getBaseMatchMeta(item) {
   return meta;
 }
 
-function collectSimilarityCandidates(raw, base, byNameLength, byNgram) {
+function collectSimilarityCandidates(raw, byNameLength, byNgram) {
   const key = matchKey(raw);
   if (!key) return [];
   const selected = new Set();
@@ -523,7 +523,7 @@ function collectSimilarityCandidates(raw, base, byNameLength, byNgram) {
       if (narrowed.length) return narrowed;
     }
   }
-  return [...selected].filter(item => base.includes(item));
+  return [...selected];
 }
 
 function storeSimilarity(a, b) {
