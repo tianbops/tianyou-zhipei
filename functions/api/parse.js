@@ -324,7 +324,7 @@ function findUniqueOneCharOmissionMatch(raw, byName, byNameLength) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function findUniqueOneCharInsertionMatch(raw, byName, byNameLength) {
+function findUniqueOneCharInsertionMatch(raw, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
@@ -337,7 +337,7 @@ function findUniqueOneCharInsertionMatch(raw, byName, byNameLength) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function findUniqueOneCharSubstitutionMatch(raw, byName, byNameLength) {
+function findUniqueOneCharSubstitutionMatch(raw, byNameLength) {
   const rawKey = matchKey(raw);
   if (!rawKey || rawKey.length < 7) return null;
   const candidates = [];
@@ -348,6 +348,30 @@ function findUniqueOneCharSubstitutionMatch(raw, byName, byNameLength) {
     if (candidates.length > 1) return null;
   }
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+// 判断两个已归一化名称是否只相差1个字符。
+// 用于OCR单字符插入/替换的快速唯一候选匹配；长度差1时允许一次插入/删除，长度相同时允许一次替换。
+function isOneCharEdit(a, b) {
+  const aa = String(a || ''), bb = String(b || '');
+  if (!aa || !bb) return false;
+  if (aa === bb) return false;
+  if (Math.abs(aa.length - bb.length) > 1) return false;
+
+  let i = 0, j = 0, edits = 0;
+  while (i < aa.length && j < bb.length) {
+    if (aa[i] === bb[j]) {
+      i++; j++;
+      continue;
+    }
+    edits++;
+    if (edits > 1) return false;
+    if (aa.length > bb.length) i++;
+    else if (bb.length > aa.length) j++;
+    else { i++; j++; }
+  }
+  edits += (aa.length - i) + (bb.length - j);
+  return edits === 1;
 }
 
 // OCR偶发连续漏字：最多允许2个字符缺失，但必须在当前线路基准库中得到唯一候选。
@@ -392,9 +416,9 @@ function findDirectMatch(raw, byName, byCode, byLearning, byWeakName, byNameLeng
   if (key && byName.has(key)) return { type: 'match', item: byName.get(key), mode: 'exact', score: 1 };
   const omission = findUniqueOneCharOmissionMatch(raw, byName, byNameLength);
   if (omission) return { type: 'match', item: omission, mode: 'similarity', score: 0.995 };
-  const insertion = findUniqueOneCharInsertionMatch(raw, byName, byNameLength);
+  const insertion = findUniqueOneCharInsertionMatch(raw, byNameLength);
   if (insertion) return { type: 'match', item: insertion, mode: 'similarity', score: 0.995 };
-  const substitution = findUniqueOneCharSubstitutionMatch(raw, byName, byNameLength);
+  const substitution = findUniqueOneCharSubstitutionMatch(raw, byNameLength);
   if (substitution) return { type: 'match', item: substitution, mode: 'similarity', score: 0.99 };
   const shortOmission = findUniqueShortOmissionMatch(raw, byName, byNameLength);
   if (shortOmission) return { type: 'match', item: shortOmission, mode: 'similarity', score: 0.985 };
