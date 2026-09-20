@@ -571,21 +571,13 @@ function collectSimilarityCandidates(raw, byNameLength, byNgram) {
 }
 
 function orderSimilarityCandidates(features, candidates) {
-  if (!features?.key || candidates.length < 2) {
-    return candidates.map(item => {
-      const meta = getBaseMatchMeta(item);
-      const nonEdit = getNonEditSimilarityFromMeta(features, meta);
-      const cheap = 0.38 + nonEdit.ngram * 0.34 + nonEdit.token * 0.20 + nonEdit.containment * 0.08;
-      return { item, meta, nonEdit, cheap, index: item.index };
-    });
-  }
   const ranked = candidates.map((item, index) => {
     const meta = getBaseMatchMeta(item);
     const nonEdit = getNonEditSimilarityFromMeta(features, meta);
     const cheap = 0.38 + nonEdit.ngram * 0.34 + nonEdit.token * 0.20 + nonEdit.containment * 0.08;
     return { item, meta, nonEdit, cheap, index };
   });
-  ranked.sort((a, b) => b.cheap - a.cheap || a.index - b.index);
+  if (ranked.length > 1) ranked.sort((a, b) => b.cheap - a.cheap || a.index - b.index);
   return ranked;
 }
 
