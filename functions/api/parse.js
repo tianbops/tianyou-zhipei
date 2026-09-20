@@ -459,7 +459,18 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
   if (!cached) {
     const candidates = collectSimilarityCandidates(raw, byNameLength, byNgram);
     const scores = new Map();
-    for (const item of candidates) scores.set(item.index, storeSimilarity(raw, item.name));
+    const rawFeatures = getRawMatchFeatures(raw, keyFeatureCache);
+    let bestScore = 0;
+    for (const item of candidates) {
+      const baseMeta = getBaseMatchMeta(item);
+      const cheap = cheapSimilarityUpperBound(rawFeatures, baseMeta);
+      // edit 相似度的最大值为 1，因此 cheap 是最终分数的安全上界。
+      // 只有在当前最佳分数已经更高时才跳过 Levenshtein，保证结果不变。
+      if (bestScore > 0 && cheap <= bestScore) continue;
+      const score = storeSimilarityFromMeta(raw, baseMeta, keyFeatureCache);
+      scores.set(item.index, score);
+      if (score > bestScore) bestScore = score;
+    }
     cached = { candidates, scores };
     if (cacheKey) similarityCache.set(cacheKey, cached);
   }
@@ -554,7 +565,7 @@ function storeSimilarityFromMeta(a, bm, keyFeatureCache) {
   for (let index = 0; index < bm.keys.length; index++) {
     const key = bm.keys[index];
     edit = Math.max(edit, normalizedEditSimilarity(features.key, key));
-    ngram = Math.max(ngram, characterNgramSimilarity(features.key, key, 2));
+    ngram = Math.max(ngram, characterNgramSimilarityFromSets(features.ngrams, bm.ngramSets[index]));
     token = Math.max(token, tokenOverlapFromSets(features.tokens, bm.tokenSets[index]));
     if (key.includes(features.key) || features.key.includes(key)) {
       containment = Math.max(containment, Math.min(features.key.length, key.length) / Math.max(features.key.length, key.length));
@@ -563,15 +574,32 @@ function storeSimilarityFromMeta(a, bm, keyFeatureCache) {
   return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
 }
 
+function cheapSimilarityUpperBound(features, bm) {
+  if (!features.key || !bm.key) return 0;
+  if (bm.keys.includes(features.key)) return 1;
+  if (features.businessCode && bm.businessCodes.includes(features.businessCode)) return 1;
+  let ngram = 0, token = 0, containment = 0;
+  for (let index = 0; index < bm.keys.length; index++) {
+    ngram = Math.max(ngram, characterNgramSimilarityFromSets(features.ngrams, bm.ngramSets[index]));
+    token = Math.max(token, tokenOverlapFromSets(features.tokens, bm.tokenSets[index]));
+    const key = bm.keys[index];
+    if (key.includes(features.key) || features.key.includes(key)) {
+      containment = Math.max(containment, Math.min(features.key.length, key.length) / Math.max(features.key.length, key.length));
+    }
+  }
+  return 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08;
+}
+
 function getRawMatchFeatures(value, cache) {
   const key = matchKey(value);
-  if (!key) return { key: '', businessCode: '', tokens: new Set() };
+  if (!key) return { key: '', businessCode: '', tokens: new Set(), ngrams: new Set() };
   const cached = cache?.get(key);
   if (cached) return cached;
   const features = {
     key,
     businessCode: extractBusinessCode(value),
-    tokens: meaningfulTokens(key)
+    tokens: meaningfulTokens(key),
+    ngrams: ngramSet(key, 2)
   };
   cache?.set(key, features);
   return features;
@@ -591,7 +619,8 @@ function weakMatchKey(value) {
 function stableStoreKey(value) { return matchKey(value).replace(/^(?:渝北|江北|特渠部|天友加盟|天友24h)/, ''); }
 function tokenOverlap(a, b) { const aa = meaningfulTokens(a), bb = meaningfulTokens(b); if (!aa.size || !bb.size) return 0; let common = 0; for (const token of aa) if (bb.has(token)) common++; return common / Math.max(aa.size, bb.size); }
 function meaningfulTokens(value) { const set = new Set(); for (const token of matchKey(value).match(/[a-z]+|\d+|[\u4e00-\u9fff]+/g) || []) if (token.length >= 2 || /\d/.test(token) || /[a-z]/i.test(token)) set.add(token); return set; }
-function characterNgramSimilarity(a, b, n = 2) { const aa = ngramSet(a, n), bb = ngramSet(b, n); if (!aa.size || !bb.size) return 0; let common = 0; for (const value of aa) if (bb.has(value)) common++; return (2 * common) / (aa.size + bb.size); }
+function characterNgramSimilarity(a, b, n = 2) { return characterNgramSimilarityFromSets(ngramSet(a, n), ngramSet(b, n)); }
+function characterNgramSimilarityFromSets(a, b) { if (!a?.size || !b?.size) return 0; let common = 0; for (const value of a) if (b.has(value)) common++; return (2 * common) / (a.size + b.size); }
 function ngramSet(value, n) { const text = String(value || ''); const set = new Set(); if (text.length <= n) { if (text) set.add(text); return set; } for (let i = 0; i <= text.length - n; i++) set.add(text.slice(i, i + n)); return set; }
 function normalizedEditSimilarity(a, b) { const aa = String(a || ''), bb = String(b || ''); if (aa === bb) return 1; if (!aa || !bb) return 0; return 1 - levenshtein(aa, bb) / Math.max(aa.length, bb.length); }
 function levenshtein(a, b) { if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length; let previous = Array.from({ length: b.length + 1 }, (_, i) => i); for (let i = 1; i <= a.length; i++) { const current = [i]; for (let j = 1; j <= b.length; j++) { const cost = a[i - 1] === b[j - 1] ? 0 : 1; current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + cost); } previous = current; } return previous[b.length]; }
