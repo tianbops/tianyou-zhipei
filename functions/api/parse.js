@@ -467,7 +467,21 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
       // edit 相似度的最大值为 1，因此 cheap 是最终分数的安全上界。
       // 只有在当前最佳分数已经更高时才跳过 Levenshtein，保证结果不变。
       if (bestScore >= 0.84 && cheap <= bestScore) continue;
-      const score = storeSimilarityFromMeta(raw, baseMeta, keyFeatureCache);
+
+      // 当当前最佳已经达到“直接匹配”阈值时，先用有界 Levenshtein 判断：
+      // 如果候选的编辑距离连超过当前最佳分数都做不到，就不再执行完整 DP。
+      // 低于 0.84 时仍走原始精确计算，避免影响 review / margin 判定。
+      let score;
+      if (bestScore >= 0.84) {
+        const nonEdit = getNonEditSimilarityFromMeta(rawFeatures, baseMeta);
+        if (canSimilarityBeatBest(rawFeatures.key, baseMeta, nonEdit, bestScore)) {
+          score = similarityFromParts(rawFeatures, baseMeta, nonEdit);
+        } else {
+          continue;
+        }
+      } else {
+        score = storeSimilarityFromMeta(raw, baseMeta, keyFeatureCache);
+      }
       scores.set(item.index, score);
       if (score > bestScore) bestScore = score;
     }
@@ -564,17 +578,90 @@ function storeSimilarityFromMeta(a, bm, keyFeatureCache) {
   if (bm.keys.includes(features.key)) return 1;
   if (features.businessCode && bm.businessCodes.includes(features.businessCode)) return 1;
 
-  let edit = 0, ngram = 0, token = 0, containment = 0;
+  const nonEdit = getNonEditSimilarityFromMeta(features, bm);
+  return similarityFromParts(features, bm, nonEdit);
+}
+
+function getNonEditSimilarityFromMeta(features, bm) {
+  let ngram = 0, token = 0, containment = 0;
   for (let index = 0; index < bm.keys.length; index++) {
     const key = bm.keys[index];
-    edit = Math.max(edit, normalizedEditSimilarity(features.key, key));
     ngram = Math.max(ngram, characterNgramSimilarityFromSets(features.ngrams, bm.ngramSets[index]));
     token = Math.max(token, tokenOverlapFromSets(features.tokens, bm.tokenSets[index]));
     if (key.includes(features.key) || features.key.includes(key)) {
       containment = Math.max(containment, Math.min(features.key.length, key.length) / Math.max(features.key.length, key.length));
     }
   }
-  return Math.min(1, edit * 0.38 + ngram * 0.34 + token * 0.20 + containment * 0.08);
+  return { ngram, token, containment };
+}
+
+function similarityFromParts(features, bm, nonEdit) {
+  let edit = 0;
+  for (const key of bm.keys) {
+    edit = Math.max(edit, normalizedEditSimilarity(features.key, key));
+  }
+  return Math.min(1, edit * 0.38 + nonEdit.ngram * 0.34 + nonEdit.token * 0.20 + nonEdit.containment * 0.08);
+}
+
+// 仅用于 bestScore >= 0.84 的安全剪枝。
+// 若任何基准名称的编辑距离有机会让最终分数严格超过当前最佳，才进入完整精确计算。
+// 返回 false 表示该候选不可能成为新的最佳项。
+function canSimilarityBeatBest(rawKey, bm, nonEdit, bestScore) {
+  const nonEditScore = nonEdit.ngram * 0.34 + nonEdit.token * 0.20 + nonEdit.containment * 0.08;
+  const requiredEditSimilarity = (bestScore - nonEditScore) / 0.38;
+  if (requiredEditSimilarity <= 0) return true;
+  if (requiredEditSimilarity >= 1) return false;
+
+  const maxLen = Math.max(rawKey.length, bm.key.length);
+  const strictDistanceLimit = (1 - requiredEditSimilarity) * maxLen;
+  const maxDistance = Math.ceil(strictDistanceLimit - 1e-12) - 1;
+  if (maxDistance < 0) return false;
+
+  for (const key of bm.keys) {
+    const distance = levenshteinAtMost(rawKey, key, maxDistance);
+    if (distance !== null) return true;
+  }
+  return false;
+}
+
+// 返回精确编辑距离；若确认距离超过 maxDistance，则提前结束。
+// 通过按长度交换两端并限制 DP 带宽，避免对明显不可能超过当前最佳的候选构建完整矩阵。
+function levenshteinAtMost(a, b, maxDistance) {
+  const aa = String(a || ''), bb = String(b || '');
+  if (aa === bb) return 0;
+  if (!aa.length) return bb.length <= maxDistance ? bb.length : null;
+  if (!bb.length) return aa.length <= maxDistance ? aa.length : null;
+  if (Math.abs(aa.length - bb.length) > maxDistance) return null;
+
+  // 让较短字符串作为列，减少每一行需要处理的单元格数量。
+  let rows = aa, cols = bb;
+  if (cols.length > rows.length) [rows, cols] = [cols, rows];
+
+  const width = cols.length;
+  let previous = Array.from({ length: width + 1 }, (_, index) => index);
+  for (let i = 1; i <= rows.length; i++) {
+    const current = new Array(width + 1);
+    current[0] = i;
+    const from = Math.max(1, i - maxDistance);
+    const to = Math.min(width, i + maxDistance);
+    for (let j = 1; j < from; j++) current[j] = maxDistance + 1;
+
+    let rowMin = current[0];
+    for (let j = from; j <= to; j++) {
+      const cost = rows[i - 1] === cols[j - 1] ? 0 : 1;
+      const value = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost
+      );
+      current[j] = value;
+      if (value < rowMin) rowMin = value;
+    }
+    for (let j = to + 1; j <= width; j++) current[j] = maxDistance + 1;
+    if (rowMin > maxDistance) return null;
+    previous = current;
+  }
+  return previous[width] <= maxDistance ? previous[width] : null;
 }
 
 function cheapSimilarityUpperBound(features, bm) {
