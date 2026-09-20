@@ -74,10 +74,18 @@ if(parsedOrders.length){
       mergeLines.push(`合并名称：${rawNames.join('、')} → ${baseName||item.name}`);
     }
     // 已合并的多条原始名称只归入“合并”，不再重复计入“更正”。
+    // 只统计实质名称变化；OCR换行、空格、括号/标点差异不计入“更正”。
     if(rawNames.length<=1&&item?.matched&&baseName&&rawNames.some(value=>value!==baseName)){
-      correctionCount++;
       const changedNames=rawNames.filter(value=>value!==baseName);
-      correctionLines.push(`更正名称：${changedNames.join('、')} → ${baseName}`);
+      const normalizeForCompare=value=>String(value||'')
+        .replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g,roman=>({ 'Ⅱ':'II','Ⅲ':'III','Ⅳ':'IV','Ⅴ':'V','Ⅵ':'VI','Ⅶ':'VII','Ⅷ':'VIII','Ⅸ':'IX','Ⅹ':'X' }[roman]||roman))
+        .replace(/((?:ii|iii|iv|v|vi|vii|viii|ix|x))l(?=类)/gi,'$1')
+        .replace(/[s　，,。；;：:（）()【】\[\]<>《》“”"'‘’·\-_/]/g,'').toLowerCase();
+      const substantive=changedNames.filter(value=>normalizeForCompare(value)!==normalizeForCompare(baseName));
+      if(substantive.length){
+        correctionCount++;
+        correctionLines.push(`更正名称：${substantive.join('、')} → ${baseName}`);
+      }
     }
   });
   if(mergeCount||correctionCount){
