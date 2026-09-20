@@ -60,7 +60,15 @@ export async function onRequest({ request, env }) {
         let dataVersion = 1;
         if (isLegacyMigration) {
           const current = await redisGet(env, key);
-          if (current.ok && current.result) return json({ error: '当前账号已经存在线路基准数据库，无需迁移' }, 409);
+          const currentRecord = parseRecord(current.result);
+          const currentStores = Array.isArray(currentRecord?.stores) ? currentRecord.stores : null;
+          const canReplaceAutoInit = currentRecord
+            && Array.isArray(currentStores)
+            && currentStores.length === 0
+            && currentRecord.source === 'auto-init';
+          if (current.ok && current.result && !canReplaceAutoInit) {
+            return json({ error: '当前账号已经存在线路基准数据库，无需迁移' }, 409);
+          }
           const legacy = await redisGet(env, `route:${route}:base`);
           const legacyRecord = parseRecord(legacy.result);
           if (!Array.isArray(legacyRecord?.stores) || !legacyRecord.stores.length) return json({ error: '未找到可迁移的旧版线路基准数据库' }, 404);
