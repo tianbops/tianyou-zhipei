@@ -264,8 +264,11 @@
       if (!options.batch && !cancelled && isUploadTaskActive(taskId)) setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
     } finally {
-      busy = false;
-      cancelRequested = false;
+      // 旧OCR任务即使在取消后迟到结束，也不能释放/重置新任务的全局状态。
+      if (currentOperation === operationId && isUploadTaskActive(taskId)) {
+        busy = false;
+        cancelRequested = false;
+      }
     }
   }
 
