@@ -157,3 +157,35 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 :root{--blue:#B8C1C8;--primary-action:#B8C1C8;--primary-action-text:#0B1015}
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
+
+/* 2026-09-21 全局文字层级优化：成熟深色产品风格，仅调整文字色调/字号/字重，不改变布局与功能 */
+:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D;--text-accent:#C8D0D6}
+body{color:var(--text-body)}
+.brand-name,.task-title,.card-title,.current-line{color:var(--text-primary)}
+.brand-sub{color:var(--text-tertiary)}
+.task-info{color:var(--text-body)}
+.task-info strong{color:var(--text-primary);font-weight:700}
+.function-btn{color:var(--text-primary)}
+.home-menu-item{color:var(--text-body)}
+.home-menu-item:first-of-type{color:var(--text-primary)}
+.vehicle-area{color:var(--text-secondary)}
+#manualOrderInput{color:var(--text-body)}
+#manualOrderInput::placeholder{color:var(--text-tertiary)}
+.status-row #statusText{color:var(--text-secondary)}
+.status-detail,.review-name{color:var(--text-secondary)}
+.review-hint{color:#C9A45A}
+.quick-actions button,.source-menu-cancel{color:var(--text-secondary)}
+.source-option{color:var(--text-body)}
+.detail-toggle,.review-summary{color:var(--text-secondary)}
+.correction-title{color:var(--text-primary)}
+.correction-item,.correction-left,.correction-right{color:var(--text-body)}
+.toast{color:var(--text-primary)}
+/* 主/次/辅助字号层级：保持原有盒子尺寸与位置 */
+.brand-name{font-size:20px;font-weight:700}
+.task-title{font-size:20px;font-weight:700}
+.card-title{font-size:18px;font-weight:650}
+.function-btn{font-size:16px;font-weight:600}
+.home-menu-item{font-size:15px;font-weight:500}
+.status-row #statusText{font-size:14px}
+.detail-toggle,.review-summary{font-size:14px;font-weight:500}
+.quick-actions button,.source-menu-cancel{font-size:13px}
