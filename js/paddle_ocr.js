@@ -20,6 +20,23 @@
   let cancelRequested = false;
   let operationId = 0;
   let warmingUp = false;
+  let uploadTaskSeq = 0;
+  let activeUploadTaskId = 0;
+
+  function beginUploadTask() {
+    activeUploadTaskId = ++uploadTaskSeq;
+    return activeUploadTaskId;
+  }
+  function invalidateUploadTask() {
+    activeUploadTaskId = ++uploadTaskSeq;
+    return activeUploadTaskId;
+  }
+  function isUploadTaskActive(taskId) {
+    return Number(taskId) > 0 && Number(taskId) === activeUploadTaskId;
+  }
+  window.beginUploadTask = beginUploadTask;
+  window.invalidateUploadTask = invalidateUploadTask;
+  window.isUploadTaskActive = isUploadTaskActive;
   const $ = (id) => document.getElementById(id);
 
   function normalizeText(value) {
@@ -185,14 +202,18 @@
     busy = true;
     cancelRequested = false;
     const currentOperation = ++operationId;
+    const taskId = Number(options.taskId) || activeUploadTaskId || beginUploadTask();
     const deadline = Date.now() + OCR_TIMEOUT_MS;
 
     const run = async () => {
+      if (!isUploadTaskActive(taskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       if (!file || !String(file.type).startsWith('image/')) throw new Error('请选择有效的运单图片');
       setStatus(options.batch ? ('正在读取第 ' + options.index + '/' + options.total + ' 张运单…') : '正在准备运单图片…', 15);
       const blob = await prepareImage(file);
+      if (!isUploadTaskActive(taskId) || currentOperation !== operationId || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       setStatus(options.batch ? ('正在识别第 ' + options.index + '/' + options.total + ' 张运单…') : '正在准备文字识别…', 25);
       const ocr = await loadEngine();
+      if (!isUploadTaskActive(taskId) || currentOperation !== operationId || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       setStatus(options.batch ? ('正在读取第 ' + options.index + '/' + options.total + ' 张运单…') : '正在读取运单文字…', 55);
 
       const remaining = Math.max(1, deadline - Date.now());
@@ -201,6 +222,7 @@
         new Promise((_, reject) => setTimeout(() => reject(new Error('读取运单时间较长，请重新尝试')), remaining))
       ]);
       if (currentOperation !== operationId || cancelRequested) throw new Error('已取消');
+      if (!isUploadTaskActive(taskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       const text = resultToText(result);
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
       const count = Array.isArray(result?.items) ? result.items.length : 0;
@@ -242,7 +264,7 @@
     for (let index = 0; index < list.length; index += 1) {
       if (cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       try {
-        const result = await process(list[index], { batch: list.length > 1, index: index + 1, total: list.length });
+        const result = await process(list[index], { taskId: activeUploadTaskId, batch: list.length > 1, index: index + 1, total: list.length });
         if (result?.rawText) results.push(result);
       } catch (error) {
         if (/已取消/.test(String(error?.message || ''))) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
@@ -253,6 +275,7 @@
       }
     }
     if (!results.length) throw failed[0]?.error || new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
+    if (!isUploadTaskActive(activeUploadTaskId) || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
     const combined = results.map(item => item.rawText).filter(Boolean).join('\\n\\n');
     putText(combined);
     const totalLines = results.reduce((sum, item) => sum + (Number(item.itemCount) || 0), 0);
@@ -262,7 +285,8 @@
     }
     // OCR完成后直接进入规划，用户无需再次点击“规划路线”；识别文字仍原样保留在输入框。
     if (typeof window.parseManualInput === 'function') {
-      await window.parseManualInput({ auto: true, source: 'ocr' });
+      if (!isUploadTaskActive(activeUploadTaskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+      await window.parseManualInput({ auto: true, source: 'ocr', taskId: activeUploadTaskId });
     }
     return { rawText: combined, source: 'paddleocr-browser-batch', itemCount: totalLines, fileCount: list.length, successCount: results.length, failedCount: failed.length, failedFiles: failed.map(item => item.file?.name || '未命名图片') };
   }
@@ -277,8 +301,12 @@
   }
 
   window.cancelOCR = async function() {
-    if (!busy) return false;
+    if (!busy) {
+      invalidateUploadTask();
+      return false;
+    }
     cancelRequested = true;
+    invalidateUploadTask();
     ++operationId;
     await disposeEngine();
     busy = false;
