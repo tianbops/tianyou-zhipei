@@ -144,3 +144,10 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
 button:active,.primary-btn:active,.secondary-btn:active,.btn-primary-action:active,.save-btn:active,.add-btn:active{background:var(--control-pressed)!important;color:#fff!important}
 input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-color:rgba(220,227,232,.45)!important;box-shadow:0 0 0 3px var(--focus-neutral)!important}
+
+
+/* 2026-09-21 首页车辆图标扁平化：仅优化图标表现，不改变布局 */
+.vehicle-area{display:inline-flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;color:#DCE3E8;font-size:15px;font-weight:600;line-height:20px}
+.vehicle-area .vehicle-icon{width:19px;height:19px;flex:0 0 19px;color:#B8C2CC;vertical-align:0}
+.vehicle-area .vehicle-icon svg{width:100%;height:100%;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.vehicle-area .vehicle-text{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
