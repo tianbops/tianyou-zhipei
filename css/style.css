@@ -82,3 +82,6 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 /* 解析失败时明确显示“重新上传”主按钮 */
 .upload-sheet.error .sheet-footer{display:flex!important;visibility:visible!important}
 .upload-sheet.error .btn-primary-action{display:block!important;visibility:visible!important;opacity:1!important}
+
+/* 修正详情：与规划详情统一为隐藏入口；弹窗文字左右对齐；隐藏右上角叉 */
+.review-summary{display:flex;align-items:center;justify-content:flex-start;gap:6px;width:100%;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;line-height:20px}.review-summary #reviewCount{margin-left:0;color:#fff;font-size:13px}.review-summary span:last-child{margin-left:0;font-size:18px;color:#7F8B98;line-height:1}.correction-header{justify-content:flex-start}.correction-item{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:8px;align-items:center;text-align:left}.correction-left{min-width:0;text-align:left;overflow-wrap:anywhere}.correction-arrow{text-align:center;color:#7F8B98}.correction-right{min-width:0;text-align:right;overflow-wrap:anywhere}
