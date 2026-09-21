@@ -77,3 +77,15 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 .date-picker-btn:disabled{background:#B8C1C8!important;color:#0B1015!important;opacity:.55}
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:#B8C1C8!important;color:#0B1015!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44px!important}
+
+/* 2026-09-21 历史页文字层级统一：仅调整文字表现，不改变布局/功能 */
+:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D}
+.history-page{color:var(--text-body)}
+.history-title,.history-header,.date-title{color:var(--text-primary)}
+.history-meta,.history-subtitle,.empty-tip,.history-info,.date-sheet-head{color:var(--text-secondary)}
+.history-title,.date-title{font-weight:700}
+.history-item .date,.history-item .route-name{color:var(--text-primary);font-weight:600}
+.history-item .meta,.history-item .summary,.history-item small{color:var(--text-secondary)}
+.delete-title{color:var(--text-primary)}
+.delete-message{color:var(--text-body)}
+.delete-warning{color:var(--text-tertiary)}
