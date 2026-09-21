@@ -439,3 +439,94 @@ body{color:var(--text-body)}
   }
   .parse-status.success:has(.compact-result) .status-detail .detail-line{font-size:13px;line-height:22px}
 }
+
+
+/* 2026-09-22 规划结果状态框最终统一字号与第二排三列布局 */
+.parse-status.success:has(.compact-result){
+  padding-top:9px;
+  padding-bottom:9px;
+}
+.parse-status.success:has(.compact-result) .status-row{
+  height:22px;
+  min-height:22px;
+  align-items:center;
+}
+.status-row #statusText.structured-status.compact-result{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  width:100%;
+  height:22px;
+  min-height:22px;
+  font-size:14px;
+  line-height:22px;
+  white-space:nowrap;
+}
+.status-row #statusText.structured-status.compact-result .status-content-left,
+.status-row #statusText.structured-status.compact-result .status-content-right{
+  flex:1 1 50%;
+  min-width:0;
+  font-size:14px;
+  line-height:22px;
+  font-weight:500;
+  color:var(--text-body,#D5DCE2);
+  white-space:nowrap;
+}
+.status-row #statusText.structured-status.compact-result .status-content-left{
+  text-align:left;
+}
+.status-row #statusText.structured-status.compact-result .status-content-right{
+  text-align:right;
+}
+.parse-status.success:has(.compact-result) .status-detail.active{
+  display:block!important;
+  width:100%;
+  height:22px;
+  min-height:22px;
+  margin-top:0;
+  padding-top:0;
+  border-top:0;
+  overflow:visible;
+}
+.parse-status.success:has(.compact-result) .status-detail .detail-row{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  align-items:center;
+  width:100%;
+  height:22px;
+  min-height:22px;
+  gap:0;
+}
+.parse-status.success:has(.compact-result) .status-detail .detail-line{
+  display:block;
+  min-width:0;
+  width:100%;
+  height:22px;
+  line-height:22px;
+  font-size:14px;
+  font-weight:500;
+  color:var(--text-body,#D5DCE2);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:clip;
+}
+.parse-status.success:has(.compact-result) .status-detail .detail-line:nth-child(1){text-align:left}
+.parse-status.success:has(.compact-result) .status-detail .detail-line:nth-child(2){text-align:center}
+.parse-status.success:has(.compact-result) .status-detail .detail-line:nth-child(3){text-align:right}
+@media(max-width:430px){
+  .parse-status.success:has(.compact-result) .status-row,
+  .parse-status.success:has(.compact-result) .status-detail.active,
+  .parse-status.success:has(.compact-result) .status-detail .detail-row,
+  .parse-status.success:has(.compact-result) .status-detail .detail-line{
+    height:22px;
+    min-height:22px;
+  }
+  .status-row #statusText.structured-status.compact-result,
+  .status-row #statusText.structured-status.compact-result .status-content-left,
+  .status-row #statusText.structured-status.compact-result .status-content-right,
+  .parse-status.success:has(.compact-result) .status-detail .detail-line{
+    font-size:14px;
+    line-height:22px;
+  }
+}
