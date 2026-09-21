@@ -66,8 +66,8 @@ function getCorrectionDetailText(){
   return Array.isArray(correctionDetails)&&correctionDetails.length?correctionDetails:[];
 }
 function renderUploadDetail(mode){
-  const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody'),switchBtn=$('uploadDetailSwitch');
-  if(!view||!title||!body||!switchBtn)return;
+  const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody');
+  if(!view||!title||!body)return;
   uploadDetailMode=mode==='correction'?'correction':'planning';
   title.textContent=uploadDetailMode==='correction'?'修正详情':'规划详情';
   body.textContent='';
@@ -76,8 +76,6 @@ function renderUploadDetail(mode){
     pre.className='upload-detail-text';
     pre.textContent=String($('manualOrderInput')?.value||'').trim()||'暂无规划详情';
     body.appendChild(pre);
-    switchBtn.textContent='修正详情';
-    switchBtn.disabled=getCorrectionDetailText().length===0;
   }else{
     const items=getCorrectionDetailText();
     if(!items.length){
@@ -96,10 +94,9 @@ function renderUploadDetail(mode){
         row.append(left,arrow,right);body.appendChild(row);
       });
     }
-    switchBtn.textContent='规划详情';
-    switchBtn.disabled=false;
   }
-  view.hidden=false;view.setAttribute('aria-hidden','false');
+  view.hidden=false;
+  view.setAttribute('aria-hidden','false');
   document.querySelector('.upload-sheet')?.classList.add('detail-view-open');
 }
 function closeUploadDetail(){
