@@ -8,7 +8,7 @@
   const MAX_SIDE = 2800;
   const JPEG_QUALITY = 0.90;
   const OCR_SCORE = 0.25;
-  // P0测试：OCR单次提取最多等待2分钟，用于验证完整识别能力。
+  // OCR单次提取最多等待2分钟，避免异常任务长期占用页面。
   const OCR_TIMEOUT_MS = 120000;
   const OCR_SDK_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
   const OCR_WORKER_URL = '/api/paddleocr-worker';
@@ -20,6 +20,7 @@
   let cancelRequested = false;
   let operationId = 0;
   let warmingUp = false;
+  let engineGeneration = 0;
   let uploadTaskSeq = 0;
   let activeUploadTaskId = 0;
 
@@ -81,6 +82,7 @@
   async function loadEngine() {
     if (enginePromise) return enginePromise;
     const PaddleOCR = await loadSdk();
+    const generation = engineGeneration;
     if (!warmingUp) setStatus('正在准备文字识别…', 35);
     const createOptions = {
       lang: 'ch',
@@ -110,7 +112,11 @@
         ortOptions: { ...createOptions.ortOptions, numThreads: 1 }
       });
       return fallback;
-    }).then(engine => {
+    }).then(async engine => {
+      if (generation !== engineGeneration) {
+        try { await engine?.dispose?.(); } catch (_) {}
+        throw Object.assign(new Error('OCR任务已取消'), { code: 'OCR_CANCELLED' });
+      }
       engineInstance = engine;
       return engine;
     }).catch(error => {
@@ -300,6 +306,7 @@
   }
 
   async function disposeEngine() {
+    ++engineGeneration;
     const engine = engineInstance;
     engineInstance = null;
     enginePromise = null;
@@ -364,9 +371,8 @@
       window.closeUploadSource?.();
       const files = Array.from(input.files || []);
       if (!files.length) return;
-      const taskId = beginUploadTask();
       processFiles(files).catch(error => {
-        if (error?.code !== 'OCR_CANCELLED' && isUploadTaskActive(taskId)) {
+        if (error?.code !== 'OCR_CANCELLED' && !/已取消/.test(String(error?.message || ''))) {
           console.error('[PaddleOCR batch]', error);
           setStatus(error?.message || '图片读取失败，请重试', 100, false, true);
         }
