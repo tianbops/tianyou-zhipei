@@ -116,7 +116,7 @@ if(parsedOrders.length){
   const weightT=parseWeight(rawWeight);
   const resultWeight=weightT>0?`${(Math.round((weightT+Number.EPSILON)*100)/100).toFixed(2)}t`:'未识别';
   const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
-  correctionDetails=correctionLines.slice();
+  correctionDetails=[...correctionLines,...mergeLines];
   setCorrectionSummary(correctionDetails.length);
   detailLines.length=0;
   detailLines.push(`今日配送：${uniqueCount}家`);
