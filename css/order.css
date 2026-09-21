@@ -20,7 +20,7 @@ to{opacity:1;transform:none}}
 
 
 /* 2026-09-21 全局按钮色彩统一：弱化/取消业务蓝，仅调整颜色，不改变布局与尺寸 */
-:root{--blue:#DCE3E8;--primary-action:#DCE3E8;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
+:root{--blue:#C8D0D6;--primary-action:#C8D0D6;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control-dark)!important;color:#E3E8ED!important}
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
