@@ -45,11 +45,17 @@ function renderDetail(details){
   const row=$('statusDetail');
   if(!row)return;
   row.textContent='';
-  const items=Array.isArray(details)?details.filter(Boolean):[];
-  items.forEach(item=>{
-    const line=document.createElement('span');
-    line.className='detail-line';
-    line.textContent=String(item);
+  const items=Array.isArray(details)?details.filter(Boolean).map(value=>String(value)):[];
+  const groups=items.length>=5?[items.slice(0,2),items.slice(2,4),items.slice(4,7)]:items.length===3?[items]:items.length===2?[items]:[items];
+  groups.filter(group=>group.length).forEach(group=>{
+    const line=document.createElement('div');
+    line.className='detail-row';
+    group.forEach(item=>{
+      const cell=document.createElement('span');
+      cell.className='detail-line';
+      cell.textContent=item;
+      line.appendChild(cell);
+    });
     row.appendChild(line);
   });
   row.classList.toggle('active',items.length>0);
