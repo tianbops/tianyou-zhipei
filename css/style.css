@@ -151,3 +151,9 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 .vehicle-area .vehicle-icon{width:20px;height:20px;flex:0 0 20px;color:#B8C2CC;vertical-align:0}
 .vehicle-area .vehicle-icon svg{width:100%;height:100%;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .vehicle-area .vehicle-text{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+/* 2026-09-21 全局按钮层级微调：主要按钮再压暗一档，次要按钮高度降低一档 */
+:root{--blue:#B8C1C8;--primary-action:#B8C1C8;--primary-action-text:#0B1015}
+button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
+button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
