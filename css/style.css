@@ -266,22 +266,21 @@ body{color:var(--text-body)}
   overflow-y:auto;
   overscroll-behavior:contain;
 }
-.upload-sheet.detail-view-open .upload-detail-switch{flex:0 0 40px}
-.upload-sheet.detail-view-open .input-area{
+.upload-sheet.detail-view-open .input-area,
+.upload-sheet.detail-view-open .review-summary{
   display:flex!important;
   flex:0 0 40px;
+  min-height:40px;
   margin-top:10px;
   justify-content:center;
   overflow:hidden;
 }
-.upload-sheet.detail-view-open .input-area .detail-toggle{width:100%;justify-content:center}
+.upload-sheet.detail-view-open .input-area .detail-toggle,
+.upload-sheet.detail-view-open .review-summary{width:100%;justify-content:center}
 .upload-sheet.detail-view-open .input-area #manualOrderInput{display:none!important}
-.upload-sheet.detail-view-open .review-summary{
-  display:flex!important;
-  flex:0 0 40px;
-  margin-top:0;
-  justify-content:center;
-}
+/* 详情页只保留“另一详情”的入口，当前详情标题本身不重复 */
+.upload-sheet.detail-view-open.detail-mode-planning .input-area{display:none!important}
+.upload-sheet.detail-view-open.detail-mode-correction .review-summary{display:none!important}
 .upload-sheet.detail-view-open .sheet-footer{
   flex:0 0 auto;
   position:relative;
@@ -519,3 +518,10 @@ body{color:var(--text-body)}
   height:22px!important;
   min-height:22px!important;
 }
+
+
+/* 2026-09-22 详情入口最终交互：展开后仅显示另一详情入口 */
+.upload-sheet.detail-view-open .upload-detail-view{min-height:0}
+.upload-sheet.detail-view-open .sheet-footer{margin-top:0}
+.upload-sheet.detail-view-open.detail-mode-planning .review-summary,
+.upload-sheet.detail-view-open.detail-mode-correction .input-area{flex:0 0 40px;min-height:40px}
