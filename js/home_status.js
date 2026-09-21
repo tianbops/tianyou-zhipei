@@ -46,7 +46,7 @@ function renderDetail(details){
   if(!row)return;
   row.textContent='';
   const items=Array.isArray(details)?details.filter(Boolean).map(value=>String(value)):[];
-  const groups=items.length>=5?[items.slice(0,2),items.slice(2,4),items.slice(4,7)]:items.length===3?[items]:items.length===2?[items]:[items];
+  const groups=items.length>=5?[items.slice(0,2),items.slice(2,5)]:items.length===3?[items]:items.length===2?[items]:[items];
   groups.filter(group=>group.length).forEach(group=>{
     const line=document.createElement('div');
     line.className='detail-row';
