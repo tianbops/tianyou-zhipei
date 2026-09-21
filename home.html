@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <meta name="theme-color" content="#05070A">
 <title>Zhipei One · 智配 One</title>
-<link rel="stylesheet" href="css/style.css?v=20260921-9">
+<link rel="stylesheet" href="css/style.css?v=20260921-10">
 </head>
 <body>
 
@@ -38,9 +38,9 @@
     <div class="upload-source-menu active" id="uploadSourceMenu" aria-hidden="false">
       <div class="source-menu-title">上传运单</div>
       <div class="source-menu-options">
-        <label class="source-option"><input id="ocrCameraInput" type="file" accept="image/*" capture="environment"><span>📷</span><strong>拍摄</strong></label>
-        <label class="source-option"><input id="ocrAlbumInput" type="file" accept="image/*" multiple><span>🖼️</span><strong>相册</strong></label>
-        <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()"><span>📁</span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
+        <label class="source-option" aria-label="拍摄运单"><input id="ocrCameraInput" type="file" accept="image/*" capture="environment"><span aria-hidden="true">📷</span><strong>拍摄</strong></label>
+        <label class="source-option" aria-label="从相册选择运单"><input id="ocrAlbumInput" type="file" accept="image/*" multiple><span aria-hidden="true">🖼️</span><strong>相册</strong></label>
+        <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()" aria-label="选择运单文件"><span aria-hidden="true">📁</span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
       </div>
       <button class="source-menu-cancel" type="button" onclick="clearManualInput();cancelParse();toggleUpload()">取消</button>
     </div>
