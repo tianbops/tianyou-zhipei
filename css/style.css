@@ -72,3 +72,13 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
   .parse-status.success{min-height:112px;max-height:154px}
   .status-row #statusText.structured-status{font-size:13px}
 }
+
+/* Upload UX final correction 2026-09-21 */
+/* 隐藏浏览器原生文件选择控件，避免出现“选择文件”等系统文字 */
+.upload-source-menu .fallback-file-input{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;padding:0!important;margin:0!important}
+/* 规划详情默认收起，仅点击“规划详情”后显示OCR文字 */
+.upload-sheet #manualOrderInput{display:none}
+.upload-sheet.ocr-text-open #manualOrderInput{display:block}
+/* 解析失败时明确显示“重新上传”主按钮 */
+.upload-sheet.error .sheet-footer{display:flex!important;visibility:visible!important}
+.upload-sheet.error .btn-primary-action{display:block!important;visibility:visible!important;opacity:1!important}
