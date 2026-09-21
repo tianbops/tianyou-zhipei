@@ -243,3 +243,24 @@ body{color:var(--text-body)}
 .upload-sheet.processing .sheet-footer .btn-cancel{
   left:0!important;
 }
+
+/* 2026-09-21 规划完成详情统一方案：详情展开不关闭底部确认/取消按钮 */
+.upload-detail-view{margin-top:12px;border-radius:16px;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.06);overflow:hidden}
+.upload-detail-header{display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:0 10px 0 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.upload-detail-title{font-size:17px;font-weight:700;color:var(--text-primary,#F2F5F7)}
+.upload-detail-close{width:34px;height:34px;border:0;border-radius:10px;background:transparent;color:#B8C2CC;font-size:25px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.upload-detail-close:active{background:#202A34;color:#fff}
+.upload-detail-body{max-height:42vh;overflow:auto;padding:14px}
+.upload-detail-text{margin:0;color:var(--text-body,#D5DCE2);font:14px/1.65 "Microsoft YaHei",Arial,sans-serif;white-space:pre-wrap;overflow-wrap:anywhere}
+.upload-detail-empty{padding:24px 8px;text-align:center;color:var(--text-secondary,#9AA6B2);font-size:14px}
+.upload-detail-view .correction-item{margin:0;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.055)}
+.upload-detail-switch{width:100%;height:40px;border:0;border-top:1px solid rgba(255,255,255,.06);background:transparent;color:#AAB6C2;font-size:14px;font-weight:500;cursor:pointer}
+.upload-detail-switch:active{background:#202A34;color:#fff}
+.upload-detail-switch:disabled{opacity:.45;cursor:default}
+.upload-sheet.detail-view-open .input-area,
+.upload-sheet.detail-view-open .review-summary{display:none!important}
+.upload-sheet.detail-view-open .upload-detail-view{display:block}
+.upload-sheet .upload-detail-view[hidden]{display:none!important}
+.upload-sheet .sheet-footer{position:relative;z-index:3}
+.upload-sheet .sheet-footer .btn-primary-action{order:1}
+.upload-sheet .sheet-footer .btn-cancel{order:2}
