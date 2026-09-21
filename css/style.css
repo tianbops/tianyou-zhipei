@@ -230,3 +230,10 @@ body{color:var(--text-body)}
   text-align:center!important;
   line-height:1!important;
 }
+
+
+/* 2026-09-21 识别中取消按钮最终微调：修正滚动区域造成的视觉左偏 */
+.upload-sheet.processing .sheet-footer .btn-cancel{
+  position:relative;
+  left:5px;
+}
