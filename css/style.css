@@ -100,3 +100,8 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .detail-toggle{cursor:pointer}
 .correction-modal{cursor:pointer}
 .correction-panel{cursor:default}
+
+
+/* 2026-09-21 上传运单弹窗统一居中 */
+.upload-overlay{align-items:center!important;justify-content:center!important;padding:16px calc(16px + env(safe-area-inset-left)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-right))!important}
+.upload-sheet{margin:0 auto!important;max-height:88vh}
