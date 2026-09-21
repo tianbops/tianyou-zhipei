@@ -202,7 +202,7 @@
     busy = true;
     cancelRequested = false;
     const currentOperation = ++operationId;
-    const taskId = Number(options.taskId) || activeUploadTaskId || beginUploadTask();
+    const taskId = Number(options.taskId) || beginUploadTask();
     const deadline = Date.now() + OCR_TIMEOUT_MS;
 
     const run = async () => {
@@ -258,13 +258,14 @@
       .filter(file => file && String(file.type).startsWith('image/'))
       .filter((file, index, arr) => arr.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
     if (!list.length) throw new Error('请选择有效的运单图片');
+    const taskId = beginUploadTask();
     const MAX_BATCH_FILES = 12;
     if (list.length > MAX_BATCH_FILES) throw new Error('一次最多导入12张运单图片，请分批导入');
     const results = [], failed = [];
     for (let index = 0; index < list.length; index += 1) {
       if (cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       try {
-        const result = await process(list[index], { taskId: activeUploadTaskId, batch: list.length > 1, index: index + 1, total: list.length });
+        const result = await process(list[index], { taskId, batch: list.length > 1, index: index + 1, total: list.length });
         if (result?.rawText) results.push(result);
       } catch (error) {
         if (/已取消/.test(String(error?.message || ''))) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
@@ -275,7 +276,7 @@
       }
     }
     if (!results.length) throw failed[0]?.error || new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
-    if (!isUploadTaskActive(activeUploadTaskId) || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+    if (!isUploadTaskActive(taskId) || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
     const combined = results.map(item => item.rawText).filter(Boolean).join('\\n\\n');
     putText(combined);
     const totalLines = results.reduce((sum, item) => sum + (Number(item.itemCount) || 0), 0);
@@ -285,8 +286,8 @@
     }
     // OCR完成后直接进入规划，用户无需再次点击“规划路线”；识别文字仍原样保留在输入框。
     if (typeof window.parseManualInput === 'function') {
-      if (!isUploadTaskActive(activeUploadTaskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
-      await window.parseManualInput({ auto: true, source: 'ocr', taskId: activeUploadTaskId });
+      if (!isUploadTaskActive(taskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+      await window.parseManualInput({ auto: true, source: 'ocr', taskId });
     }
     return { rawText: combined, source: 'paddleocr-browser-batch', itemCount: totalLines, fileCount: list.length, successCount: results.length, failedCount: failed.length, failedFiles: failed.map(item => item.file?.name || '未命名图片') };
   }
