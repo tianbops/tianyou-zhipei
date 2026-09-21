@@ -48,6 +48,8 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .upload-sheet.waiting .source-menu-cancel{display:block!important}
 
 /* Upload sheet final UI correction */
+.source-option{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.source-option strong{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .upload-source-menu .source-menu-title{display:block}
 .upload-source-menu .source-option strong{display:none!important}
 .upload-source-menu .source-option{min-height:64px;height:64px}
@@ -55,7 +57,7 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .upload-source-menu .source-menu-options{gap:10px}
 .upload-source-menu .source-menu-cancel{font-size:13px}
 .parse-status.detail-hidden{display:none!important}
-.parse-status.success{max-height:132px;overflow:visible}
+.parse-status.success{min-height:112px;max-height:150px;overflow:visible}
 .parse-status.success .status-row{min-height:20px}
 .status-row #statusText.structured-status{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;white-space:nowrap;overflow:visible}
 .status-row #statusText.structured-status .status-content-left{min-width:0;flex:1 1 auto;text-align:left;white-space:nowrap}
@@ -67,6 +69,6 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 @media(max-width:430px){
   .upload-source-menu .source-option{height:62px;min-height:62px}
   .upload-source-menu .source-option span{font-size:27px}
-  .parse-status.success{max-height:136px}
+  .parse-status.success{min-height:112px;max-height:154px}
   .status-row #statusText.structured-status{font-size:13px}
 }
