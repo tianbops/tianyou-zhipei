@@ -208,3 +208,25 @@ body{color:var(--text-body)}
   margin:0;
   box-sizing:border-box;
 }
+
+
+/* 2026-09-21 识别提取状态框下方取消按钮：按钮本体居中 */
+.upload-sheet.processing .sheet-footer{
+  width:100%;
+  display:flex;
+  justify-content:center!important;
+  align-items:center;
+}
+.upload-sheet.processing .sheet-footer .btn-cancel{
+  flex:0 0 120px!important;
+  width:120px!important;
+  max-width:120px!important;
+  min-width:120px!important;
+  margin:0 auto!important;
+  padding:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  line-height:1!important;
+}
