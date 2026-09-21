@@ -53,3 +53,12 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 /* 2026-09-21 登录页按钮层级微调：主要按钮再压暗一档 */
 :root{--blue:#B8C1C8}
 .login-btn,.login-btn:disabled{background:#B8C1C8!important;color:#0B1015!important}
+
+/* 2026-09-21 登录页文字层级统一：仅调整文字表现，不改变布局/功能 */
+:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D}
+.login-container{color:var(--text-body)}
+.brand-main,.login-title{color:var(--text-primary)}
+.brand-sub,.login-subtitle,.switch-btn{color:var(--text-secondary)}
+.input-box input{color:var(--text-primary)}
+.input-box input::placeholder{color:var(--text-tertiary)}
+.input-label,.form-label{color:var(--text-secondary)}
