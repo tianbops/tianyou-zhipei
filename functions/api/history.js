@@ -35,12 +35,16 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
   if (!target) return json({ success: false, error: '未找到要删除的历史记录' }, 404);
   const signature = historySignature(target);
   if (!signature) return json({ success: false, error: '该历史记录数据无效，无法删除' }, 400);
-  const remaining = current.filter(item => historySignature(item) !== signature), deleted = current.length - remaining.length;
+  const targetBatchId = String(target?.orderBatchId || '').trim();
+  const remaining = targetBatchId
+    ? current.filter(item => String(item?.orderBatchId || '').trim() !== targetBatchId)
+    : current.filter(item => historySignature(item) !== signature);
+  const deleted = current.length - remaining.length;
   await redisSet(env, key, remaining);
   let todayDeleted = false;
   if (date === businessDate()) {
     const todayKey = scopedKey(userId, route, `today:${date}`), today = await redisGet(env, todayKey);
-    if (today && todayOrderSignature(today) === signature) { await redisDelete(env, todayKey); todayDeleted = true; }
+    if (today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId) { await redisDelete(env, todayKey); todayDeleted = true; }
   }
   await purgeExpiredHistory(env, userId, route);
   return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: Math.max(0, deleted - 1), todayDeleted });
@@ -80,7 +84,7 @@ function isWithinRetention(date) {
   return diffDays >= -FUTURE_DAYS && diffDays < HISTORY_DAYS;
 }
 function dedupeHistory(input) { const map = new Map(); let changed = false; for (const item of input) { if (!item || typeof item !== 'object') { changed = true; continue; } const signature = historySignature(item); if (!signature) { changed = true; continue; } const old = map.get(signature); if (!old) map.set(signature, item); else { changed = true; if (compareUpdatedAt(item, old) > 0) map.set(signature, item); } } const records = Array.from(map.values()).sort((a, b) => compareUpdatedAt(b, a)); if (records.length !== input.length) changed = true; return { records, changed }; }
-function historySignature(record) { const route = String(record?.route || '').trim(), date = normalizeDate(record?.date), vehicle = String(record?.vehicle || '').trim().toLowerCase(), weight = normalizeWeight(record?.totalWeight ?? record?.weight), orders = Array.isArray(record?.orders) ? record.orders : []; if (!date && !orders.length && !weight) return ''; const stores = orders.map(item => ({ name: normalizeStoreName(item?.name || item?.storeName || item?.shopName || item?.['门店名称']), weight: normalizeNumber(item?.weight) })).filter(item => item.name).sort((a, b) => `${a.name}|${a.weight}`.localeCompare(`${b.name}|${b.weight}`)); return JSON.stringify({ route, date, vehicle, weight, stores }); }
+function historySignature(record) { const batch = String(record?.orderBatchId || '').trim(); if (batch) return `batch:${batch}`; const route = String(record?.route || '').trim(), date = normalizeDate(record?.date), vehicle = String(record?.vehicle || '').trim().toLowerCase(), weight = normalizeWeight(record?.totalWeight ?? record?.weight), orders = Array.isArray(record?.orders) ? record.orders : []; if (!date && !orders.length && !weight) return ''; const stores = orders.map(item => ({ name: normalizeStoreName(item?.name || item?.storeName || item?.shopName || item?.['门店名称']), weight: normalizeNumber(item?.weight) })).filter(item => item.name).sort((a, b) => `${a.name}|${a.weight}`.localeCompare(`${b.name}|${b.weight}`)); return JSON.stringify({ route, date, vehicle, weight, stores }); }
 function todayOrderSignature(record) { return historySignature(record); }
 function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase(); }
 function normalizeNumber(value) { const n = Number(value); return Number.isFinite(n) ? Math.round(n * 1000000) / 1000000 : 0; }
