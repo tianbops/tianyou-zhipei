@@ -532,6 +532,28 @@ body{color:var(--text-body)}
 }
 
 
+
+
+/* 2026-09-22 规划结果状态框：去掉日期前成功勾选，内容向内收紧 */
+.parse-status.success:has(.compact-result){
+  padding-left:16px;
+  padding-right:16px;
+}
+.parse-status.success:has(.compact-result) #statusIcon{
+  display:none!important;
+}
+.parse-status.success:has(.compact-result) .status-row{
+  gap:0;
+}
+.status-row #statusText.structured-status.compact-result{
+  padding-left:4px;
+  padding-right:4px;
+}
+.parse-status.success:has(.compact-result) .status-detail.active{
+  padding-left:4px;
+  padding-right:4px;
+}
+
 /* 2026-09-22 规划结果：所有结果文字统一字号 */
 .parse-status.success:has(.compact-result) .status-row #statusText.structured-status.compact-result,
 .parse-status.success:has(.compact-result) .status-row #statusText.structured-status.compact-result .status-content-left,
