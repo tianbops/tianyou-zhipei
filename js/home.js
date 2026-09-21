@@ -48,7 +48,7 @@ async function parseOrderText(text){
     clearTimeout(timer);parseAbortController=null;parseInFlight=false;
   }
 }
-window.cancelParse=async()=>{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')cancelOCR().catch(()=>{});toast('已取消规划','warning');};
+window.cancelParse=async()=>{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')cancelOCR().catch(()=>{});};
 
 function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'plan';const button=$('primaryActionBtn');if(!button)return;button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'规划路线';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false}
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.remove('ocr-text-open');sheet?.classList.add('waiting')}}
