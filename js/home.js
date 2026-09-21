@@ -1,11 +1,6 @@
 /* 天友智配One - 首页业务逻辑 */
 (function(){
 'use strict';
-window.navigateApp = window.navigateApp || function(url){ window.location.href = url; };
-window.goToRouteEdit = window.goToRouteEdit || function(){ window.location.href = 'pages/route_edit.html'; };
-window.goToOrderDetail = window.goToOrderDetail || function(){ window.location.href = 'pages/order_detail.html'; };
-window.goToHistory = window.goToHistory || function(){ window.location.href = 'pages/history.html'; };
-window.openHomeMenu = window.openHomeMenu || function(){ const menu=document.getElementById('homeMenu'); if(menu) menu.style.display=menu.style.display==='block'?'none':'block'; };
 
 let parsedOrders=[],serverOrder=null,pendingMeta={},reviewMode=false,primaryActionMode='plan';
 const $=id=>document.getElementById(id);
@@ -33,7 +28,7 @@ async function parseOrderText(text){
   const route=currentRoute();if(!route)throw Error('未指定配送线路');
   if(parseInFlight)throw Error('规划正在进行，请勿重复点击');
   parseInFlight=true;parseCancelled=false;parseAbortController=new AbortController();
-  const PARSE_TIMEOUT_MS=120000; // P0测试：门店提取与基准库比对最多等待2分钟
+  const PARSE_TIMEOUT_MS=120000; // 门店提取与基准库比对最多等待2分钟
   const timer=setTimeout(()=>parseAbortController?.abort(),PARSE_TIMEOUT_MS);
   try{
     const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,route}),credentials:'same-origin',cache:'no-store',signal:parseAbortController.signal});
@@ -185,8 +180,6 @@ if(parsedOrders.length){
   const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
   correctionDetails=[...correctionLines,...mergeLines];
   setCorrectionSummary(correctionDetails.length);
-  detailLines.length=0;
-  detailLines.push(`今日配送：${uniqueCount}家`);
   detailLines.push(resultWeight);
   const structuredStatus={left:'规划完成',right:resultDate,details:[`今日配送：${uniqueCount}家`,resultWeight,`原始${rawCount}家`,`更正${correctionCount}家`,`合并${mergeCount}家`]};
   window.renderUnifiedStatus('success',100,structuredStatus);
