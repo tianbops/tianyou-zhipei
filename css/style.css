@@ -85,3 +85,10 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 
 /* 修正详情：与规划详情统一为隐藏入口；弹窗文字左右对齐；隐藏右上角叉 */
 .review-summary{display:flex;align-items:center;justify-content:flex-start;gap:6px;width:100%;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;line-height:20px}.review-summary #reviewCount{margin-left:0;color:#fff;font-size:13px}.review-summary span:last-child{margin-left:0;font-size:18px;color:#7F8B98;line-height:1}.correction-header{justify-content:flex-start}.correction-item{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:8px;align-items:center;text-align:left}.correction-left{min-width:0;text-align:left;overflow-wrap:anywhere}.correction-arrow{text-align:center;color:#7F8B98}.correction-right{min-width:0;text-align:right;overflow-wrap:anywhere}
+
+/* 2026-09-21 详情统一：规划详情/修正详情字号、箭头与隐藏方式一致 */
+.detail-toggle,.review-summary{display:flex;align-items:center;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;font-weight:500;line-height:20px;cursor:pointer}
+.detail-toggle span,.review-summary span:last-child{margin-left:6px;font-size:18px;color:#7F8B98;line-height:1}
+.review-summary #reviewCount{display:none!important}
+.correction-item{font-size:13px;line-height:20px}
+.correction-left,.correction-right{font-size:13px;line-height:20px}
