@@ -381,3 +381,21 @@ body{color:var(--text-body)}
   .parse-status.success:has(.compact-result) .status-detail .detail-row:first-child .detail-line{font-size:16px}
   .parse-status.success:has(.compact-result) .status-detail .detail-row:nth-child(2) .detail-line{font-size:12px}
 }
+
+
+/* 规划完成结果栏 V2：日期/核心结果左右一排，统计左中右一排 */
+.status-row #statusText.structured-status.compact-result{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;white-space:nowrap}
+.status-row #statusText.structured-status.compact-result .status-content-left{flex:1 1 50%;min-width:0;text-align:left;font-size:14px;line-height:22px;color:#B8C2CC;font-weight:600;white-space:nowrap}
+.status-row #statusText.structured-status.compact-result .status-content-right{display:block;flex:1 1 50%;min-width:0;text-align:right;font-size:18px;line-height:24px;color:#FFFFFF;font-weight:800;letter-spacing:.1px;white-space:nowrap}
+.parse-status.success:has(.compact-result) .status-detail.active{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;gap:0;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.05)}
+.parse-status.success:has(.compact-result) .status-detail .detail-row{display:contents}
+.parse-status.success:has(.compact-result) .status-detail .detail-line{font-size:12px;line-height:20px;color:#B8C2CC;font-weight:600;white-space:nowrap;overflow:visible;text-overflow:clip}
+.parse-status.success:has(.compact-result) .status-detail .detail-line:nth-child(1){text-align:left}
+.parse-status.success:has(.compact-result) .status-detail .detail-line:nth-child(2){text-align:center}
+.parse-status.success:has(.compact-result) .status-detail .detail-line:nth-child(3){text-align:right}
+.parse-status.success:has(.compact-result) .status-detail .detail-line::first-letter{color:#FFFFFF}
+@media(max-width:430px){
+  .status-row #statusText.structured-status.compact-result .status-content-left{font-size:13px}
+  .status-row #statusText.structured-status.compact-result .status-content-right{font-size:17px}
+  .parse-status.success:has(.compact-result) .status-detail .detail-line{font-size:11px}
+}
