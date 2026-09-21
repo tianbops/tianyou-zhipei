@@ -92,3 +92,11 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .review-summary #reviewCount{display:none!important}
 .correction-item{font-size:13px;line-height:20px}
 .correction-left,.correction-right{font-size:13px;line-height:20px}
+
+
+/* 2026-09-21 详情展开/隐藏统一：点击按钮展开，点击外部空白区域隐藏 */
+.review-summary{display:flex;align-items:center;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;font-weight:500;line-height:20px;cursor:pointer}
+.review-summary span:last-child{margin-left:6px;font-size:18px;color:#7F8B98;line-height:1}
+.detail-toggle{cursor:pointer}
+.correction-modal{cursor:pointer}
+.correction-panel{cursor:default}
