@@ -35,6 +35,7 @@
     return Number(taskId) > 0 && Number(taskId) === activeUploadTaskId;
   }
   window.beginUploadTask = beginUploadTask;
+  window.getUploadTaskId = () => activeUploadTaskId;
   window.invalidateUploadTask = invalidateUploadTask;
   window.isUploadTaskActive = isUploadTaskActive;
   const $ = (id) => document.getElementById(id);
@@ -264,9 +265,9 @@
       .filter(file => file && String(file.type).startsWith('image/'))
       .filter((file, index, arr) => arr.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
     if (!list.length) throw new Error('请选择有效的运单图片');
-    const taskId = beginUploadTask();
     const MAX_BATCH_FILES = 12;
     if (list.length > MAX_BATCH_FILES) throw new Error('一次最多导入12张运单图片，请分批导入');
+    const taskId = beginUploadTask();
     const results = [], failed = [];
     for (let index = 0; index < list.length; index += 1) {
       if (cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
@@ -274,7 +275,7 @@
         const result = await process(list[index], { taskId, batch: list.length > 1, index: index + 1, total: list.length });
         if (result?.rawText) results.push(result);
       } catch (error) {
-        if (/已取消/.test(String(error?.message || ''))) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+        if (!isUploadTaskActive(taskId) || error?.code === 'OCR_CANCELLED' || /已取消/.test(String(error?.message || ''))) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
         failed.push({ file: list[index], error });
         if (list.length > 1) {
           window.renderUnifiedStatus?.('loading', Math.min(95, Math.round(((index + 1) / list.length) * 90)), '第 ' + (index + 1) + '/' + list.length + ' 张未成功，继续读取下一张…');
@@ -363,8 +364,9 @@
       window.closeUploadSource?.();
       const files = Array.from(input.files || []);
       if (!files.length) return;
+      const taskId = beginUploadTask();
       processFiles(files).catch(error => {
-        if (error?.code !== 'OCR_CANCELLED') {
+        if (error?.code !== 'OCR_CANCELLED' && isUploadTaskActive(taskId)) {
           console.error('[PaddleOCR batch]', error);
           setStatus(error?.message || '图片读取失败，请重试', 100, false, true);
         }
