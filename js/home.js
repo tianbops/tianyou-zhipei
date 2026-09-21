@@ -126,11 +126,13 @@ function closeUploadHistoryGuard(){
   uploadHistoryGuard=false;
   if(history.state&&history.state.zpeiUploadOverlay){history.back();}
 }
-window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');if(opening){overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.closeUploadSource?.();overlay.classList.remove('active');closeUploadHistoryGuard();}};
+window.cancelUpload=async()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(overlay){overlay.classList.remove('active');window.closeUploadSource?.();}closeUploadHistoryGuard();};
+window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');if(opening){overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.cancelUpload?.();}};
 window.addEventListener('popstate',()=>{
   const overlay=$('uploadOverlay');
   if(!overlay||!uploadHistoryGuard)return;
   uploadHistoryGuard=false;
+  window.clearManualInput?.();
   overlay.classList.remove('active');
   window.closeUploadSource?.();
 });
