@@ -1,6 +1,12 @@
 /* 天友智配One - 首页业务逻辑 */
 (function(){
 'use strict';
+window.navigateApp = window.navigateApp || function(url){ window.location.href = url; };
+window.goToRouteEdit = window.goToRouteEdit || function(){ window.location.href = 'pages/route_edit.html'; };
+window.goToOrderDetail = window.goToOrderDetail || function(){ window.location.href = 'pages/order_detail.html'; };
+window.goToHistory = window.goToHistory || function(){ window.location.href = 'pages/history.html'; };
+window.openHomeMenu = window.openHomeMenu || function(){ const menu=document.getElementById('homeMenu'); if(menu) menu.style.display=menu.style.display==='block'?'none':'block'; };
+
 let parsedOrders=[],serverOrder=null,pendingMeta={},reviewMode=false,primaryActionMode='plan';
 const $=id=>document.getElementById(id);
 function toast(message,type=''){let el=$('homeToast');if(!el){el=document.createElement('div');el.id='homeToast';el.className='toast';document.body.appendChild(el)}el.textContent=message;el.className=`toast show ${type}`;clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),2800)}
