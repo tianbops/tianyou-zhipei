@@ -148,6 +148,6 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 
 /* 2026-09-21 首页车辆图标扁平化：仅优化图标表现，不改变布局 */
 .vehicle-area{display:inline-flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;color:#DCE3E8;font-size:15px;font-weight:600;line-height:20px}
-.vehicle-area .vehicle-icon{width:19px;height:19px;flex:0 0 19px;color:#B8C2CC;vertical-align:0}
+.vehicle-area .vehicle-icon{width:20px;height:20px;flex:0 0 20px;color:#B8C2CC;vertical-align:0}
 .vehicle-area .vehicle-icon svg{width:100%;height:100%;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .vehicle-area .vehicle-text{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
