@@ -237,3 +237,9 @@ body{color:var(--text-body)}
   position:relative;
   left:5px;
 }
+
+
+/* 2026-09-21 识别中取消按钮：恢复严格水平居中，不再右移 */
+.upload-sheet.processing .sheet-footer .btn-cancel{
+  left:0!important;
+}
