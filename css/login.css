@@ -12,3 +12,15 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 @media(max-width:360px){.login-container{padding-left:16px;padding-right:16px}.logo{width:150px;height:150px}.brand-sub{font-size:13px;letter-spacing:2px}}
 
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+
+
+/* 2026-09-21 登录页按钮色彩统一：仅调整颜色 */
+:root{--blue:#DCE3E8}
+.login-btn{background:#DCE3E8!important;color:#0B1015!important}
+.login-btn:hover{filter:brightness(1.04)}
+.login-btn:active{background:#313E49!important;color:#fff!important}
+.login-btn:disabled{background:#DCE3E8!important;color:#0B1015!important;opacity:.55}
+.eye-btn:active{color:#fff;background:#313E49!important}
+.switch-btn{color:#DCE3E8!important}
+.switch-btn:active{background:#202A34!important;color:#fff!important}
+.input-box input:focus{border-color:rgba(220,227,232,.45)!important;box-shadow:0 0 0 3px rgba(220,227,232,.18)!important}
