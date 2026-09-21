@@ -54,8 +54,57 @@ function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm'
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.remove('ocr-text-open');sheet?.classList.add('waiting')}}
 window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
 window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder==='function')return window.submitManualOrder();return}if(primaryActionMode==='error'){window.restartUpload?.();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
-function closeOCRTextDetails(){const sheet=document.querySelector('.upload-sheet');const toggle=$('ocrTextToggle');if(!sheet||!toggle)return;sheet.classList.remove('ocr-text-open');toggle.setAttribute('aria-expanded','false');const arrow=toggle.querySelector('span');if(arrow)arrow.textContent='›';const status=$('parseStatus');if(status)status.classList.remove('detail-hidden');}
-window.toggleOCRText=()=>{const sheet=document.querySelector('.upload-sheet');const toggle=$('ocrTextToggle');if(!sheet||!toggle)return;const open=sheet.classList.toggle('ocr-text-open');toggle.setAttribute('aria-expanded',open?'true':'false');const arrow=toggle.querySelector('span');if(arrow)arrow.textContent='›';const status=$('parseStatus');if(status)status.classList.toggle('detail-hidden',open);};
+let uploadDetailMode='';
+function getCorrectionDetailText(){
+  return Array.isArray(correctionDetails)&&correctionDetails.length?correctionDetails:[];
+}
+function renderUploadDetail(mode){
+  const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody'),switchBtn=$('uploadDetailSwitch');
+  if(!view||!title||!body||!switchBtn)return;
+  uploadDetailMode=mode==='correction'?'correction':'planning';
+  title.textContent=uploadDetailMode==='correction'?'修正详情':'规划详情';
+  body.textContent='';
+  if(uploadDetailMode==='planning'){
+    const pre=document.createElement('pre');
+    pre.className='upload-detail-text';
+    pre.textContent=String($('manualOrderInput')?.value||'').trim()||'暂无规划详情';
+    body.appendChild(pre);
+    switchBtn.textContent='修正详情';
+    switchBtn.disabled=getCorrectionDetailText().length===0;
+  }else{
+    const items=getCorrectionDetailText();
+    if(!items.length){
+      const empty=document.createElement('div');
+      empty.className='upload-detail-empty';
+      empty.textContent='暂无修正记录';
+      body.appendChild(empty);
+    }else{
+      items.forEach(item=>{
+        const row=document.createElement('div');
+        row.className='correction-item';
+        const parts=String(item).split(' → ');
+        const left=document.createElement('span');left.className='correction-left';left.textContent=parts[0]||'';
+        const arrow=document.createElement('span');arrow.className='correction-arrow';arrow.textContent='→';
+        const right=document.createElement('span');right.className='correction-right';right.textContent=parts.slice(1).join(' → ')||'';
+        row.append(left,arrow,right);body.appendChild(row);
+      });
+    }
+    switchBtn.textContent='规划详情';
+    switchBtn.disabled=false;
+  }
+  view.hidden=false;view.setAttribute('aria-hidden','false');
+  document.querySelector('.upload-sheet')?.classList.add('detail-view-open');
+}
+function closeUploadDetail(){
+  const view=$('uploadDetailView');if(!view)return;
+  view.hidden=true;view.setAttribute('aria-hidden','true');
+  document.querySelector('.upload-sheet')?.classList.remove('detail-view-open');
+  uploadDetailMode='';
+}
+window.closeUploadDetail=closeUploadDetail;
+window.switchUploadDetail=()=>renderUploadDetail(uploadDetailMode==='planning'?'correction':'planning');
+window.toggleOCRText=()=>renderUploadDetail('planning');
+window.openCorrectionDetails=()=>renderUploadDetail('correction');
 window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');openUploadHistoryGuard();const sheet=overlay.querySelector('.upload-sheet');if(sheet)sheet.classList.remove('ocr-text-open');window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
 let uploadHistoryGuard=false;
 function openUploadHistoryGuard(){
@@ -85,7 +134,7 @@ window.goToRouteEdit=()=>navigateApp('pages/route_edit.html');
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
-window.clearManualInput=()=>{correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','ocr-text-open','review-ready');sheet.classList.add('waiting')}const modal=$('correctionModal');if(modal){modal.classList.remove('active');modal.setAttribute('aria-hidden','true')}};
+window.clearManualInput=()=>{correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','ocr-text-open','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.()const modal=$('correctionModal');if(modal){modal.classList.remove('active');modal.setAttribute('aria-hidden','true')}};
 let correctionDetails=[];
 function openCorrectionDetails(){
   const modal=$('correctionModal'),list=$('correctionList');
