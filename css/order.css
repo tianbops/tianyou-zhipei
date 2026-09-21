@@ -32,3 +32,10 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 :root{--blue:#B8C1C8;--primary-action:#B8C1C8}
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:#B8C1C8!important;color:#0B1015!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
+
+/* 2026-09-21 订单页文字层级统一：仅调整文字表现，不改变布局/功能 */
+:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D}
+.order-detail-page{color:var(--text-body)}
+.order-detail-page .date-title,.order-detail-page .summary-title,.order-detail-page .card-title{color:var(--text-primary);font-weight:700}
+.order-detail-page .store-name{color:var(--text-primary);font-weight:600}
+.order-detail-page .store-note,.order-detail-page .store-address,.order-detail-page .meta,.order-detail-page .summary-label{color:var(--text-secondary)}
