@@ -530,3 +530,18 @@ body{color:var(--text-body)}
     line-height:22px;
   }
 }
+
+
+/* 2026-09-22 规划结果：所有结果文字统一字号 */
+.parse-status.success:has(.compact-result) .status-row #statusText.structured-status.compact-result,
+.parse-status.success:has(.compact-result) .status-row #statusText.structured-status.compact-result .status-content-left,
+.parse-status.success:has(.compact-result) .status-row #statusText.structured-status.compact-result .status-content-right,
+.parse-status.success:has(.compact-result) .status-detail .detail-line{
+  font-size:14px!important;
+  line-height:22px!important;
+  font-weight:500!important;
+}
+.parse-status.success:has(.compact-result) .status-detail .detail-row{
+  height:22px!important;
+  min-height:22px!important;
+}
