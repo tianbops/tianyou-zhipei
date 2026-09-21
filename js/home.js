@@ -119,8 +119,10 @@ if(parsedOrders.length){
   correctionDetails=correctionLines.slice();
   setCorrectionSummary(correctionDetails.length);
   detailLines.length=0;
-  detailLines.push(`今日配送：${uniqueCount}家　　${resultWeight}`);
-  detailLines.push(`现在${uniqueCount}家，原始${rawCount}家${correctionCount?`，更正${correctionCount}家`:''}`);
+  detailLines.push(`今日配送：${uniqueCount}家`);
+  detailLines.push(resultWeight);
+  const structuredStatus={left:'规划完成',right:resultDate,details:[`今日配送：${uniqueCount}家`,resultWeight,`原始${rawCount}家`,`更正${correctionCount}家`,`合并${mergeCount}家`]};
+  window.renderUnifiedStatus('success',100,structuredStatus);
   const reviewSummary=$('reviewSummary'),reviewCount=$('reviewCount');
   if(reviewSummary&&reviewCount){reviewCount.textContent=String(correctionCount);reviewSummary.hidden=correctionCount===0;}
   window.renderStatusDetail?.(structuredStatus.details);
