@@ -135,3 +135,12 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .upload-sheet .review-summary span:last-child{display:none!important}
 .upload-sheet.processing .sheet-footer{justify-content:center}
 .upload-sheet.processing .sheet-footer .btn-cancel{flex:0 0 100%;text-align:center}
+
+
+/* 2026-09-21 全局按钮色彩统一：弱化/取消业务蓝，仅调整颜色，不改变布局与尺寸 */
+:root{--blue:#DCE3E8;--primary-action:#DCE3E8;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
+button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
+button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control-dark)!important;color:#E3E8ED!important}
+button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
+button:active,.primary-btn:active,.secondary-btn:active,.btn-primary-action:active,.save-btn:active,.add-btn:active{background:var(--control-pressed)!important;color:#fff!important}
+input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-color:rgba(220,227,232,.45)!important;box-shadow:0 0 0 3px var(--focus-neutral)!important}
