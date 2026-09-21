@@ -525,3 +525,230 @@ body{color:var(--text-body)}
 .upload-sheet.detail-view-open .sheet-footer{margin-top:0}
 .upload-sheet.detail-view-open.detail-mode-planning .review-summary,
 .upload-sheet.detail-view-open.detail-mode-correction .input-area{flex:0 0 40px;min-height:40px}
+
+
+/* 2026-09-22 产品UX最终优化：详情页可读性、关闭按钮、状态框与操作间距 */
+
+/* 详情容器：必须位于顶部状态框之后，不能覆盖状态框 */
+.upload-sheet.detail-view-open{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.upload-sheet.detail-view-open > .parse-status{
+  flex:0 0 auto!important;
+  position:relative!important;
+  z-index:30!important;
+  display:block!important;
+  visibility:visible!important;
+  margin-bottom:12px!important;
+}
+.upload-sheet.detail-view-open > .upload-detail-view{
+  display:flex!important;
+  flex:1 1 auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+  position:relative!important;
+  z-index:10!important;
+}
+
+/* 详情标题栏：明确高度、留出关闭按钮空间 */
+.upload-sheet.detail-view-open .upload-detail-header{
+  position:relative!important;
+  flex:0 0 52px!important;
+  min-height:52px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0 48px 0 20px!important;
+  border-bottom:1px solid rgba(255,255,255,.07)!important;
+}
+.upload-sheet.detail-view-open .upload-detail-title{
+  color:#F2F5F7!important;
+  font-size:16px!important;
+  line-height:24px!important;
+  font-weight:600!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+.upload-sheet.detail-view-open .upload-detail-close{
+  position:absolute!important;
+  top:50%!important;
+  right:10px!important;
+  transform:translateY(-50%)!important;
+  width:36px!important;
+  height:36px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:50%!important;
+  background:rgba(255,255,255,.06)!important;
+  color:#F2F5F7!important;
+  font-family:Arial,sans-serif!important;
+  font-size:27px!important;
+  font-weight:300!important;
+  line-height:36px!important;
+  cursor:pointer!important;
+  z-index:50!important;
+  -webkit-tap-highlight-color:transparent!important;
+}
+.upload-sheet.detail-view-open .upload-detail-close:hover{
+  background:rgba(255,255,255,.11)!important;
+}
+.upload-sheet.detail-view-open .upload-detail-close:active{
+  background:rgba(255,255,255,.16)!important;
+  transform:translateY(-50%) scale(.96)!important;
+}
+
+/* 内容区独立滚动 */
+.upload-sheet.detail-view-open .upload-detail-body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:14px 16px 18px!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+
+/* 规划详情：增加行间距，避免大段OCR文字挤在一起 */
+.upload-sheet.detail-view-open .upload-detail-text{
+  margin:0!important;
+  padding:0!important;
+  color:#D5DCE2!important;
+  font-family:"Microsoft YaHei",Arial,sans-serif!important;
+  font-size:14px!important;
+  line-height:1.85!important;
+  letter-spacing:.1px!important;
+  white-space:pre-wrap!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+}
+
+/* 修正详情：每一条记录独立成行，并保留明显上下间距 */
+.upload-sheet.detail-view-open .correction-item{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr)!important;
+  gap:8px!important;
+  align-items:center!important;
+  min-height:42px!important;
+  padding:10px 0!important;
+  border-bottom:1px solid rgba(255,255,255,.055)!important;
+  color:#D5DCE2!important;
+  font-size:14px!important;
+  line-height:22px!important;
+}
+.upload-sheet.detail-view-open .correction-item:first-child{
+  padding-top:4px!important;
+}
+.upload-sheet.detail-view-open .correction-left,
+.upload-sheet.detail-view-open .correction-right{
+  min-width:0!important;
+  color:#D5DCE2!important;
+  font-size:14px!important;
+  line-height:22px!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+}
+.upload-sheet.detail-view-open .correction-left{text-align:left!important}
+.upload-sheet.detail-view-open .correction-right{text-align:right!important}
+.upload-sheet.detail-view-open .correction-arrow{
+  color:#8D99A5!important;
+  font-size:15px!important;
+  line-height:22px!important;
+  text-align:center!important;
+}
+.upload-sheet.detail-view-open .upload-detail-empty{
+  padding:24px 8px!important;
+  color:#8D99A5!important;
+  font-size:14px!important;
+  line-height:24px!important;
+  text-align:center!important;
+}
+
+/* “另一详情”入口与底部操作区拉开距离，降低误触 */
+.upload-sheet.detail-view-open .input-area,
+.upload-sheet.detail-view-open .review-summary{
+  flex:0 0 44px!important;
+  min-height:44px!important;
+  height:44px!important;
+  margin-top:12px!important;
+  margin-bottom:14px!important;
+  padding:0 8px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border-top:1px solid rgba(255,255,255,.055)!important;
+  border-bottom:1px solid rgba(255,255,255,.055)!important;
+  border-radius:10px!important;
+  background:rgba(255,255,255,.025)!important;
+  overflow:hidden!important;
+}
+.upload-sheet.detail-view-open .input-area .detail-toggle,
+.upload-sheet.detail-view-open .review-summary{
+  width:100%!important;
+  min-height:44px!important;
+  height:44px!important;
+  margin:0!important;
+  justify-content:center!important;
+  color:#B8C2CC!important;
+  font-size:14px!important;
+  line-height:22px!important;
+  font-weight:500!important;
+}
+.upload-sheet.detail-view-open .input-area #manualOrderInput{
+  display:none!important;
+}
+
+/* 当前详情打开时，只显示另一详情入口 */
+.upload-sheet.detail-view-open.detail-mode-planning .input-area{
+  display:none!important;
+}
+.upload-sheet.detail-view-open.detail-mode-correction .review-summary{
+  display:none!important;
+}
+
+/* 入口与确认/取消按钮之间增加安全距离 */
+.upload-sheet.detail-view-open .sheet-footer{
+  flex:0 0 auto!important;
+  position:relative!important;
+  z-index:40!important;
+  margin-top:0!important;
+  padding-top:14px!important;
+  border-top:1px solid rgba(255,255,255,.055)!important;
+  background:rgba(28,37,48,.98)!important;
+}
+.upload-sheet.detail-view-open .sheet-footer button{
+  height:48px!important;
+}
+
+/* 小屏高度下仍优先保证：状态框 > 详情标题 > 详情滚动 > 入口 > 操作按钮 */
+@media(max-height:700px){
+  .upload-sheet.detail-view-open > .parse-status{
+    margin-bottom:8px!important;
+  }
+  .upload-sheet.detail-view-open .upload-detail-header{
+    flex-basis:48px!important;
+    min-height:48px!important;
+  }
+  .upload-sheet.detail-view-open .upload-detail-body{
+    padding-top:10px!important;
+    padding-bottom:12px!important;
+  }
+  .upload-sheet.detail-view-open .input-area,
+  .upload-sheet.detail-view-open .review-summary{
+    margin-top:8px!important;
+    margin-bottom:10px!important;
+  }
+  .upload-sheet.detail-view-open .sheet-footer{
+    padding-top:10px!important;
+  }
+}
