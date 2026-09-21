@@ -187,7 +187,7 @@ if(parsedOrders.length){
   const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
   correctionDetails=[...correctionLines,...mergeLines];
   setCorrectionSummary(correctionDetails.length);
-  const structuredStatus={left:'规划完成',right:resultDate,details:[`今日配送：${uniqueCount}家`,resultWeight,`原始${rawCount}家`,`更正${correctionCount}家`,`合并${mergeCount}家`]};
+  const structuredStatus={left:resultDate,right:'',compact:true,details:[`${uniqueCount}家 · ${resultWeight}`,`原始${rawCount}家 · 更正${correctionCount}家 · 合并${mergeCount}家`]};
   window.renderUnifiedStatus('success',100,structuredStatus);
   const reviewSummary=$('reviewSummary');
   if(reviewSummary)reviewSummary.hidden=correctionDetails.length===0;
