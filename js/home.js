@@ -24,7 +24,7 @@ function isFallbackStore(value){const text=cleanFallbackStore(value),compact=tex
 function fallbackStoresFromText(text){let source=String(text||'').replace(/\r\n?/g,'\n').replace(/[＞》➜➤⇒↦→]/g,'->').replace(/\s*->\s*/g,'->');const carrier=source.lastIndexOf('承运订单');if(carrier>=0)source=source.slice(carrier+'承运订单'.length);const parts=source.includes('->')?source.replace(/\s+/g,' ').split('->'):source.split('\n');const stores=[],seen=new Set();for(const part of parts){let name=cleanFallbackStore(part).replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/gi,' ').trim();if(!isFallbackStore(name))continue;const key=name.replace(/\s/g,'').toLowerCase();if(seen.has(key))continue;seen.add(key);stores.push({code:String(stores.length+1).padStart(2,'0'),name,nav:'',note:'',weight:0,isNew:false,matched:false,needsReview:false,matchType:'raw-order',matchScore:0,rawName:name,rawNames:[name]})}return stores}
 function fallbackParse(text){const stores=fallbackStoresFromText(text);if(!stores.length)throw Error('未识别到有效门店，请检查OCR文字后再解析');const totalWeight=parseWeightFromText(text);return{route:currentRoute(),date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight,totalVolume:'',rawOrderCount:stores.length,recognizedCount:stores.length,uniqueStoreCount:stores.length,storeCount:stores.length,matchedCount:0,newStoreCount:0,reviewCount:0,duplicateCount:0,learnedCount:0,baseDatabaseAvailable:false,stores,warning:`未找到${currentRoute()}独立基准数据库，本次按运单识别顺序排列`}}
 let parseAbortController=null,parseInFlight=false,parseCancelled=false;
-function currentUploadTaskId(){return Number(window.activeUploadTaskId)||0}
+function currentUploadTaskId(){return typeof window.getUploadTaskId==='function'?Number(window.getUploadTaskId())||0:0}
 function ensureUploadTask(){if(typeof window.beginUploadTask!=='function')return 0;return currentUploadTaskId()||window.beginUploadTask()}
 function invalidateUploadTask(){return typeof window.invalidateUploadTask==='function'?window.invalidateUploadTask():0}
 function isUploadTaskActive(taskId){return !taskId||typeof window.isUploadTaskActive!=='function'||window.isUploadTaskActive(taskId)}
@@ -41,7 +41,7 @@ async function parseOrderText(text,taskId=0){
     if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});
     if(!response.ok||!data.success){
       const message=String(data?.error||'');
-      if(/未找到.*独立基准数据库/.test(message))return fallbackParse(text);
+      if(/未找到.*独立基准数据库/.test(message)){if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});const fallback=fallbackParse(text);if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});return fallback;}
       throw Error(message||`规划接口错误（${response.status}）`);
     }
     return data.data;
@@ -191,7 +191,7 @@ if(parsedOrders.length){
   if(reviewSummary)reviewSummary.hidden=correctionDetails.length===0;
   window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();correctionDetails=[];setCorrectionSummary(0);}
-if(parsedOrders.length)setPrimaryActionMode('confirm');return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
+if(parsedOrders.length)setPrimaryActionMode('confirm');return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
 const HOME_ORDER_CACHE_KEY='zsp_home_order_v1';
 function readCachedHomeOrder(){try{const raw=sessionStorage.getItem(HOME_ORDER_CACHE_KEY);if(!raw)return null;const item=JSON.parse(raw);if(item?.date!==currentDate()||!item?.order)return null;return item.order}catch(_){return null}}
 function writeCachedHomeOrder(order){try{sessionStorage.setItem(HOME_ORDER_CACHE_KEY,JSON.stringify({date:currentDate(),order}))}catch(_){}}
