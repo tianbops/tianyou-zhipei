@@ -27,3 +27,6 @@
 .wheel-labels{display:grid;grid-template-columns:1.25fr 1fr 1fr;text-align:center;color:#7F8B98;font-size:11px;padding-top:4px}
 @media(max-height:700px){.history-page{padding-top:10px;padding-bottom:26px!important;height:calc(100dvh - 26px)}.history-page .top-bar{margin-bottom:8px}.history-filter-card{padding:10px;margin-bottom:9px}.history-record-card{padding:12px}.date-picker-btn{height:44px}.history-date-item{padding:8px 10px;margin-bottom:8px}.history-head{min-height:40px}.empty-tip{padding:28px 15px}}
 @media(prefers-reduced-motion:reduce){.date-picker-btn,.history-view,.history-date-item{transition:none}}
+/* 2026-09-21 历史查询时间选择器居中 */
+.date-modal{align-items:center!important;justify-content:center!important;padding:16px;box-sizing:border-box}
+.date-sheet{width:min(100%,520px);max-height:88vh;overflow-y:auto;border-radius:22px!important;margin:0 auto}
