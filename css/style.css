@@ -189,3 +189,22 @@ body{color:var(--text-body)}
 .status-row #statusText{font-size:14px}
 .detail-toggle,.review-summary{font-size:14px;font-weight:500}
 .quick-actions button,.source-menu-cancel{font-size:13px}
+
+
+/* 2026-09-21 识别提取中取消按钮：强制内容几何居中 */
+.upload-sheet.processing .sheet-footer{
+  width:100%;
+  justify-content:center;
+  align-items:center;
+}
+.upload-sheet.processing .sheet-footer .btn-cancel{
+  flex:0 0 100%;
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:0;
+  margin:0;
+  box-sizing:border-box;
+}
