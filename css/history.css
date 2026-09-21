@@ -39,3 +39,12 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
 button:active,.primary-btn:active,.secondary-btn:active,.btn-primary-action:active,.save-btn:active,.add-btn:active{background:var(--control-pressed)!important;color:#fff!important}
 input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-color:rgba(220,227,232,.45)!important;box-shadow:0 0 0 3px var(--focus-neutral)!important}
+
+
+/* 2026-09-21 历史查询时间选择按钮统一：仅调整颜色 */
+.date-picker-btn{background:#DCE3E8!important;color:#0B1015!important}
+.date-picker-btn:active{background:#313E49!important;color:#fff!important}
+.date-picker-btn:disabled{background:#DCE3E8!important;color:#0B1015!important;opacity:.55}
+.date-sheet-head button{color:#DCE3E8!important}
+.date-sheet-head button:last-child{color:#DCE3E8!important}
+.wheel-item.active{color:#fff}
