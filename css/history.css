@@ -48,3 +48,20 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 .date-sheet-head button{color:#DCE3E8!important}
 .date-sheet-head button:last-child{color:#DCE3E8!important}
 .wheel-item.active{color:#fff}
+
+/* 2026-09-21 历史配送记录删除弹窗优化：替代原生 confirm */
+.delete-modal{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72);box-sizing:border-box}
+.delete-modal.active{display:flex}
+.delete-sheet{width:min(100%,360px);box-sizing:border-box;background:#18212B;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:24px 20px 18px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,.5)}
+.delete-icon{width:44px;height:44px;margin:0 auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(231,76,60,.12);color:#F06A5E}
+.delete-icon .z-icon{width:22px;height:22px;flex-basis:22px}
+.delete-title{display:block;font-size:17px;line-height:24px;color:#fff;font-weight:700}
+.delete-message{margin-top:10px;font-size:15px;line-height:22px;color:#E3E8ED}
+.delete-warning{margin-top:5px;font-size:13px;line-height:20px;color:#8F9BA7}
+.delete-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.delete-actions button{height:44px;border:0;border-radius:12px;font-size:15px;font-weight:650;cursor:pointer}
+.delete-cancel{background:#202A34;color:#E3E8ED}
+.delete-confirm{background:#DCE3E8;color:#0B1015}
+.delete-cancel:active{background:#313E49;color:#fff}
+.delete-confirm:active{background:#BFC8CF;color:#0B1015}
+.history-view.deleting{opacity:.55}
