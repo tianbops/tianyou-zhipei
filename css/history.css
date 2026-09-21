@@ -65,3 +65,8 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 .delete-cancel:active{background:#313E49;color:#fff}
 .delete-confirm:active{background:#BFC8CF;color:#0B1015}
 .history-view.deleting{opacity:.55}
+
+/* 2026-09-21 历史运单按钮统一视觉：仅调整颜色 */
+.history-view{background:#DCE3E8!important;color:#0B1015!important}
+.history-view:hover{filter:brightness(1.04)}
+.history-view:active{background:#313E49!important;color:#fff!important;filter:none}
