@@ -265,6 +265,79 @@ body{color:var(--text-body)}
 .upload-sheet .sheet-footer .btn-primary-action{order:1}
 .upload-sheet .sheet-footer .btn-cancel{order:2}
 
+
+/* 2026-09-21 详情页最终固定布局：X保留、内容滚动、规划入口保留、底部操作栏固定 */
+.upload-sheet.detail-view-open{
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden!important;
+}
+.upload-sheet.detail-view-open .sheet-handle{
+  flex:0 0 auto;
+}
+.upload-sheet.detail-view-open .upload-detail-view{
+  display:flex!important;
+  flex-direction:column;
+  flex:1 1 auto;
+  min-height:0;
+  margin-top:0;
+  border-radius:16px;
+  overflow:hidden;
+}
+.upload-sheet.detail-view-open .upload-detail-header{
+  flex:0 0 52px;
+  min-height:52px;
+}
+.upload-sheet.detail-view-open .upload-detail-close{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  position:relative;
+  z-index:30;
+  flex:0 0 34px;
+}
+.upload-sheet.detail-view-open .upload-detail-body{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.upload-sheet.detail-view-open .upload-detail-switch{
+  display:flex!important;
+  flex:0 0 40px;
+  height:40px;
+  align-items:center;
+  justify-content:center;
+}
+.upload-sheet.detail-view-open .sheet-footer{
+  flex:0 0 auto;
+  width:100%;
+  position:relative!important;
+  z-index:40;
+  margin-top:12px!important;
+  padding-top:0;
+  background:rgba(28,37,48,.99);
+}
+.upload-sheet.detail-view-open .sheet-footer .btn-primary-action,
+.upload-sheet.detail-view-open .sheet-footer .btn-cancel{
+  display:flex!important;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  visibility:visible!important;
+}
+.upload-sheet.detail-view-open .sheet-footer .btn-primary-action{order:1}
+.upload-sheet.detail-view-open .sheet-footer .btn-cancel{order:2}
+.upload-sheet.detail-view-open .input-area,
+.upload-sheet.detail-view-open .review-summary{
+  display:none!important;
+}
+.upload-sheet .upload-detail-view[hidden]{
+  display:none!important;
+}
+
 /* 2026-09-21 状态框弹窗取消按钮：大按钮并严格居中 */
 .upload-sheet.processing .sheet-footer{
   width:100%;
