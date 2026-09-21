@@ -135,16 +135,7 @@ window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
 window.clearManualInput=()=>{correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','ocr-text-open','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.()const modal=$('correctionModal');if(modal){modal.classList.remove('active');modal.setAttribute('aria-hidden','true')}};
-let correctionDetails=[];
-function openCorrectionDetails(){
-  const modal=$('correctionModal'),list=$('correctionList');
-  if(!modal||!list||!correctionDetails.length)return;
-  list.textContent='';
-  correctionDetails.forEach(item=>{const row=document.createElement('div');row.className='correction-item';const parts=String(item).split(' → ');const left=document.createElement('span');left.className='correction-left';left.textContent=parts[0]||'';const arrow=document.createElement('span');arrow.className='correction-arrow';arrow.textContent='→';const right=document.createElement('span');right.className='correction-right';right.textContent=parts.slice(1).join(' → ')||'';row.append(left,arrow,right);list.appendChild(row);});
-  modal.classList.add('active');
-  modal.setAttribute('aria-hidden','false');
-}
-window.openCorrectionDetails=openCorrectionDetails;function setCorrectionSummary(count){
+let correctionDetails=[];function setCorrectionSummary(count){
   const row=$('reviewSummary');
   if(row)row.hidden=count<=0;
 }
