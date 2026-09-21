@@ -60,6 +60,13 @@ export async function onRequest({ request, env }) {
     const token = createLockToken();
     if (!(await acquireLock(env, lockKey, token, 15))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试' }, 409);
     try {
+      // 重复运单必须在日期锁内判断，避免两个相同确认请求并发穿透。
+      // 命中后直接复用第一笔已有批次，不覆盖今日数据、不新增历史记录。
+      const duplicate = await findDuplicateOrder(env, userId, route, date, todayData);
+      if (duplicate) {
+        return json({ success: true, duplicate: true, data: duplicate });
+      }
+
       await redisSet(env, todayKey, todayData);
       const saved = await readAfterWrite(env, todayKey, orderBatchId, orders.length);
       if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
@@ -211,6 +218,26 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
   }
 }
 
+async function findDuplicateOrder(env, userId, route, date, candidate) {
+  const todayKey = scopedKey(userId, route, `today:${date}`);
+  const historyKey = scopedKey(userId, route, `history:${date}`);
+  const today = await redisGet(env, todayKey);
+  if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) {
+    return today;
+  }
+  const history = await redisGet(env, historyKey);
+  if (Array.isArray(history)) {
+    const signature = businessOrderSignature(candidate);
+    if (signature) {
+      const match = history
+        .filter(item => businessOrderSignature(item) === signature)
+        .sort((a, b) => String(a?.updatedAt || '').localeCompare(String(b?.updatedAt || '')))[0];
+      if (match) return match;
+    }
+  }
+  return null;
+}
+
 async function saveHistory(env, userId, route, date, today) {
   const keyName = scopedKey(userId, route, `history:${date}`);
   const old = await redisGet(env, keyName);
@@ -249,9 +276,33 @@ function normalizeDate(value) { const s = String(value || '').trim().replace(/[�
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function normalizeRoute(value) { const s = String(value || '').trim(), m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
+function normalizeVehicle(value) { return String(value || '').trim().replace(/\\s+/g, '').toUpperCase(); }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`; }
 function resolveTotalWeight(value, rawText) { const direct = normalizeWeight(value); if (direct) return direct; const source = String(rawText || '').replace(/\s+/g, ' '); const match = source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)\b/i); return match ? normalizeWeight(`${match[1]}${match[2] || ''}`) : ''; }
-function historySignature(record) { const batch=String(record?.orderBatchId||'').trim(); if(batch)return `batch:${batch}`; const stores = Array.isArray(record?.orders) ? record.orders.map(item => key(item?.name)).filter(Boolean).sort() : []; return JSON.stringify({ route: String(record?.route || ''), date: String(record?.date || ''), vehicle: String(record?.vehicle || ''), weight: normalizeWeight(record?.totalWeight ?? record?.weight), stores }); }
+function businessOrderSignature(record) {
+  if (!record || !Array.isArray(record.orders) || !record.orders.length) return '';
+  const route = normalizeRoute(record.route);
+  const date = normalizeDate(record.date);
+  const vehicle = normalizeVehicle(record.vehicle);
+  const weight = normalizeWeight(record.totalWeight ?? record.weight);
+  const stores = record.orders.map(item => key(item?.name)).filter(Boolean).sort();
+  if (!route || !date || !vehicle || !weight || !stores.length) return '';
+  return JSON.stringify({ route, date, vehicle, weight, stores });
+}
+function historySignature(record) {
+  const business = businessOrderSignature(record);
+  if (business) return business;
+  const batch = String(record?.orderBatchId || '').trim();
+  if (batch) return `batch:${batch}`;
+  const stores = Array.isArray(record?.orders) ? record.orders.map(item => key(item?.name)).filter(Boolean).sort() : [];
+  return JSON.stringify({
+    route: String(record?.route || ''),
+    date: String(record?.date || ''),
+    vehicle: String(record?.vehicle || ''),
+    weight: normalizeWeight(record?.totalWeight ?? record?.weight),
+    stores
+  });
+}
 async function readAfterWrite(env, keyName, batchId, count) { for (let attempt = 0; attempt < 3; attempt++) { const saved = await redisGet(env, keyName); if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count && normalizeWeight(saved.totalWeight)) return saved; if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1))); } return null; }
 function pruneAliases(aliases, limit) { const entries = Object.entries(aliases); if (entries.length <= limit) return; entries.sort((a, b) => String(a[1]?.updatedAt || '').localeCompare(String(b[1]?.updatedAt || ''))); for (const [alias] of entries.slice(0, entries.length - limit)) delete aliases[alias]; }
 function createBatchId(date, route) { const stamp = new Date().toISOString().replace(/[-:.TZ]/g, ''); const suffix = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/gi, '').slice(0, 12); return `${date}-${route.replace(/\D/g, '')}-${stamp}-${suffix}`; }
