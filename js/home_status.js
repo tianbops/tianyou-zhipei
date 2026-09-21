@@ -21,12 +21,24 @@ function render(status='idle',progress=0,message=''){
     icon.innerHTML=state==='loading'?'<span class="status-spinner" aria-hidden="true"></span>':'';
   }
   if($('statusText')){
-    const text=String(message||MESSAGES[state]).trim();
-    $('statusText').textContent=text;
-    $('statusText').setAttribute('data-text',text);
+    const statusText=$('statusText');
+    const structured=message&&typeof message==='object'&&!Array.isArray(message);
+    if(structured){
+      statusText.textContent='';
+      statusText.removeAttribute('data-text');
+      const left=document.createElement('span'); left.className='status-content-left'; left.textContent=String(message.left||'');
+      const right=document.createElement('span'); right.className='status-content-right'; right.textContent=String(message.right||'');
+      statusText.append(left,right);
+      statusText.classList.add('structured-status');
+    }else{
+      const text=String(message||MESSAGES[state]).trim();
+      statusText.classList.remove('structured-status');
+      statusText.textContent=text;
+      statusText.setAttribute('data-text',text);
+    }
   }
   if($('statusText'))$('statusText').style.setProperty('--status-progress',Math.max(0,Math.min(100,Number(progress)||0))+'%');
-  if(state==='error')setError(message);else clearError();
+  if(state==='error')setError(typeof message==='object'?'运单识别失败':message);else clearError();
   if(state!=='success')renderDetail([]);
 }
 function renderDetail(details){
