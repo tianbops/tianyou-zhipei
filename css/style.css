@@ -105,3 +105,24 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 /* 2026-09-21 上传运单弹窗统一居中 */
 .upload-overlay{align-items:center!important;justify-content:center!important;padding:16px calc(16px + env(safe-area-inset-left)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-right))!important}
 .upload-sheet{margin:0 auto!important;max-height:88vh}
+
+
+/* 2026-09-21 上传运单弹窗文字层级优化：仅调整字号，提升核心内容可读性 */
+.upload-sheet .source-menu-title{font-size:17px}
+.upload-sheet .source-menu-cancel{font-size:14px}
+.upload-sheet .parse-status{font-size:15px}
+.upload-sheet .status-row #statusText{font-size:15px}
+.upload-sheet .status-detail{font-size:14px}
+.upload-sheet .status-detail .detail-row .detail-line{font-size:14px}
+.upload-sheet .review-hint{font-size:13px}
+.upload-sheet .review-name{font-size:14px}
+.upload-sheet .review-select{font-size:14px}
+.upload-sheet .review-apply{font-size:14px}
+.upload-sheet .quick-actions button{font-size:14px}
+.upload-sheet .detail-toggle{font-size:15px}
+.upload-sheet #manualOrderInput{font-size:15px}
+.upload-sheet .review-summary{font-size:15px}
+.upload-sheet .sheet-footer button{font-size:16px}
+.correction-modal .correction-title{font-size:18px}
+.correction-modal .correction-item{font-size:14px}
+.correction-modal .correction-left,.correction-modal .correction-right{font-size:14px}
