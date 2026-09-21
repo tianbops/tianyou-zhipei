@@ -124,8 +124,8 @@ if(parsedOrders.length){
   detailLines.push(resultWeight);
   const structuredStatus={left:'规划完成',right:resultDate,details:[`今日配送：${uniqueCount}家`,resultWeight,`原始${rawCount}家`,`更正${correctionCount}家`,`合并${mergeCount}家`]};
   window.renderUnifiedStatus('success',100,structuredStatus);
-  const reviewSummary=$('reviewSummary'),reviewCount=$('reviewCount');
-  if(reviewSummary&&reviewCount){reviewCount.textContent=String(correctionCount);reviewSummary.hidden=correctionCount===0;}
+  const reviewSummary=$('reviewSummary');
+  if(reviewSummary)reviewSummary.hidden=correctionDetails.length===0;
   window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();correctionDetails=[];setCorrectionSummary(0);}
 if(parsedOrders.length)setPrimaryActionMode('confirm');return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
