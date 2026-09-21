@@ -25,3 +25,9 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
 button:active,.primary-btn:active,.secondary-btn:active,.btn-primary-action:active,.save-btn:active,.add-btn:active{background:var(--control-pressed)!important;color:#fff!important}
 input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-color:rgba(220,227,232,.45)!important;box-shadow:0 0 0 3px var(--focus-neutral)!important}
+
+
+/* 2026-09-21 全局按钮层级微调：主要按钮再压暗一档，次要按钮高度降低一档 */
+:root{--blue:#B8C1C8;--primary-action:#B8C1C8}
+button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:#B8C1C8!important;color:#0B1015!important}
+button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
