@@ -30,9 +30,10 @@ function render(status='idle',progress=0,message=''){
       const right=document.createElement('span'); right.className='status-content-right'; right.textContent=String(message.right||'');
       statusText.append(left,right);
       statusText.classList.add('structured-status');
+      statusText.classList.toggle('compact-result',message.compact===true);
     }else{
       const text=String(message||MESSAGES[state]).trim();
-      statusText.classList.remove('structured-status');
+      statusText.classList.remove('structured-status','compact-result');
       statusText.textContent=text;
       statusText.setAttribute('data-text',text);
     }
@@ -46,7 +47,8 @@ function renderDetail(details){
   if(!row)return;
   row.textContent='';
   const items=Array.isArray(details)?details.filter(Boolean).map(value=>String(value)):[];
-  const groups=items.length>=5?[items.slice(0,2),items.slice(2,5)]:items.length===3?[items]:items.length===2?[items]:[items];
+  const compact=$('statusText')?.classList.contains('compact-result');
+  const groups=compact?items.map(item=>[item]):items.length>=5?[items.slice(0,2),items.slice(2,5)]:items.length===3?[items]:items.length===2?[items]:[items];
   groups.filter(group=>group.length).forEach(group=>{
     const line=document.createElement('div');
     line.className='detail-row';
