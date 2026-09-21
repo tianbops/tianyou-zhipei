@@ -239,13 +239,19 @@
         new Promise((_, reject) => setTimeout(() => reject(new Error('OCR读取/识别超过2分钟，请检查图片质量或OCR处理链路')), OCR_TIMEOUT_MS))
       ]);
     } catch (error) {
-      if (/OCR识别已取消/.test(String(error?.message || ''))) {
-        ++operationId; disposeEngine().catch(() => {});
-      } else if (/读取运单时间较长/.test(String(error?.message || ''))) {
-        cancelRequested = true; ++operationId; disposeEngine().catch(() => {});
+      const message = String(error?.message || '');
+      const cancelled = error?.code === 'OCR_CANCELLED' || /已取消/.test(message) || !isUploadTaskActive(taskId);
+      const timedOut = /读取运单时间较长|OCR读取\/识别超过2分钟/.test(message);
+      if (cancelled) {
+        ++operationId;
+        disposeEngine().catch(() => {});
+      } else if (timedOut) {
+        cancelRequested = true;
+        ++operationId;
+        disposeEngine().catch(() => {});
       }
-      console.error('[PaddleOCR]', error);
-      if (!options.batch) setStatus(error?.message || 'OCR识别失败', 100, false, true);
+      if (!cancelled) console.error('[PaddleOCR]', error);
+      if (!options.batch && !cancelled && isUploadTaskActive(taskId)) setStatus(error?.message || 'OCR识别失败', 100, false, true);
       throw error;
     } finally {
       busy = false;
