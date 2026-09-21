@@ -70,3 +70,10 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 .history-view{background:#C8D0D6!important;color:#0B1015!important}
 .history-view:hover{filter:brightness(1.04)}
 .history-view:active{background:#313E49!important;color:#fff!important;filter:none}
+
+
+/* 2026-09-21 全局按钮层级微调：主要按钮再压暗一档，次要按钮高度降低一档 */
+.date-picker-btn,.history-view,.delete-confirm{background:#B8C1C8!important;color:#0B1015!important}
+.date-picker-btn:disabled{background:#B8C1C8!important;color:#0B1015!important;opacity:.55}
+button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:#B8C1C8!important;color:#0B1015!important}
+button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44px!important}
