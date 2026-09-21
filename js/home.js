@@ -57,7 +57,27 @@ window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof
 function closeOCRTextDetails(){const sheet=document.querySelector('.upload-sheet');const toggle=$('ocrTextToggle');if(!sheet||!toggle)return;sheet.classList.remove('ocr-text-open');toggle.setAttribute('aria-expanded','false');const arrow=toggle.querySelector('span');if(arrow)arrow.textContent='›';const status=$('parseStatus');if(status)status.classList.remove('detail-hidden');}
 window.toggleOCRText=()=>{const sheet=document.querySelector('.upload-sheet');const toggle=$('ocrTextToggle');if(!sheet||!toggle)return;const open=sheet.classList.toggle('ocr-text-open');toggle.setAttribute('aria-expanded',open?'true':'false');const arrow=toggle.querySelector('span');if(arrow)arrow.textContent='›';const status=$('parseStatus');if(status)status.classList.toggle('detail-hidden',open);};
 window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');const sheet=overlay.querySelector('.upload-sheet');if(sheet)sheet.classList.remove('ocr-text-open');window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
-window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');overlay.classList.toggle('active',opening);if(opening){window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.closeUploadSource?.();}};
+let uploadHistoryGuard=false;
+function openUploadHistoryGuard(){
+  if(uploadHistoryGuard)return;
+  const overlay=$('uploadOverlay');
+  if(!overlay)return;
+  history.pushState({zpeiUploadOverlay:true},'',location.href);
+  uploadHistoryGuard=true;
+}
+function closeUploadHistoryGuard(){
+  if(!uploadHistoryGuard)return;
+  uploadHistoryGuard=false;
+  if(history.state&&history.state.zpeiUploadOverlay){history.back();}
+}
+window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');if(opening){overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.closeUploadSource?.();overlay.classList.remove('active');closeUploadHistoryGuard();}};
+window.addEventListener('popstate',()=>{
+  const overlay=$('uploadOverlay');
+  if(!overlay||!uploadHistoryGuard)return;
+  uploadHistoryGuard=false;
+  overlay.classList.remove('active');
+  window.closeUploadSource?.();
+});
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
