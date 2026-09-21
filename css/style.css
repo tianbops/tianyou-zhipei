@@ -125,3 +125,23 @@ to{opacity:0;transform:translateY(-4px)}}to{opacity:1;transform:none}}
   .upload-sheet{padding-top:18px}
   .status-detail{gap:8px}
 }
+
+
+/* 完成状态框：独立内容单元三行布局 */
+.status-row #statusText.structured-status{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;width:100%;gap:12px;color:#fff}
+.status-row #statusText.structured-status::after{display:none}
+.status-content-left{min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status-content-right{min-width:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status-detail.active{display:flex;flex-direction:column;gap:5px;margin-top:6px;padding-top:6px}
+.status-detail .detail-row{width:100%;display:grid;align-items:center;gap:8px;min-width:0}
+.status-detail .detail-row:nth-child(1),
+.status-detail .detail-row:nth-child(2){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.status-detail .detail-row:nth-child(1) .detail-line:first-child,
+.status-detail .detail-row:nth-child(2) .detail-line:first-child{text-align:left}
+.status-detail .detail-row:nth-child(1) .detail-line:last-child,
+.status-detail .detail-row:nth-child(2) .detail-line:last-child{text-align:right}
+.status-detail .detail-row:nth-child(3){grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)}
+.status-detail .detail-row:nth-child(3) .detail-line:nth-child(1){text-align:left}
+.status-detail .detail-row:nth-child(3) .detail-line:nth-child(2){text-align:center}
+.status-detail .detail-row:nth-child(3) .detail-line:nth-child(3){text-align:right}
+.status-detail .detail-line{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
