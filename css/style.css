@@ -126,3 +126,12 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .correction-modal .correction-title{font-size:18px}
 .correction-modal .correction-item{font-size:14px}
 .correction-modal .correction-left,.correction-modal .correction-right{font-size:14px}
+
+
+/* 2026-09-21 上传弹窗细节入口：文字居中并取消箭头；识别中取消按钮居中 */
+.upload-sheet .detail-toggle,
+.upload-sheet .review-summary{justify-content:center;text-align:center}
+.upload-sheet .detail-toggle span,
+.upload-sheet .review-summary span:last-child{display:none!important}
+.upload-sheet.processing .sheet-footer{justify-content:center}
+.upload-sheet.processing .sheet-footer .btn-cancel{flex:0 0 100%;text-align:center}
