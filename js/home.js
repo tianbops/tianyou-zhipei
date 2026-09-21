@@ -69,6 +69,11 @@ function renderUploadDetail(mode){
   const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody');
   if(!view||!title||!body)return;
   uploadDetailMode=mode==='correction'?'correction':'planning';
+  const sheet=document.querySelector('.upload-sheet');
+  if(sheet){
+    sheet.classList.remove('detail-mode-planning','detail-mode-correction');
+    sheet.classList.add(`detail-mode-${uploadDetailMode}`);
+  }
   title.textContent=uploadDetailMode==='correction'?'修正详情':'规划详情';
   body.textContent='';
   if(uploadDetailMode==='planning'){
@@ -102,7 +107,8 @@ function renderUploadDetail(mode){
 function closeUploadDetail(){
   const view=$('uploadDetailView');if(!view)return;
   view.hidden=true;view.setAttribute('aria-hidden','true');
-  document.querySelector('.upload-sheet')?.classList.remove('detail-view-open');
+  const sheet=document.querySelector('.upload-sheet');
+  sheet?.classList.remove('detail-view-open','detail-mode-planning','detail-mode-correction');
   uploadDetailMode='';
 }
 window.closeUploadDetail=closeUploadDetail;
