@@ -31,3 +31,12 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 :root{--blue:#B8C1C8;--primary-action:#B8C1C8}
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:#B8C1C8!important;color:#0B1015!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
+
+/* 2026-09-21 线路编辑文字层级统一：仅调整文字表现，不改变布局/功能 */
+:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D}
+.route-edit-page{color:var(--text-body)}
+.card-header,.card-title,.route-title{color:var(--text-primary)}
+.store-name,.store-title{color:var(--text-primary);font-weight:600}
+.store-meta,.store-address,.store-note,.base-hint{color:var(--text-secondary)}
+.dialog-box h3,.dialog-box .title{color:var(--text-primary)}
+.dialog-box p,.dialog-box .hint{color:var(--text-secondary)}
