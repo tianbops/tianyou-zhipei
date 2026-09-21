@@ -78,7 +78,7 @@ window.openCorrectionDetails=openCorrectionDetails;function setCorrectionSummary
   const row=$('reviewSummary'),num=$('reviewCount');
   if(row&&num){num.textContent=String(count);row.hidden=count<=0;}
 }
-window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');if(parseInFlight)return auto?[]:toast('规划正在进行，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',10,auto?'正在根据运单生成路线…':'正在规划路线…');const data=await parseOrderText(text);window.renderUnifiedStatus('loading',78,'正在生成配送顺序…');parsedOrders=Array.isArray(data.stores)?data.stores:[];pendingMeta={date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;const message=parsedOrders.length?'路线规划完成':'没有识别到有效门店';window.onOrderParsed?.(data);setReviewText(data);window.renderUnifiedStatus(parsedOrders.length?'success':'error',100,parsedOrders.length?`路线规划完成　${String(data?.date||pendingMeta.date||currentDate()).trim()}`:message);
+window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');if(parseInFlight)return auto?[]:toast('规划正在进行，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',10,auto?'正在根据运单生成路线…':'正在规划路线…');const data=await parseOrderText(text);window.renderUnifiedStatus('loading',78,'正在生成配送顺序…');parsedOrders=Array.isArray(data.stores)?data.stores:[];pendingMeta={date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;const message=parsedOrders.length?'路线规划完成':'没有识别到有效门店';window.onOrderParsed?.(data);setReviewText(data);window.renderUnifiedStatus(parsedOrders.length?'success':'error',100,parsedOrders.length?{left:'规划完成',right:String(data?.date||pendingMeta.date||currentDate()).trim(),details:[]}:message);
 const detailLines=[];
 if(parsedOrders.length){
   let mergeCount=0,correctionCount=0;
@@ -112,7 +112,9 @@ if(parsedOrders.length){
       }
     }
   });
-  const resultWeight=String(data?.totalWeight||'').trim()||'未识别';
+  const rawWeight=String(data?.totalWeight||'').trim();
+  const weightT=parseWeight(rawWeight);
+  const resultWeight=weightT>0?`${(Math.round((weightT+Number.EPSILON)*100)/100).toFixed(2)}t`:'未识别';
   const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
   correctionDetails=correctionLines.slice();
   setCorrectionSummary(correctionDetails.length);
@@ -121,7 +123,7 @@ if(parsedOrders.length){
   detailLines.push(`现在${uniqueCount}家，原始${rawCount}家${correctionCount?`，更正${correctionCount}家`:''}`);
   const reviewSummary=$('reviewSummary'),reviewCount=$('reviewCount');
   if(reviewSummary&&reviewCount){reviewCount.textContent=String(correctionCount);reviewSummary.hidden=correctionCount===0;}
-  window.renderStatusDetail?.(detailLines);
+  window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();correctionDetails=[];setCorrectionSummary(0);}
 if(parsedOrders.length)setPrimaryActionMode('confirm');return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
 const HOME_ORDER_CACHE_KEY='zsp_home_order_v1';
