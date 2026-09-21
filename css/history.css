@@ -33,7 +33,7 @@
 
 
 /* 2026-09-21 全局按钮色彩统一：弱化/取消业务蓝，仅调整颜色，不改变布局与尺寸 */
-:root{--blue:#DCE3E8;--primary-action:#DCE3E8;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
+:root{--blue:#C8D0D6;--primary-action:#C8D0D6;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control-dark)!important;color:#E3E8ED!important}
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
@@ -42,9 +42,9 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 
 
 /* 2026-09-21 历史查询时间选择按钮统一：仅调整颜色 */
-.date-picker-btn{background:#DCE3E8!important;color:#0B1015!important}
+.date-picker-btn{background:#C8D0D6!important;color:#0B1015!important}
 .date-picker-btn:active{background:#313E49!important;color:#fff!important}
-.date-picker-btn:disabled{background:#DCE3E8!important;color:#0B1015!important;opacity:.55}
+.date-picker-btn:disabled{background:#C8D0D6!important;color:#0B1015!important;opacity:.55}
 .date-sheet-head button{color:#DCE3E8!important}
 .date-sheet-head button:last-child{color:#DCE3E8!important}
 .wheel-item.active{color:#fff}
@@ -67,6 +67,6 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 .history-view.deleting{opacity:.55}
 
 /* 2026-09-21 历史运单按钮统一视觉：仅调整颜色 */
-.history-view{background:#DCE3E8!important;color:#0B1015!important}
+.history-view{background:#C8D0D6!important;color:#0B1015!important}
 .history-view:hover{filter:brightness(1.04)}
 .history-view:active{background:#313E49!important;color:#fff!important;filter:none}
