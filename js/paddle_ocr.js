@@ -103,6 +103,9 @@
       }
     };
     enginePromise = PaddleOCR.create(createOptions).catch(async error => {
+      if (generation !== engineGeneration) {
+        throw Object.assign(new Error('OCR任务已取消'), { code: 'OCR_CANCELLED' });
+      }
       console.warn('[PaddleOCR worker] Worker模式加载失败，回退主线程:', error);
       const fallback = await PaddleOCR.create({
         ...createOptions,
