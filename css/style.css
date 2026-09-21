@@ -38,3 +38,11 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 @media(max-width:430px){.app-container,.page-container{padding-left:14px;padding-right:14px}.source-menu-options{gap:7px}.status-detail .detail-row{gap:0}.status-detail .detail-row .detail-line{font-size:11px}}
 @media(max-height:700px){.app-container,.page-container{padding-top:12px}.top-bar{height:50px}.task-card{margin-top:30px;padding:17px}.function-list{margin-top:20px}.function-btn{height:58px}.upload-sheet{max-height:94vh}.parse-status{max-height:70px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* Upload source sheet stability */
+.upload-sheet.waiting{padding-top:16px}
+.upload-sheet.waiting .upload-source-menu{display:block!important;margin-top:0;padding:14px;border-radius:18px}
+.upload-sheet.waiting .source-menu-options{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}
+.upload-sheet.waiting .source-option{min-width:0;overflow:hidden}
+.upload-sheet.waiting .source-option strong{white-space:nowrap}
+.upload-sheet.waiting .source-menu-cancel{display:block!important}
