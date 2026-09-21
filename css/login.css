@@ -48,3 +48,8 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
   border-color:rgba(255,255,255,.055);
   transition:background-color 9999s ease-out 0s;
 }
+
+
+/* 2026-09-21 登录页按钮层级微调：主要按钮再压暗一档 */
+:root{--blue:#B8C1C8}
+.login-btn,.login-btn:disabled{background:#B8C1C8!important;color:#0B1015!important}
