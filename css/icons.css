@@ -7,3 +7,5 @@
 .source-option .z-icon{width:28px;height:28px;flex-basis:28px;stroke-width:1.8}
 .home-menu-item .z-icon,.menu-panel>div .z-icon,.setting-row .z-icon{width:19px;height:19px;flex-basis:19px}
 .empty-tip .z-icon{margin-right:6px;color:#7F8B98}
+
+.z-nav-icon{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
