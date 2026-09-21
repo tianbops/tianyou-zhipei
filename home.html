@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#05070A">
 <title>Zhipei One · 智配 One</title>
 <link rel="stylesheet" href="css/style.css?v=20260921-12">
+<link rel="stylesheet" href="css/icons.css?v=20260921-1">
 </head>
 <body>
 
@@ -16,15 +17,15 @@
 </header>
 <div id="homeMenu" class="home-menu">
   <div class="current-line" id="menuRoute">加载中...</div>
-  <div class="home-menu-item" onclick="location.href='settings.html'">👤 账户设置</div>
-  <div class="home-menu-item" onclick="goToRouteEdit()">⚙ 原始数据</div>
-  <div class="home-menu-item logout-item" onclick="logout()">🚪 退出登录</div>
+  <div class="home-menu-item" onclick="location.href='settings.html'"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c.7-3.5 2.9-5.3 6.5-5.3s5.8 1.8 6.5 5.3"/></svg></span>账户设置</div>
+  <div class="home-menu-item" onclick="goToRouteEdit()"><span class="z-icon" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></span>原始数据</div>
+  <div class="home-menu-item logout-item" onclick="logout()"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 16l4-4-4-4M18 12H9"/></svg></span>退出登录</div>
 </div>
 <section class="task-card" id="taskCard">
   <div class="task-title"><div class="task-name">当日任务 <span class="status-dot" id="statusDot"></span></div><div class="vehicle-area" id="homeRoute">加载中...</div></div>
   <div class="task-main">
     <div class="task-info"><div>当日配送：<strong id="storeCount">无数据</strong></div><div>总体重量：<strong id="totalWeight">无数据</strong></div></div>
-    <div class="delivery-man"><img src="assets/delivery-route.png" alt="配送路线" onerror="this.style.display='none';this.parentElement.textContent='🚚'"></div>
+    <div class="delivery-man"><img src="assets/delivery-route.png" alt="配送路线" onerror="this.style.display='none';this.parentElement.innerHTML='<span class="z-icon lg" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>'"></div>
   </div>
 </section>
 <div class="function-list">
@@ -38,9 +39,9 @@
     <div class="upload-source-menu active" id="uploadSourceMenu" aria-hidden="false">
       <div class="source-menu-title">上传运单</div>
       <div class="source-menu-options">
-        <label class="source-option" aria-label="拍摄运单"><input id="ocrCameraInput" type="file" accept="image/*" capture="environment"><span aria-hidden="true">📷</span><strong>拍摄</strong></label>
-        <label class="source-option" aria-label="从相册选择运单"><input id="ocrAlbumInput" type="file" accept="image/*" multiple><span aria-hidden="true">🖼️</span><strong>相册</strong></label>
-        <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()" aria-label="选择运单文件"><span aria-hidden="true">📁</span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
+        <label class="source-option" aria-label="拍摄运单"><input id="ocrCameraInput" type="file" accept="image/*" capture="environment"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h4l1.5-2h5L16 7h4v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><strong>拍摄</strong></label>
+        <label class="source-option" aria-label="从相册选择运单"><input id="ocrAlbumInput" type="file" accept="image/*" multiple><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 3.5 3.5 2.5-2.5 5 5"/></svg></span><strong>相册</strong></label>
+        <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()" aria-label="选择运单文件"><span class="z-icon" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3z"/></svg></span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
       </div>
       <button class="source-menu-cancel" type="button" onclick="clearManualInput();cancelParse();toggleUpload()">取消</button>
     </div>
