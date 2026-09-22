@@ -136,3 +136,16 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .dialog-box{
   margin:0 auto!important;
 }
+
+
+/* UI 2.0 · 第二十二轮：线路维护页视觉基线统一 2026-09-22 */
+.top-bar{align-items:center!important}
+.app-title{line-height:24px!important;display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+.back-btn{display:flex!important;align-items:center!important;justify-content:center!important}
+.base-actions{align-items:center!important}
+.base-actions button,.store-actions button,.save-btn,.cancel-btn{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+.dialog{align-items:center!important;justify-content:center!important}
+.dialog-box{margin:0 auto!important}
+.dialog-btn{align-items:center!important}
+.dialog-btn button{display:flex!important;align-items:center!important;justify-content:center!important}
+.btn-group{align-items:center!important}
