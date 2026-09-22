@@ -2,7 +2,7 @@
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
 // 学习数据按用户ID+线路写入 Upstash Redis，任何账号之间互不共享。
 import { authRequired } from './_auth.js';
-import { canManageRoute, loadRouteBase, routeLearningKey } from './_data.js';
+import { canManageRoute, legacyUserLearningKey, loadRouteBase, routeLearningKey } from './_data.js';
 
 const MAX_ALIASES = 1000;
 const MAX_BATCH = 100;
@@ -102,7 +102,8 @@ async function getBaseStores(env, route, userId) {
 }
 
 async function getLearning(env, key, userId, route) {
-  const data = await redisGet(env, key);
+  let data = await redisGet(env, key);
+  if (!data || typeof data !== 'object') data = await redisGet(env, legacyUserLearningKey(userId, route));
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
