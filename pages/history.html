@@ -62,7 +62,48 @@
   async function requestHistory(date){const query=date?`?date=${encodeURIComponent(date)}`:'';const r=await fetch('/api/history'+query,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);const payload=await r.json();return Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[])}
   async function loadHistoryDates(){if(historyLoading)return;historyLoading=true;const box=$('historyList');box.innerHTML='<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>正在读取历史记录...</div>';try{const entries=await requestHistory('');renderDates(Array.isArray(entries)?entries.filter(entry=>entry?.date&&Array.isArray(entry.records)&&entry.records.length):[])}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21"/></svg></span>${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}finally{historyLoading=false}}
   function recordSummary(item){const count=Number(item?.uniqueStoreCount)||Number(item?.count)||(Array.isArray(item?.orders)?item.orders.length:0);const raw=item?.totalWeight??item?.weight??'';const source=String(raw).trim().replace(/,/g,'');const match=source.match(/\d+(?:\.\d+)?/);const value=match?Number(match[0]):NaN;let tons=NaN;if(Number.isFinite(value)){if(/kg|千克|公斤/i.test(source))tons=value/1000;else tons=value}const weight=Number.isFinite(tons)?(Math.round((tons+Number.EPSILON)*100)/100).toFixed(2):'0.00';return {count,weight}}
-  function renderDates(entries){const box=$('historyList');if(!entries.length){box.innerHTML='<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="13" rx="2"/><path d="m7 10 3 3 2-2 5 5"/></svg></span>暂无配送记录</div>';return}box.innerHTML='';entries.sort((a,b)=>b.date.localeCompare(a.date)).forEach(entry=>{const card=document.createElement('div');card.className='history-date-item';const head=document.createElement('button');head.type='button';head.className='history-head';head.setAttribute('aria-expanded','false');head.innerHTML='<span class="history-date">'+escapeHtml(entry.date)+'</span><span class="history-count">'+dedupeDateRecords(entry.records).length+'笔</span>';card.appendChild(head);const list=document.createElement('div');list.className='history-records';list.hidden=true;card.appendChild(list);head.addEventListener('click',()=>{const expanded=head.getAttribute('aria-expanded')==='true';if(expanded){head.setAttribute('aria-expanded','false');list.hidden=true;return}box.querySelectorAll('.history-head[aria-expanded="true"]').forEach(openHead=>{openHead.setAttribute('aria-expanded','false');const openList=openHead.parentElement?.querySelector('.history-records');if(openList)openList.hidden=true});head.setAttribute('aria-expanded','true');list.hidden=false;renderDateRecords(entry.records,list,head.querySelector('.history-count'),entry.date)});box.appendChild(card)})}
+  function renderDates(entries){
+  const box=$('historyList');
+  if(!entries.length){
+    box.innerHTML='<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="13" rx="2"/><path d="m7 10 3 3 2-2 5 5"/></svg></span>暂无配送记录</div>';
+    return;
+  }
+  box.innerHTML='';
+  const currentMonth=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit'}).format(new Date());
+  entries.sort((a,b)=>b.date.localeCompare(a.date)).forEach(entry=>{
+    const card=document.createElement('div');
+    card.className='history-date-item';
+    const head=document.createElement('button');
+    head.type='button';
+    head.className='history-head';
+    const expanded=entry.date.slice(0,7)===currentMonth;
+    head.setAttribute('aria-expanded',expanded?'true':'false');
+    head.innerHTML='<span class="history-date">'+escapeHtml(entry.date)+'</span><span class="history-count">'+dedupeDateRecords(entry.records).length+'笔</span>';
+    card.appendChild(head);
+    const list=document.createElement('div');
+    list.className='history-records';
+    list.hidden=!expanded;
+    card.appendChild(list);
+    if(expanded) renderDateRecords(entry.records,list,head.querySelector('.history-count'),entry.date);
+    head.addEventListener('click',()=>{
+      const isExpanded=head.getAttribute('aria-expanded')==='true';
+      if(isExpanded){
+        head.setAttribute('aria-expanded','false');
+        list.hidden=true;
+        return;
+      }
+      box.querySelectorAll('.history-head[aria-expanded="true"]').forEach(openHead=>{
+        openHead.setAttribute('aria-expanded','false');
+        const openList=openHead.parentElement?.querySelector('.history-records');
+        if(openList)openList.hidden=true;
+      });
+      head.setAttribute('aria-expanded','true');
+      list.hidden=false;
+      renderDateRecords(entry.records,list,head.querySelector('.history-count'),entry.date);
+    });
+    box.appendChild(card);
+  });
+}
 function historySignature(item){const batch=String(item?.orderBatchId||'').trim();if(batch)return `batch:${batch}`;const vehicle=String(item?.vehicle||'').trim().toLowerCase(),weight=String(item?.totalWeight??item?.weight??'').trim(),orders=Array.isArray(item?.orders)?item.orders.map(order=>({name:String(order?.name||order?.storeName||order?.shopName||order?.['门店名称']||'').trim().replace(/[\\s\\u3000（）()【】\\[\\]]/g,'').toLowerCase(),weight:Number(order?.weight)||0})).filter(order=>order.name).sort((a,b)=>String(a.name+'|'+a.weight).localeCompare(String(b.name+'|'+b.weight))):[];return JSON.stringify({vehicle,weight,orders})}
   function dedupeDateRecords(records){const map=new Map();records.forEach(item=>{const signature=historySignature(item);if(signature&&!map.has(signature))map.set(signature,item)});return [...map.values()]}
   async function deleteRecord(date,item,button){if(!item?.orderBatchId)return;button.disabled=true;button.classList.add('deleting');try{const r=await fetch('/api/history?date='+encodeURIComponent(date)+'&orderBatchId='+encodeURIComponent(item.orderBatchId),{method:'DELETE',cache:'no-store',headers:authHeaders(),credentials:'same-origin'});const payload=await r.json().catch(()=>({}));if(!r.ok||payload?.success!==true)throw new Error(payload?.error||'删除失败');const records=await requestHistory(date);const list=button.parentElement,headCount=list?.previousElementSibling?.querySelector('.history-count');renderDateRecords(records,list,headCount,date)}catch(e){console.error(e);alert(e.message||'删除失败');button.disabled=false;button.classList.remove('deleting')}}
