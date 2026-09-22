@@ -1229,3 +1229,246 @@ input:focus,textarea:focus,select:focus{
   box-shadow:0 0 0 3px rgba(208,215,220,.10)!important;
 }
 .badge,.tag,.status-tag{border-radius:999px!important;font-size:11px!important;line-height:22px!important;min-height:22px}
+
+
+/* UI 2.0 · 第五轮：首页与上传流程精修
+   目标：首页首屏更轻、任务卡更清晰、上传底部面板更接近原生移动交互。
+   仅调整 UI，不改变业务逻辑、OCR、API、数据结构或运行方式。 */
+
+/* 首页首屏层级 */
+.app-container>.top-bar{
+  margin-bottom:0!important;
+}
+.brand-info{min-width:0}
+.brand-name{font-weight:700!important}
+.task-card{
+  position:relative;
+  overflow:hidden;
+}
+.task-card::after{
+  content:"";
+  position:absolute;
+  left:18px;
+  right:18px;
+  bottom:0;
+  height:1px;
+  background:rgba(255,255,255,.035);
+  pointer-events:none;
+}
+.task-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.task-name{
+  display:flex;
+  align-items:center;
+  min-width:0;
+  white-space:nowrap;
+}
+.vehicle-area{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  color:var(--one-secondary);
+}
+.vehicle-icon{width:20px!important;height:20px!important;flex:0 0 20px!important;color:var(--one-body)}
+.vehicle-text{
+  color:var(--one-text);
+  font-size:14px;
+  font-weight:600;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.task-main{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:end;
+  gap:10px;
+}
+.task-info{min-width:0}
+.task-info>div{
+  display:flex;
+  align-items:baseline;
+  gap:3px;
+}
+.delivery-man{
+  align-self:end;
+  opacity:.86;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+}
+
+/* 三个主入口：统一为“整行可点击”的移动端操作项 */
+.function-btn{
+  position:relative;
+  overflow:hidden;
+  justify-content:flex-start!important;
+}
+.function-btn::after{
+  content:"›";
+  position:absolute;
+  right:16px;
+  top:50%;
+  transform:translateY(-50%);
+  color:var(--one-tertiary);
+  font-size:22px;
+  line-height:1;
+  font-family:Arial,sans-serif;
+}
+.function-btn:active::after{color:var(--one-primary-text)}
+.function-icon{
+  margin-right:12px;
+}
+
+/* 首页菜单 */
+.home-menu{
+  overflow:hidden;
+  padding:5px!important;
+}
+.current-line{
+  margin-bottom:4px;
+  border-radius:11px;
+  padding:0 13px!important;
+  display:flex!important;
+  align-items:center;
+}
+.home-menu-item{
+  border-radius:10px;
+  display:flex!important;
+  align-items:center;
+  gap:9px;
+}
+.home-menu-item .z-icon{flex:0 0 20px}
+
+/* 上传底部面板：标题/来源/操作统一节奏 */
+.upload-overlay{
+  align-items:flex-end!important;
+  justify-content:center!important;
+}
+.upload-sheet{
+  overflow:hidden;
+  padding-top:8px!important;
+  box-shadow:0 -18px 48px rgba(0,0,0,.42)!important;
+}
+.sheet-handle{
+  width:38px!important;
+  height:4px!important;
+  border-radius:999px!important;
+  margin:2px auto 12px!important;
+  background:#65717D!important;
+}
+.upload-source-menu{
+  padding:0 16px 12px!important;
+}
+.source-menu-title{
+  font-size:17px!important;
+  font-weight:700!important;
+  color:var(--one-text)!important;
+  text-align:center!important;
+  margin:2px 0 14px!important;
+}
+.source-menu-options{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:8px!important;
+}
+.source-option{
+  min-height:82px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  padding:8px!important;
+  color:var(--one-body)!important;
+}
+.source-option .z-icon{
+  width:25px!important;
+  height:25px!important;
+  color:var(--one-text)!important;
+}
+.source-option strong{
+  font-size:13px!important;
+  font-weight:600!important;
+}
+.source-menu-cancel{
+  width:100%!important;
+  margin-top:9px!important;
+  border:1px solid var(--one-line)!important;
+  background:var(--one-surface-2)!important;
+  color:var(--one-body)!important;
+}
+
+/* 解析/规划状态：状态优先，减少视觉噪声 */
+.parse-status{
+  margin:0 16px 10px!important;
+  padding-left:13px!important;
+  padding-right:13px!important;
+}
+.parse-status .status-row{
+  min-height:40px;
+}
+.parse-status .status-detail{
+  color:var(--one-secondary);
+}
+
+/* 详情入口统一成次级信息卡 */
+.detail-entry-row{
+  padding:0 16px!important;
+  gap:8px!important;
+}
+.detail-toggle,.review-summary{
+  min-height:46px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  padding:0 13px!important;
+  color:var(--one-body)!important;
+  font-size:14px!important;
+  font-weight:600!important;
+}
+.detail-toggle span,.review-summary span{
+  color:var(--one-tertiary)!important;
+  font-size:20px!important;
+  line-height:1!important;
+}
+#manualOrderInput{
+  margin-top:8px!important;
+  min-height:150px!important;
+}
+
+/* 底部操作区固定节奏，不改变原有按钮行为 */
+.sheet-footer{
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom))!important;
+  border-top:1px solid rgba(255,255,255,.055)!important;
+  background:rgba(21,29,38,.98)!important;
+}
+.sheet-footer .btn-primary-action{min-width:0}
+.sheet-footer .btn-cancel{min-width:0}
+
+/* 处理状态时只保留取消操作，保持视觉中心 */
+.upload-sheet.processing .sheet-footer{
+  padding-top:8px!important;
+}
+.upload-sheet.processing .sheet-footer .btn-cancel{
+  border:1px solid var(--one-line)!important;
+  background:var(--one-surface-2)!important;
+}
+
+/* 小屏幕：来源按钮不压缩文字 */
+@media(max-width:380px){
+  .vehicle-text{font-size:13px}
+  .task-main{gap:6px}
+  .delivery-man{width:78px;height:68px}
+  .source-option{min-height:76px!important}
+  .source-option strong{font-size:12px!important}
+  .upload-source-menu,.detail-entry-row{padding-left:12px!important;padding-right:12px!important}
+  .parse-status{margin-left:12px!important;margin-right:12px!important}
+  .sheet-footer{padding-left:12px!important;padding-right:12px!important}
+}
