@@ -1667,16 +1667,6 @@ a:focus-visible,
 }
 
 
-/* UI 2.0 · 第十九轮：首页任务卡以下内容整体下移 2026-09-22 */
-.function-list{
-  margin-top:28px!important;
-}
-@media(max-width:380px){
-  .function-list{
-    margin-top:24px!important;
-  }
-}
-
 /* UI 2.0 · 第十八轮：首页今日任务卡适度放大 2026-09-22 */
 /* 不增加新信息，只提升“今日任务”作为首页核心卡片的视觉占比 */
 .task-card{
@@ -1769,7 +1759,7 @@ a:focus-visible,
   }
 }
 
-/* UI 2.0 · 第二十轮：统一所有弹出层居中 2026-09-22 */
+/* UI 2.0 · 第二十轮：统一上传弹出层居中 2026-09-22 */
 .upload-overlay{
   align-items:center!important;
   justify-content:center!important;
@@ -1777,10 +1767,6 @@ a:focus-visible,
 .upload-sheet{
   margin:0 auto!important;
   max-height:88vh!important;
-}
-.correction-modal{
-  align-items:center!important;
-  justify-content:center!important;
 }
 
 /* UI 2.0 · 第二十一轮：识别读取中状态文字垂直居中 2026-09-22 */
