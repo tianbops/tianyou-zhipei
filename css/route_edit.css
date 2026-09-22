@@ -118,3 +118,12 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .route-edit-page .store-actions button{min-width:38px!important;height:36px!important;border-radius:10px!important}
 .route-edit-page .btn-group{padding-top:9px!important}
 .route-edit-page .save-btn,.route-edit-page .cancel-btn{height:44px!important;min-height:44px!important;border-radius:11px!important}
+
+
+/* UI 2.0 · 第十二轮：修复线路编辑按钮外层方形焦点框 2026-09-22 */
+.route-edit-page button:focus-visible,
+.route-edit-page a:focus-visible,
+.route-edit-page [role="button"]:focus-visible{
+  outline:none!important;
+  box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
+}
