@@ -85,10 +85,17 @@ function recoverFromToday(today, userId, route, date) {
 async function listAllHistory(env, userId, route) {
   const historyPattern = scopedKey(userId, route, 'history:*');
   const todayPattern = scopedKey(userId, route, 'today:*');
-  const [historyKeys, todayKeys] = await Promise.all([
+  let [historyKeys, todayKeys] = await Promise.all([
     scanKeys(env, historyPattern),
     scanKeys(env, todayPattern)
   ]);
+  if (!historyKeys.length && !todayKeys.length) {
+    const legacyPrefix = 'user:' + encodeKey(userId) + ':route:' + encodeKey(route) + ':orders:';
+    [historyKeys, todayKeys] = await Promise.all([
+      scanKeys(env, legacyPrefix + 'history:*'),
+      scanKeys(env, legacyPrefix + 'today:*')
+    ]);
+  }
   const keyMap = new Map();
   historyKeys.forEach(key => keyMap.set(key, 'history'));
   todayKeys.forEach(key => keyMap.set(key, 'today'));
