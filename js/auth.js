@@ -109,6 +109,13 @@ window.Auth = {
   async checkAuth() {
     const page = location.pathname.split('/').pop();
     if (['index.html', 'login.html', ''].includes(page)) return true;
+    const registeredEntry = page === 'home.html' && new URLSearchParams(location.search).get('registered') === '1';
+    if (registeredEntry) {
+      // 新用户注册完成后直接进入首页，不再被旧的“未设置线路→设置页”规则拦截。
+      history.replaceState({}, '', 'home.html');
+      if (!this.serverUser) await this.getCurrentServerUser();
+      return !!this.serverUser;
+    }
     if (this.serverUser && (this.serverUser.route || page === 'settings.html')) return true;
     if (this.authPromise) return this.authPromise;
     this.authPromise = this.getCurrentServerUser().then(user => {
