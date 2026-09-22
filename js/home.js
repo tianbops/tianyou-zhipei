@@ -188,11 +188,9 @@ if(parsedOrders.length){
   const resultWeight=weightT>0?`${(Math.round((weightT+Number.EPSILON)*100)/100).toFixed(2)}t`:'未识别';
   const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
   correctionDetails=[...correctionLines,...mergeLines];
-  setCorrectionSummary(correctionDetails.length);
+  setCorrectionSummary(1);
   const structuredStatus={left:resultDate,right:`${uniqueCount}家 · ${resultWeight}`,compact:true,details:[`原始${rawCount}家`,`更正${correctionCount}家`,`合并${mergeCount}家`]};
   window.renderUnifiedStatus('success',100,structuredStatus);
-  const reviewSummary=$('reviewSummary');
-  if(reviewSummary)reviewSummary.hidden=correctionDetails.length===0;
   window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();correctionDetails=[];setCorrectionSummary(0);}
 if(parsedOrders.length)setPrimaryActionMode('confirm');return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
