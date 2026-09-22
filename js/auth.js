@@ -126,7 +126,19 @@ window.Auth = {
   },
 
   getCurrentRoute() { return this.serverUser?.route || ''; },
-  getRoute() { return this.serverUser?.route || ''; },
+  getBoundRoute() { return this.serverUser?.boundRouteId || this.serverUser?.route || ''; },
+  getDispatchRoute() {
+    const selected = String(sessionStorage.getItem('zhipei_dispatch_route_v1') || '').trim();
+    return selected || this.getBoundRoute();
+  },
+  setDispatchRoute(route) {
+    const value = this.formatRouteCode(route);
+    if (value) sessionStorage.setItem('zhipei_dispatch_route_v1', value);
+    else sessionStorage.removeItem('zhipei_dispatch_route_v1');
+    return value;
+  },
+  clearDispatchRoute() { sessionStorage.removeItem('zhipei_dispatch_route_v1'); },
+  getRoute() { return this.getDispatchRoute(); },
 
   async logout() {
     this.serverUser = null;
