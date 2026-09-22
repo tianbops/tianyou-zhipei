@@ -236,7 +236,26 @@
       ]);
       if (currentOperation !== operationId || cancelRequested) throw new Error('已取消');
       if (!isUploadTaskActive(taskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
-      const text = resultToText(result);
+      let text = resultToText(result);
+      // 取消后立即重新上传时，旧 OCR 引擎可能刚完成释放，新任务首次推理偶发返回空结果。
+      // 空结果不直接判定为图片无文字：先彻底重建一次引擎并对同一图片自动重试，避免用户必须再次手动上传。
+      if ((!text || isPlaceholder(text)) && isUploadTaskActive(taskId) && !cancelRequested) {
+        setStatus(options.batch ? ('正在重新识别第 ' + options.index + '/' + options.total + ' 张运单…') : '正在重新识别运单文字…', 68);
+        await disposeEngine();
+        if (!isUploadTaskActive(taskId) || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+        const retryOcr = await loadEngine();
+        if (!isUploadTaskActive(taskId) || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+        const retryRemaining = Math.max(1, deadline - Date.now());
+        const [retryResult] = await Promise.race([
+          retryOcr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('读取运单时间较长，请重新尝试')), retryRemaining))
+        ]);
+        if (currentOperation !== operationId || cancelRequested || !isUploadTaskActive(taskId)) {
+          throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
+        }
+        text = resultToText(retryResult);
+        result = retryResult;
+      }
       if (!text || isPlaceholder(text)) throw new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
       const count = Array.isArray(result?.items) ? result.items.length : 0;
       if (!options.batch) {
