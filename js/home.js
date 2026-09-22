@@ -85,6 +85,24 @@ function renderUploadDetail(mode){
     body.appendChild(info);const listTitle=document.createElement('div');listTitle.className='detail-subtitle';listTitle.textContent='门店列表';body.appendChild(listTitle);
     const pre=document.createElement('pre');pre.className='upload-detail-text';const marker=lines.findIndex(v=>v.includes('门店列表'));pre.textContent=marker>=0?(lines.slice(marker+1).join('\n')||'暂无门店列表'):'暂无门店列表';body.appendChild(pre);
   }else{
+    const sectionTitle=document.createElement('div');
+    sectionTitle.className='detail-section-title';
+    sectionTitle.textContent='当日更改信息';
+    body.appendChild(sectionTitle);
+    const stats=document.createElement('div');
+    stats.className='correction-stats';
+    [['原始',correctionStats.raw],['更正',correctionStats.corrected],['合并',correctionStats.merged]].forEach(([label,value])=>{
+      const item=document.createElement('div');
+      item.className='correction-stat';
+      const text=document.createElement('span');
+      text.textContent=label+'：'+(Number(value)||0)+'家';
+      item.appendChild(text);stats.appendChild(item);
+    });
+    body.appendChild(stats);
+    const detailTitle=document.createElement('div');
+    detailTitle.className='detail-subtitle';
+    detailTitle.textContent='更改明细';
+    body.appendChild(detailTitle);
     const items=getCorrectionDetailText();
     if(!items.length){
       const empty=document.createElement('div');
