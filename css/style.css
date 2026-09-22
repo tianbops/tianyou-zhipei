@@ -754,71 +754,35 @@ body{color:var(--text-body)}
 }
 
 
-/* 2026-09-22 产品UX：未展开时“规划详情/修正详情”改为左右一排；展开后的详情布局保持不变 */
+/* 2026-09-22 产品UX：规划完成后详情入口固定左右同排
+   说明：使用 float 而不是 inline-flex，避免父级块格式化导致两个入口换行。展开详情时由 detail-view-open 规则接管。 */
 .upload-sheet:not(.detail-view-open) .input-area,
 .upload-sheet:not(.detail-view-open) .review-summary{
-  display:inline-flex!important;
-  vertical-align:top!important;
-  width:calc(50% - 6px)!important;
-  min-height:40px!important;
-  height:40px!important;
-  margin-top:12px!important;
-  margin-bottom:0!important;
-  padding:0 4px!important;
-  align-items:center!important;
-  justify-content:center!important;
-  overflow:hidden!important;
-}
-.upload-sheet:not(.detail-view-open) .input-area{
-  margin-right:8px!important;
-}
-.upload-sheet:not(.detail-view-open) .input-area .detail-toggle,
-.upload-sheet:not(.detail-view-open) .review-summary{
-  width:100%!important;
-  min-height:40px!important;
-  height:40px!important;
-  margin:0!important;
-  padding:0!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  white-space:nowrap!important;
-}
-.upload-sheet:not(.detail-view-open) .input-area #manualOrderInput{
   display:none!important;
 }
-/* 展开详情后完全沿用现有 detail-view-open 规则，不受本次左右布局影响 */
 
-
-/* 2026-09-22 产品UX修正：详情入口只在“规划完成”后出现；完成后左右一排 */
-/* 上传、识别、规划进行中、失败等状态均不显示详情入口 */
-.upload-sheet:not(.detail-view-open):not(.success) .input-area,
-.upload-sheet:not(.detail-view-open):not(.success) .review-summary{
-  display:none!important;
-}
-/* 规划完成后：规划详情/修正详情左右并排 */
 .upload-sheet.success:not(.detail-view-open) .input-area,
 .upload-sheet.success:not(.detail-view-open) .review-summary{
-  display:inline-flex!important;
-  vertical-align:top!important;
+  display:flex!important;
+  float:left!important;
   width:calc(50% - 6px)!important;
-  min-height:40px!important;
   height:40px!important;
-  margin-top:12px!important;
-  margin-bottom:0!important;
+  min-height:40px!important;
+  margin:12px 0 0!important;
   padding:0 4px!important;
   align-items:center!important;
   justify-content:center!important;
   overflow:hidden!important;
+  box-sizing:border-box!important;
 }
 .upload-sheet.success:not(.detail-view-open) .input-area{
-  margin-right:8px!important;
+  margin-right:12px!important;
 }
 .upload-sheet.success:not(.detail-view-open) .input-area .detail-toggle,
 .upload-sheet.success:not(.detail-view-open) .review-summary{
   width:100%!important;
-  min-height:40px!important;
   height:40px!important;
+  min-height:40px!important;
   margin:0!important;
   padding:0!important;
   display:flex!important;
@@ -826,8 +790,15 @@ body{color:var(--text-body)}
   justify-content:center!important;
   white-space:nowrap!important;
 }
-/* 修正详情没有修正记录时，严格保持 hidden，不占位 */
+.upload-sheet.success:not(.detail-view-open) .input-area #manualOrderInput{
+  display:none!important;
+}
+/* 无修正记录时继续尊重 JS 的 hidden 状态，不占第二个入口位置。 */
 .upload-sheet.success:not(.detail-view-open) .review-summary[hidden]{
   display:none!important;
 }
-/* 展开后的布局由 detail-view-open 专用规则接管，本次左右布局不影响展开页 */
+/* 浮动入口结束后，底部按钮恢复到完整宽度并清除浮动。 */
+.upload-sheet.success:not(.detail-view-open) .sheet-footer{
+  clear:both!important;
+}
+/* 展开详情后：完全由 detail-view-open 专用规则接管，不参与左右布局。 */
