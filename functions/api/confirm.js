@@ -82,15 +82,8 @@ export async function onRequest({ request, env }) {
       // 历史记录是确认入库的核心结果，必须先于非核心的学习库更新。
       await saveHistory(env, userId, route, date, saved);
 
-      // 门店学习属于辅助能力，失败不应阻断“确认录入 → 当日详情”的主流程。
-      if (!noBase) {
-        try {
-          await learnConfirmedVariants(env, userId, route, body.orders, base);
-        } catch (learningError) {
-          console.warn('门店学习库更新失败，不影响本次订单入库', learningError);
-        }
-      }
-
+      // 门店学习由前端 /api/store-learning 独立执行，不能阻断核心入库链路。
+      // confirm 只负责：今日数据 → 历史记录 → latest → 返回成功。
       await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt });
       return json({ success: true, data: saved });
     } finally {
