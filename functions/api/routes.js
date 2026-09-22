@@ -2,7 +2,7 @@
 import { authRequired } from './_auth.js';
 import {
   canManageRoute, getRoute, getUser, loadRouteBase, normalizeRoute,
-  normalizeStores, routeBaseKey, saveRoute, redisSet
+  normalizeStores, routeBaseKey, saveRoute, redisSet, scanUsers
 } from './_data.js';
 
 const LOCK_TTL_SECONDS = 20;
@@ -160,6 +160,17 @@ async function listRoutes(env) {
       if (record?.id) records.push(record);
     }
   } while (cursor !== '0');
-  records.sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }));
-  return records;
+  const users = await scanUsers(env);
+  const byId = new Map(records.map(record => [String(record.id), record]));
+  for (const user of users) {
+    const id = normalizeRoute(user?.boundRouteId || user?.route);
+    if (!id) continue;
+    if (!byId.has(id)) byId.set(id, { id, name: id, driverUserId: '', deliveryUserId: '', boundUserIds: [] });
+    const record = byId.get(id);
+    if (user.routeDuty === 'driver') record.driverUserId = user.id;
+    if (user.routeDuty === 'delivery') record.deliveryUserId = user.id;
+    if (!Array.isArray(record.boundUserIds)) record.boundUserIds = [];
+    if (!record.boundUserIds.includes(user.id)) record.boundUserIds.push(user.id);
+  }
+  return [...byId.values()].sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }));
 }
