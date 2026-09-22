@@ -64,14 +64,33 @@ export async function onRequest({ request, env }) {
       // 命中后直接复用第一笔已有批次，不覆盖今日数据、不新增历史记录。
       const duplicate = await findDuplicateOrder(env, userId, route, date, todayData);
       if (duplicate) {
+        // 即使今日数据已经存在，也要确保历史索引存在。
+        // 这样可修复“今日数据已写入、历史写入中断”后的重试，不会因为重复判断而永久跳过历史记录。
+        await saveHistory(env, userId, route, date, duplicate);
+        await redisSet(env, scopedKey(userId, route, 'latest'), {
+          date,
+          orderBatchId: duplicate.orderBatchId,
+          updatedAt: duplicate.updatedAt || new Date().toISOString()
+        });
         return json({ success: true, duplicate: true, data: duplicate });
       }
 
       await redisSet(env, todayKey, todayData);
       const saved = await readAfterWrite(env, todayKey, orderBatchId, orders.length);
       if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
-      if (!noBase) await learnConfirmedVariants(env, userId, route, body.orders, base);
+
+      // 历史记录是确认入库的核心结果，必须先于非核心的学习库更新。
       await saveHistory(env, userId, route, date, saved);
+
+      // 门店学习属于辅助能力，失败不应阻断“确认录入 → 当日详情”的主流程。
+      if (!noBase) {
+        try {
+          await learnConfirmedVariants(env, userId, route, body.orders, base);
+        } catch (learningError) {
+          console.warn('门店学习库更新失败，不影响本次订单入库', learningError);
+        }
+      }
+
       await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt });
       return json({ success: true, data: saved });
     } finally {
