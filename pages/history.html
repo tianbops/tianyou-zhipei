@@ -109,7 +109,7 @@
         dayHead.className='history-head history-day-head';
         dayHead.setAttribute('aria-expanded','false');
         const day=String(entry.date).slice(8,10);
-        dayHead.innerHTML='<span class="history-date">'+escapeHtml(monthParts[0]+'年'+monthParts[1]+'月'+day+'日')+'</span>';
+        dayHead.innerHTML='<span class="history-date">'+escapeHtml(monthParts[0]+'年'+monthParts[1]+'月'+day+'日')+'</span><span class="history-count">'+dedupeDateRecords(entry.records).length+'笔</span>';
         dayCard.appendChild(dayHead);
 
         const list=document.createElement('div');
