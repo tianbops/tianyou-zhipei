@@ -222,7 +222,8 @@
   }
 
   async function process(file, options = {}) {
-    if (busy) return;
+    // 不再用全局 busy 拦截新任务。取消旧任务后，用户可能立即选择第二张运单；
+    // 新任务必须能够接管，旧任务则由 operationId / taskId 双重校验自动失效。
     busy = true;
     cancelRequested = false;
     const currentOperation = ++operationId;
@@ -370,17 +371,24 @@
     }
   }
   window.cancelOCR = async function() {
-    if (!busy) {
-      invalidateUploadTask();
-      return false;
-    }
+    // 先让旧任务立即失去控制权，再释放OCR资源。
+    // 这样即使释放过程尚未结束，用户也可以马上选择新的运单。
     cancelRequested = true;
     invalidateUploadTask();
     ++operationId;
-    await disposeEngine();
+    const releasePromise = disposeEngine();
     busy = false;
     setStatus('已取消', 100, false, false, true);
+    try { await releasePromise; } catch (_) {}
     return true;
+  };
+
+  // 第二次上传无需等待取消按钮对应的Promise完成。
+  // 新任务只需在真正创建OCR引擎前等待旧引擎释放，页面与任务状态不再互相阻塞。
+  window.waitForOCRReady = async function() {
+    const pending = engineDisposePromise;
+    if (!pending) return;
+    try { await pending; } catch (_) {}
   };
 
   window.callOCR = process;
