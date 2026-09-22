@@ -727,3 +727,30 @@ body{color:var(--text-body)}
 .upload-sheet.detail-view-open.detail-mode-correction .detail-entry-row .review-summary{
   display:none!important;
 }
+
+
+/* 2026-09-22 产品UX：上传运单弹窗按钮统一规范 */
+/* 上传来源：三项等宽、等高，适配移动端拇指操作 */
+.upload-source-menu{padding:16px!important;border-radius:18px!important}
+.source-menu-title{height:24px!important;line-height:24px!important;margin:0 0 14px!important;font-size:15px!important;font-weight:600!important}
+.source-menu-options{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important}
+.source-option{width:100%!important;height:76px!important;min-height:76px!important;padding:0!important;border-radius:13px!important;gap:7px!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important}
+.source-option .z-icon{width:24px!important;height:24px!important;display:flex!important;align-items:center!important;justify-content:center!important;color:#D5DCE3!important}
+.source-option .z-icon svg{width:23px!important;height:23px!important;display:block!important}
+.source-option strong{font-size:13px!important;line-height:18px!important;font-weight:500!important}
+.source-option:active{transform:scale(.97);background:rgba(255,255,255,.09)!important}
+.source-menu-cancel{height:44px!important;min-height:44px!important;margin-top:12px!important;border-radius:12px!important;font-size:14px!important;font-weight:500!important;display:flex!important;align-items:center!important;justify-content:center!important}
+/* 底部操作：主按钮与取消按钮统一高度，比例保持主操作突出 */
+.sheet-footer{display:flex!important;gap:10px!important;align-items:center!important;width:100%!important}
+.sheet-footer button{height:48px!important;min-height:48px!important;margin:0!important;border-radius:14px!important;padding:0 14px!important;display:flex!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;font-size:15px!important;line-height:20px!important;touch-action:manipulation!important}
+.btn-cancel{flex:1 1 0!important;min-width:0!important}
+.btn-primary-action{flex:3 1 0!important;min-width:0!important}
+/* 详情入口与底部按钮保持同一视觉尺寸体系 */
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .detail-toggle,
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary{height:44px!important;min-height:44px!important;border-radius:12px!important;font-size:14px!important;line-height:20px!important}
+@media(max-width:360px){
+  .upload-source-menu{padding:14px!important}
+  .source-menu-options{gap:7px!important}
+  .source-option{height:72px!important;min-height:72px!important}
+  .source-menu-cancel{height:44px!important}
+}
