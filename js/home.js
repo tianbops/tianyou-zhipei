@@ -208,7 +208,7 @@ window.addEventListener('popstate',()=>{
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
-window.goToRouteEdit=()=>navigateApp('pages/route_edit.html');
+window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度路线不是你的绑定路线，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
