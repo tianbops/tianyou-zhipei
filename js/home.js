@@ -187,6 +187,7 @@ let correctionDetails=[];let correctionStats={raw:0,corrected:0,merged:0};functi
 window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');const taskId=Number(options?.taskId)||ensureUploadTask();if(taskId&&!isUploadTaskActive(taskId))return[];if(parseInFlight)return auto?[]:toast('规划正在进行，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',10,auto?'正在根据运单生成路线…':'正在规划路线…');const data=await parseOrderText(text,taskId);if(taskId&&!isUploadTaskActive(taskId))return[];window.renderUnifiedStatus('loading',78,'正在生成配送顺序…');parsedOrders=Array.isArray(data.stores)?data.stores:[];pendingMeta={date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;if(taskId&&!isUploadTaskActive(taskId))return[];window.onOrderParsed?.(data);setReviewText(data);
 if(parsedOrders.length){
   let mergeCount=0,correctionCount=0;
+  const newStoreCount=Number(data?.newStoreCount)||parsedOrders.filter(item=>item?.isNew===true||item?.matchType==='new').length;
   const mergeLines=[],correctionLines=[];
   parsedOrders.forEach(item=>{
     const baseName=String(item?.baseName||item?.name||'').trim();
@@ -224,7 +225,11 @@ if(parsedOrders.length){
   correctionDetails=[...correctionLines,...mergeLines];
   correctionStats={raw:rawCount,corrected:correctionCount,merged:mergeCount};
   setCorrectionSummary(1);
-  const structuredStatus={left:resultDate,right:`${uniqueCount}家 · ${resultWeight}`,compact:true,details:[`原始${rawCount}家`,`更正${correctionCount}家`,`合并${mergeCount}家`]};
+  const statusDetails=[];
+  if(newStoreCount>0)statusDetails.push(`新增${newStoreCount}家`);
+  if(correctionCount>0)statusDetails.push(`更正${correctionCount}家`);
+  if(mergeCount>0)statusDetails.push(`合并${mergeCount}家`);
+  const structuredStatus={left:resultDate,right:`${uniqueCount}家 · ${resultWeight}`,compact:true,details:statusDetails};
   window.renderUnifiedStatus('success',100,structuredStatus);
   window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();correctionDetails=[];correctionStats={raw:0,corrected:0,merged:0};setCorrectionSummary(0);}
