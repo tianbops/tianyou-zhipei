@@ -1,6 +1,7 @@
 // 天友智配One - 用户注册
 // 注册只创建最小账号资料；姓名、线路、车辆进入系统后再设置。
 import { createSession, sessionCookie } from './_auth.js';
+import { publicUser, redisCommand } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -26,11 +27,15 @@ export async function onRequest({ request, env }) {
       id,
       username,
       name: username,
+      phone: '',
+      boundRouteId: '',
       route: '',
       vehicle: '',
+      role: 'driver',
       passwordHash,
       status: 'active',
       sessionVersion: 1,
+      schemaVersion: 1,
       createdAt: now,
       updatedAt: now
     };
@@ -46,7 +51,7 @@ export async function onRequest({ request, env }) {
       throw error;
     }
 
-    const safeUser = { id, username, name: username, route: '', vehicle: '' };
+    const safeUser = publicUser(user);
     const token = await createSession(env, safeUser);
     return new Response(JSON.stringify({ success: true, user: safeUser, needSetup: true }), {
       status: 201,
