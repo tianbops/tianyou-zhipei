@@ -57,3 +57,11 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .input-wrap input{height:48px;border-radius:12px;background:#0D1319;border-color:var(--line)}.input-wrap input:focus{border-color:rgba(208,215,220,.48);box-shadow:0 0 0 3px rgba(208,215,220,.10)}
 .sheet-actions{gap:8px}.secondary-btn,.primary-btn,.danger-btn{height:46px;border-radius:12px;font-size:14px}
 .secondary-btn{background:#202A34!important;color:#E3E8ED!important}.primary-btn{background:#D0D7DC!important;color:#0B1015!important}.danger-btn{background:transparent!important;border:1px solid rgba(255,107,94,.38)!important;color:#FF8278!important}
+
+
+/* UI 2.0 · 第六轮：设置页触控与危险操作收口 2026-09-22 */
+.settings-card,.profile-hero{box-shadow:none!important}
+.setting-row:focus-visible,.logout-btn:focus-visible,.back-btn:focus-visible,.close-btn:focus-visible,.sheet-actions button:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:2px!important}
+.setting-row:active{transform:none!important}
+.logout-btn{background:transparent!important}
+.danger-btn:active{background:rgba(255,107,94,.10)!important;color:#FF9A92!important}
