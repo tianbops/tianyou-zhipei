@@ -71,7 +71,7 @@ export async function onRequest({ request, env }) {
           date,
           orderBatchId: duplicate.orderBatchId,
           updatedAt: duplicate.updatedAt || new Date().toISOString()
-        });
+        }).catch(error => console.warn('latest 索引更新失败，不影响重复订单返回', error));
         return json({ success: true, duplicate: true, data: duplicate });
       }
 
@@ -84,7 +84,8 @@ export async function onRequest({ request, env }) {
 
       // 门店学习由前端 /api/store-learning 独立执行，不能阻断核心入库链路。
       // confirm 只负责：今日数据 → 历史记录 → latest → 返回成功。
-      await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt });
+      await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt })
+        .catch(error => console.warn('latest 索引更新失败，不影响订单确认成功', error));
       return json({ success: true, data: saved });
     } finally {
       // 锁只用于并发保护；释放失败不应让已经成功写入的订单变成“确认失败”。
@@ -253,7 +254,19 @@ async function findDuplicateOrder(env, userId, route, date, candidate) {
 
 async function saveHistory(env, userId, route, date, today) {
   const keyName = scopedKey(userId, route, `history:${date}`);
-  const old = await redisGet(env, keyName);
+  let old = null;
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      old = await redisGet(env, keyName);
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 120));
+    }
+  }
+  if (lastError) throw lastError;
   const list = Array.isArray(old) ? old : [];
   const record = {
     orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle,
@@ -269,7 +282,18 @@ async function saveHistory(env, userId, route, date, today) {
   if (index >= 0) list[index] = record;
   else list.push(record);
   list.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
-  await redisSet(env, keyName, list.slice(0, 90));
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await redisSet(env, keyName, list.slice(0, 90));
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 120));
+    }
+  }
+  if (lastError) throw lastError;
 }
 
 async function getLearning(env, keyName) {
