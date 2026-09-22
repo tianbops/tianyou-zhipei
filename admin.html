@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>智配One · 系统管理</title>
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <main class="admin-shell">
+    <header class="admin-head">
+      <div>
+        <div class="eyebrow">天友智配One</div>
+        <h1>系统管理</h1>
+        <p id="adminUser">正在验证管理员身份…</p>
+      </div>
+      <button id="backBtn" class="ghost">返回</button>
+    </header>
+
+    <section id="notice" class="notice hidden"></section>
+
+    <nav class="tabs" aria-label="管理模块">
+      <button class="tab active" data-tab="users">用户管理</button>
+      <button class="tab" data-tab="routes">路线绑定</button>
+    </nav>
+
+    <section id="usersTab" class="panel">
+      <div class="panel-head"><div><h2>用户</h2><span id="userCount">0</span></div><button id="refreshUsers" class="primary">刷新</button></div>
+      <div id="userList" class="user-list"></div>
+    </section>
+
+    <section id="routesTab" class="panel hidden">
+      <div class="panel-head"><div><h2>路线绑定</h2><span>一条路线最多驾驶员 + 配送员</span></div><button id="refreshRoutes" class="primary">刷新</button></div>
+      <div class="route-form">
+        <label>路线<input id="routeInput" placeholder="例如 17号线"></label>
+        <label>驾驶员<select id="driverSelect"></select></label>
+        <label>配送员<select id="deliverySelect"></select></label>
+        <button id="saveRoute" class="primary">保存绑定</button>
+      </div>
+      <div id="routeList" class="route-list"></div>
+    </section>
+  </main>
+  <script src="js/admin.js"></script>
+</body>
+</html>
