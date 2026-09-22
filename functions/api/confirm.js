@@ -94,7 +94,8 @@ export async function onRequest({ request, env }) {
       await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt });
       return json({ success: true, data: saved });
     } finally {
-      await releaseLock(env, lockKey, token).catch(() => {});
+      // 锁只用于并发保护；释放失败不应让已经成功写入的订单变成“确认失败”。
+      releaseLock(env, lockKey, token).catch(() => {});
     }
   } catch (error) {
     console.error('confirm api error', error);
