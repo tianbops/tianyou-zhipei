@@ -754,32 +754,36 @@ body{color:var(--text-body)}
 }
 
 
-/* 2026-09-22 产品UX：规划完成后详情入口固定左右同排
-   说明：使用 float 而不是 inline-flex，避免父级块格式化导致两个入口换行。展开详情时由 detail-view-open 规则接管。 */
-.upload-sheet:not(.detail-view-open) .input-area,
-.upload-sheet:not(.detail-view-open) .review-summary{
-  display:none!important;
+/* 2026-09-22 产品UX：详情入口统一容器
+   只在规划成功后显示；容器使用原生 flex，避免 input-area/review-summary 各自参与块级换行。 */
+.detail-entry-row{
+  display:none;
 }
-
-.upload-sheet.success:not(.detail-view-open) .input-area,
-.upload-sheet.success:not(.detail-view-open) .review-summary{
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row{
   display:flex!important;
-  float:left!important;
-  width:calc(50% - 6px)!important;
+  width:100%!important;
+  gap:12px!important;
+  margin-top:12px!important;
+  align-items:stretch!important;
+}
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .input-area,
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary{
+  display:flex!important;
+  flex:1 1 0!important;
+  width:auto!important;
+  min-width:0!important;
   height:40px!important;
   min-height:40px!important;
-  margin:12px 0 0!important;
+  margin:0!important;
   padding:0 4px!important;
   align-items:center!important;
   justify-content:center!important;
-  overflow:hidden!important;
   box-sizing:border-box!important;
+  overflow:hidden!important;
+  float:none!important;
 }
-.upload-sheet.success:not(.detail-view-open) .input-area{
-  margin-right:12px!important;
-}
-.upload-sheet.success:not(.detail-view-open) .input-area .detail-toggle,
-.upload-sheet.success:not(.detail-view-open) .review-summary{
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .detail-toggle,
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary{
   width:100%!important;
   height:40px!important;
   min-height:40px!important;
@@ -790,15 +794,18 @@ body{color:var(--text-body)}
   justify-content:center!important;
   white-space:nowrap!important;
 }
-.upload-sheet.success:not(.detail-view-open) .input-area #manualOrderInput{
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row #manualOrderInput{
   display:none!important;
 }
-/* 无修正记录时继续尊重 JS 的 hidden 状态，不占第二个入口位置。 */
-.upload-sheet.success:not(.detail-view-open) .review-summary[hidden]{
+/* 详情展开后隐藏入口容器，由 detail-view-open 的专用规则接管另一详情入口。 */
+.upload-sheet.detail-view-open .detail-entry-row{
+  display:contents!important;
+}
+.upload-sheet.detail-view-open.detail-mode-planning .detail-entry-row .review-summary,
+.upload-sheet.detail-view-open.detail-mode-correction .detail-entry-row .input-area{
+  display:flex!important;
+}
+.upload-sheet.detail-view-open.detail-mode-planning .detail-entry-row .input-area,
+.upload-sheet.detail-view-open.detail-mode-correction .detail-entry-row .review-summary{
   display:none!important;
 }
-/* 浮动入口结束后，底部按钮恢复到完整宽度并清除浮动。 */
-.upload-sheet.success:not(.detail-view-open) .sheet-footer{
-  clear:both!important;
-}
-/* 展开详情后：完全由 detail-view-open 专用规则接管，不参与左右布局。 */
