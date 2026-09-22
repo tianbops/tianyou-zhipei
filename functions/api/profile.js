@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 用户资料
 // 用户可以维护个人姓名/手机号/默认车辆，但不能自行修改路线绑定。
-import { authRequired, createSession, sessionCookie } from './_auth.js';
+import { authRequired, createAndroidToken, createMiniToken, createSession, sessionCookie } from './_auth.js';
 import { publicUser, redisGet, redisSet } from './_data.js';
 
 export async function onRequest({ request, env }) {
@@ -37,6 +37,14 @@ export async function onRequest({ request, env }) {
     await redisSet(env, 'user:' + session.id, updated);
 
     const safeUser = publicUser(updated);
+    if (session.client === 'miniprogram') {
+      const token = await createMiniToken(env, updated);
+      return json({ success: true, user: safeUser, token });
+    }
+    if (session.client === 'android') {
+      const token = await createAndroidToken(env, updated);
+      return json({ success: true, user: safeUser, token });
+    }
     const token = await createSession(env, updated, { client: 'web' });
     return new Response(JSON.stringify({ success: true, user: safeUser }), {
       status: 200,
