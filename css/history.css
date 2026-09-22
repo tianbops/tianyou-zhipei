@@ -89,3 +89,23 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 .delete-title{color:var(--text-primary)}
 .delete-message{color:var(--text-body)}
 .delete-warning{color:var(--text-tertiary)}
+
+
+/* UI 2.0 · 历史查询 */
+.history-page{max-width:430px;padding-top:12px;padding-left:14px;padding-right:14px}
+.history-page .top-bar{margin-bottom:10px}.history-filter-card{padding:10px;margin-bottom:10px}
+.date-picker-btn{height:46px;border-radius:12px;background:#D0D7DC!important;color:#0B1015!important;font-size:14px;font-weight:650}
+.date-picker-btn:active{background:#AEB8C0!important;transform:scale(.99)}
+.history-record-card{padding:13px}.history-date-item{background:#0D1319;border-color:var(--line);border-radius:13px;padding:9px 11px}
+.history-head{min-height:42px}.history-date{font-size:14px;color:#F2F5F7}.history-count{font-size:12px;color:#9AA6B2}
+.history-records{gap:8px}.history-view{height:44px;border-radius:11px;background:#1B2530!important;color:#F2F5F7!important;border:1px solid var(--line);font-size:13px;font-weight:600}
+.history-view:active{background:#313C47!important;color:#fff!important}
+.empty-tip{color:#75818D}
+.date-modal{background:rgba(0,0,0,.70);backdrop-filter:blur(5px)}
+.date-sheet{max-width:430px;background:#151D26;border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0}
+.date-sheet-head{border-bottom-color:var(--line)}.date-sheet-head strong{font-size:15px;color:#F2F5F7}.date-sheet-head button{color:#9AA6B2!important}.date-sheet-head button:last-child{color:#D0D7DC!important;font-weight:650}
+.wheel-item{color:#75818D}.wheel-item.active{color:#F2F5F7;font-size:18px}.wheel-highlight{border-color:rgba(208,215,220,.20)}
+.delete-sheet{background:#151D26;border-color:var(--line);border-radius:18px}.delete-title{font-size:16px}.delete-message{font-size:14px;color:#D5DCE2}.delete-warning{font-size:12px;color:#75818D}
+.delete-actions{gap:8px}.delete-actions button{height:46px;border-radius:12px;font-size:14px}
+.delete-cancel{background:#202A34!important;color:#E3E8ED!important}.delete-confirm{background:#D0D7DC!important;color:#0B1015!important}
+.delete-confirm:active{background:#AEB8C0!important}
