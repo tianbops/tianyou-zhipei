@@ -2,6 +2,7 @@
 // OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前用户线路基准库匹配。
 // 基准库按线路独立；学习库进一步按用户ID+线路隔离，避免不同账号互相学习。
 import { authRequired } from './_auth.js';
+import { loadRouteBase, routeLearningKey, canUseRoute, redisGet as coreRedisGet } from './_data.js';
 
 const baseMatchIndexCache = new Map();
 const BASE_INDEX_CACHE_MAX = 16;
@@ -14,16 +15,17 @@ export async function onRequest({ request, env }) {
     const body = await request.json().catch(() => ({}));
     const text = String(body?.text || '').trim();
     if (!text) return json({ success: false, error: '请输入或先识别运单文字' }, 400);
-    const route = normalizeRoute(session.route);
+    const route = normalizeRoute(body.route || session.route);
     const userId = normalizeUserId(session.id);
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
 
     const startedAt = Date.now();
     const deadline = startedAt + 120000;
+    if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该路线' }, 403);
     const [baseRecord, learning] = await Promise.all([
       getBaseStores(env, route, deadline, userId),
-      getLearning(env, userId, route, deadline)
+      getLearning(env, route, deadline)
     ]);
     const dataReadyAt = Date.now();
     const base = getCachedBaseMatchIndex(userId, route, baseRecord.dataVersion, baseRecord.stores);
@@ -204,19 +206,18 @@ function extractVolume(source) {
 }
 
 async function getBaseStores(env, route, deadline, userId) {
-  const data = await redisGet(env, scopedBaseKey(userId, route), deadline);
-  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到当前账号的${normalizeRoute(route)}独立基准数据库`);
+  const data = await loadRouteBase(env, route, { allowLegacyUserId: userId });
+  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error('未找到' + normalizeRoute(route) + '路线基准数据库');
   return {
     stores: data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean),
     dataVersion: Number(data?.dataVersion) || 1
   };
 }
 
-function getCachedBaseMatchIndex(userId, route, dataVersion, stores) {
-  const normalizedUserId = normalizeUserId(userId);
+function getCachedBaseMatchIndex(route, dataVersion, stores) {
   const normalizedRoute = normalizeRoute(route);
   const version = Number(dataVersion) || 1;
-  const key = `${encodeKey(normalizedUserId)}|${encodeKey(normalizedRoute)}|${version}`;
+  const key = `${encodeKey(normalizedRoute)}|${version}`;
   const cached = baseMatchIndexCache.get(key);
   if (cached) {
     // LRU：命中时刷新顺序，避免高频线路被固定容量淘汰。
@@ -233,26 +234,14 @@ function getCachedBaseMatchIndex(userId, route, dataVersion, stores) {
   return index;
 }
 
-async function getLearning(env, userId, route, deadline) {
-  const data = await redisGet(env, learningKey(userId, route), deadline);
-  if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
-  return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
+async function getLearning(env, route, deadline) {
+  const data = await coreRedisGet(env, routeLearningKey(route));
+  if (!data || typeof data !== 'object') return { version: 1, route: normalizeRoute(route), aliases: {} };
+  return { ...data, version: 1, route: normalizeRoute(route), aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
-function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`; }
-
-function learningKey(userId, route) {
-  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
-}
-
-function encodeKey(value) {
-  return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_');
-}
-
-function normalizeUserId(value) {
-  return String(value || '').trim().slice(0, 128);
-}
-
+function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
+function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 const REDIS_TIMEOUT_MS = 15000;
 async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
   const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
