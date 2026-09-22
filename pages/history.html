@@ -75,7 +75,7 @@
 
   entries.sort((a,b)=>b.date.localeCompare(a.date)).forEach(entry=>{
     const month=String(entry.date||'').slice(0,7);
-    if(!/^\\d{4}-\\d{2}$/.test(month))return;
+    if(!/^\d{4}-\d{2}$/.test(month))return;
     if(!months.has(month))months.set(month,[]);
     months.get(month).push(entry);
   });
