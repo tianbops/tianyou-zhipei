@@ -2,59 +2,27 @@
 // 历史数据按用户ID+线路+日期独立存储；允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
 
-const HISTORY_DAYS = 31;
-const FUTURE_DAYS = 1;
-
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
   const session = await authRequired(request, env);
   if (!session?.route || !session?.id) return json({ error: '登录已失效或权限信息不完整' }, 401);
-  const url = new URL(request.url), date = normalizeDate(url.searchParams.get('date'));
-  if (!date) return json({ error: 'Missing date parameter' }, 400);
+  const url = new URL(request.url);
+  const date = normalizeDate(url.searchParams.get('date'));
   const route = normalizeRoute(session.route), userId = normalizeUserId(session.id);
+
   try {
-    if (request.method === 'DELETE') return await deleteHistoryRecord(env, userId, route, date, String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim());
-    if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
-    await purgeExpiredHistory(env, userId, route);
-    if (!isWithinRetention(date)) return json([]);
-    const key = scopedKey(userId, route, `history:${date}`), result = await redisGet(env, key);
-    let records = Array.isArray(result) ? result : [];
-
-    // 兼容旧版本“今日已写入、历史未写入”的半成功订单：
-    // 历史查询发现当天没有记录时，从同一用户/线路的 today 数据自动补建历史。
-    if (!records.length) {
-      const todayKey = scopedKey(userId, route, `today:${date}`);
-      const today = await redisGet(env, todayKey);
-      if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
-        const recovered = {
-          orderBatchId: String(today.orderBatchId || '').trim(),
-          date,
-          route,
-          userId,
-          vehicle: String(today.vehicle || '').trim(),
-          count: Number(today.count) || today.orders.length,
-          uniqueStoreCount: Number(today.uniqueStoreCount) || today.orders.length,
-          weight: today.totalWeight ?? today.weight ?? '',
-          totalWeight: today.totalWeight ?? today.weight ?? '',
-          orders: today.orders,
-          matchedCount: Number(today.matchedCount) || 0,
-          newStoreCount: Number(today.newStoreCount) || 0,
-          reviewCount: Number(today.reviewCount) || 0,
-          duplicateCount: Number(today.duplicateCount) || 0,
-          recognizedCount: Number(today.recognizedCount) || today.orders.length,
-          rawOrderCount: Number(today.rawOrderCount) || today.orders.length,
-          baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
-          source: String(today.source || 'recovered-from-today'),
-          updatedAt: today.updatedAt || new Date().toISOString()
-        };
-        if (historySignature(recovered)) {
-          await redisSet(env, key, [recovered]);
-          records = [recovered];
-        }
-      }
+    if (request.method === 'DELETE') {
+      if (!date) return json({ success: false, error: 'Missing date parameter' }, 400);
+      return await deleteHistoryRecord(env, userId, route, date, String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim());
     }
+    if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
-    const { records: cleaned, changed } = dedupeHistory(filterRetention(records));
+    // 不传日期时返回该用户/线路全部历史日期，历史运单不再按31天自动清理。
+    if (!date) return await listAllHistory(env, userId, route);
+
+    const key = scopedKey(userId, route, `history:${date}`);
+    let records = await readHistoryOrRecover(env, userId, route, date, key);
+    const { records: cleaned, changed } = dedupeHistory(records);
     if (changed || cleaned.length !== records.length) await redisSet(env, key, cleaned);
     return json(cleaned);
   } catch (error) {
@@ -63,41 +31,118 @@ export async function onRequest({ request, env }) {
   }
 }
 
+async function readHistoryOrRecover(env, userId, route, date, key) {
+  const result = await redisGet(env, key);
+  let records = Array.isArray(result) ? result : [];
+  if (records.length) return records;
+
+  // 兼容旧版本半成功数据：历史没有记录，但同日期 today 数据仍存在。
+  const todayKey = scopedKey(userId, route, `today:${date}`);
+  const today = await redisGet(env, todayKey);
+  if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
+    const recovered = recoverFromToday(today, userId, route, date);
+    if (historySignature(recovered)) {
+      await redisSet(env, key, [recovered]);
+      return [recovered];
+    }
+  }
+  return [];
+}
+
+function recoverFromToday(today, userId, route, date) {
+  return {
+    orderBatchId: String(today.orderBatchId || '').trim(),
+    date,
+    route,
+    userId,
+    vehicle: String(today.vehicle || '').trim(),
+    count: Number(today.count) || today.orders.length,
+    uniqueStoreCount: Number(today.uniqueStoreCount) || today.orders.length,
+    weight: today.totalWeight ?? today.weight ?? '',
+    totalWeight: today.totalWeight ?? today.weight ?? '',
+    orders: today.orders,
+    matchedCount: Number(today.matchedCount) || 0,
+    newStoreCount: Number(today.newStoreCount) || 0,
+    reviewCount: Number(today.reviewCount) || 0,
+    duplicateCount: Number(today.duplicateCount) || 0,
+    recognizedCount: Number(today.recognizedCount) || today.orders.length,
+    rawOrderCount: Number(today.rawOrderCount) || today.orders.length,
+    baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
+    source: String(today.source || 'recovered-from-today'),
+    updatedAt: today.updatedAt || new Date().toISOString()
+  };
+}
+
+async function listAllHistory(env, userId, route) {
+  const historyPattern = scopedKey(userId, route, 'history:*');
+  const todayPattern = scopedKey(userId, route, 'today:*');
+  const [historyKeys, todayKeys] = await Promise.all([
+    scanKeys(env, historyPattern),
+    scanKeys(env, todayPattern)
+  ]);
+  const keyMap = new Map();
+  historyKeys.forEach(key => keyMap.set(key, 'history'));
+  todayKeys.forEach(key => keyMap.set(key, 'today'));
+  const keys = [...keyMap.keys()];
+  if (!keys.length) return json([]);
+
+  const values = await redisPipelineGet(env, keys);
+  const grouped = new Map();
+
+  keys.forEach((key, index) => {
+    const type = keyMap.get(key);
+    const raw = values[index];
+    if (type === 'history') {
+      const date = normalizeDate(String(key).split(':history:').pop());
+      if (!date) return;
+      const records = Array.isArray(raw) ? raw : [];
+      if (!records.length) return;
+      grouped.set(date, records);
+      return;
+    }
+
+    // 旧数据兼容：today 有而 history 没有时自动补历史。
+    const date = normalizeDate(String(key).split(':today:').pop());
+    if (!date || !raw || !Array.isArray(raw.orders) || !raw.orders.length) return;
+    if (grouped.has(date)) return;
+    const recovered = recoverFromToday(raw, userId, route, date);
+    if (!historySignature(recovered)) return;
+    grouped.set(date, [recovered]);
+  });
+
+  const entries = [];
+  for (const [date, rawRecords] of grouped.entries()) {
+    const cleaned = dedupeHistory(rawRecords).records;
+    if (!cleaned.length) continue;
+    entries.push({ date, records: cleaned });
+  }
+  entries.sort((a, b) => b.date.localeCompare(a.date));
+  return json(entries);
+}
+
 async function deleteHistoryRecord(env, userId, route, date, batchId) {
-  if (!isWithinRetention(date)) return json({ success: true, deleted: 0, date, expired: true });
-  const key = scopedKey(userId, route, `history:${date}`), records = await redisGet(env, key);
+  const key = scopedKey(userId, route, `history:${date}`);
+  const records = await redisGet(env, key);
   if (!Array.isArray(records) || !records.length) return json({ success: true, deleted: 0, date });
-  const current = dedupeHistory(filterRetention(records)).records, target = batchId ? current.find(item => String(item?.orderBatchId || '') === batchId) : null;
+
+  const current = dedupeHistory(records).records;
+  const target = batchId ? current.find(item => String(item?.orderBatchId || '').trim() === batchId) : null;
   if (!target) return json({ success: false, error: '未找到要删除的历史记录' }, 404);
-  const signature = historySignature(target);
-  if (!signature) return json({ success: false, error: '该历史记录数据无效，无法删除' }, 400);
+
   const targetBatchId = String(target?.orderBatchId || '').trim();
   const remaining = targetBatchId
     ? current.filter(item => String(item?.orderBatchId || '').trim() !== targetBatchId)
-    : current.filter(item => historySignature(item) !== signature);
+    : current.filter(item => historySignature(item) !== historySignature(target));
   const deleted = current.length - remaining.length;
-  await redisSet(env, key, remaining);
-  let todayDeleted = false;
-  if (date === businessDate()) {
-    const todayKey = scopedKey(userId, route, `today:${date}`), today = await redisGet(env, todayKey);
-    if (today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId) { await redisDelete(env, todayKey); todayDeleted = true; }
-  }
-  await purgeExpiredHistory(env, userId, route);
-  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: Math.max(0, deleted - 1), todayDeleted });
-}
 
-async function purgeExpiredHistory(env, userId, route) {
-  const today = businessDate(), cutoff = addDays(today, -(HISTORY_DAYS - 1)), futureCutoff = addDays(today, FUTURE_DAYS), keys = await scanKeys(env, scopedKey(userId, route, 'history:*'));
-  if (!keys.length) return;
-  const commands = [];
-  for (const key of keys) {
-    const date = normalizeDate(String(key).split(':history:').pop());
-    if (!date || date < cutoff || date > futureCutoff) { commands.push(['DEL', key]); continue; }
-    const raw = await redisGet(env, key), records = Array.isArray(raw) ? raw : [], filtered = filterRetention(records), cleaned = dedupeHistory(filtered).records;
-    if (!cleaned.length) commands.push(['DEL', key]);
-    else if (cleaned.length !== records.length) commands.push(['SET', key, JSON.stringify(cleaned)]);
+  const todayKey = scopedKey(userId, route, `today:${date}`);
+  const today = await redisGet(env, todayKey);
+  const commands = [['SET', key, JSON.stringify(remaining)]];
+  if (today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId) {
+    commands.push(['DEL', todayKey]);
   }
-  if (commands.length) await redisPipeline(env, commands);
+  await redisPipeline(env, commands);
+  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: commands.length > 1 });
 }
 
 async function scanKeys(env, pattern) {
@@ -113,12 +158,6 @@ async function scanKeys(env, pattern) {
   return keys;
 }
 
-function filterRetention(records) { return records.filter(item => isWithinRetention(normalizeDate(item?.date))); }
-function isWithinRetention(date) {
-  const normalized = normalizeDate(date); if (!normalized) return false;
-  const today = businessDate(), target = new Date(`${normalized}T00:00:00+08:00`), current = new Date(`${today}T00:00:00+08:00`), diffDays = Math.floor((current - target) / 86400000);
-  return diffDays >= -FUTURE_DAYS && diffDays < HISTORY_DAYS;
-}
 function dedupeHistory(input) { const map = new Map(); let changed = false; for (const item of input) { if (!item || typeof item !== 'object') { changed = true; continue; } const signature = historySignature(item); if (!signature) { changed = true; continue; } const old = map.get(signature); if (!old) map.set(signature, item); else { changed = true; if (compareUpdatedAt(item, old) > 0) map.set(signature, item); } } const records = Array.from(map.values()).sort((a, b) => compareUpdatedAt(b, a)); if (records.length !== input.length) changed = true; return { records, changed }; }
 function historySignature(record) { const route = String(record?.route || '').trim(), date = normalizeDate(record?.date), vehicle = String(record?.vehicle || '').trim().toLowerCase(), weight = normalizeWeight(record?.totalWeight ?? record?.weight), orders = Array.isArray(record?.orders) ? record.orders : []; if (!date && !orders.length && !weight) return ''; const stores = orders.map(item => normalizeStoreName(item?.name || item?.storeName || item?.shopName || item?.['门店名称'])).filter(Boolean).sort(); return JSON.stringify({ route, date, vehicle, weight, stores }); }
 function todayOrderSignature(record) { return historySignature(record); }
@@ -135,6 +174,28 @@ function addDays(date, days) { const d = new Date(`${date}T00:00:00+08:00`); d.s
 async function redisGet(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis读取失败'); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
 async function redisSet(env, key, value) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(value), cache: 'no-store' }); if (!response.ok) throw new Error('Redis保存失败'); }
 async function redisDelete(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/del/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis删除失败'); }
-async function redisPipeline(env, commands) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/pipeline`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(commands), cache: 'no-store' }); if (!response.ok) throw new Error(`Redis pipeline HTTP ${response.status}`); }
+async function redisPipeline(env, commands) {
+  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/pipeline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(commands),
+    cache: 'no-store'
+  });
+  if (!response.ok) throw new Error(`Redis pipeline HTTP ${response.status}`);
+  const data = await response.json().catch(() => []);
+  if (!Array.isArray(data)) throw new Error('Redis pipeline 返回格式异常');
+  const failed = data.find(item => item && item.error);
+  if (failed) throw new Error(String(failed.error));
+  return data;
+}
+
+async function redisPipelineGet(env, keys) {
+  return redisPipeline(env, keys.map(key => ['GET', key])).then(results => results.map(item => {
+    const value = item?.result;
+    if (value === null || value === undefined || value === '') return null;
+    try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
+  }));
+}
+
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
