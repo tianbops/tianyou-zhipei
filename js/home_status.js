@@ -86,6 +86,5 @@ window.renderUnifiedStatus=(status='idle',progress=0,message='')=>{
   render(status,0,message);
   animateProgressTo(progress);
 };
-window.setHomeStatusError=setError;
-window.clearHomeStatusError=clearError;
+
 })();
