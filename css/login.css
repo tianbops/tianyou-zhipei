@@ -118,3 +118,10 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 .login-btn{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
 .bottom-actions{align-items:center!important}
 .bottom-actions button,.switch-btn{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+
+/* 2026-09-22 登录/注册页面互斥：同一时间只显示一个主按钮 */
+.login-card:not(.register-mode) .login-only{display:flex!important}
+.login-card:not(.register-mode) .register-only{display:none!important}
+.login-card.register-mode .login-only{display:none!important}
+.login-card.register-mode .register-only{display:block!important}
+.login-card.register-mode #registerButton{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
