@@ -39,6 +39,10 @@ export function routeOrderKey(route, suffix) {
   return `route:${encodeKey(normalizeRoute(route))}:orders:${suffix}`;
 }
 
+export function legacyUserLearningKey(userId, route) {
+  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
+}
+
 export function routeLearningKey(route) {
   return `route:${encodeKey(normalizeRoute(route))}:learning`;
 }
