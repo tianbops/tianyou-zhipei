@@ -23,6 +23,9 @@
   let engineGeneration = 0;
   let uploadTaskSeq = 0;
   let activeUploadTaskId = 0;
+  // 取消后的旧OCR引擎释放必须与新任务串行，允许用户立即重新选择图片，
+  // 但新任务在旧引擎真正释放完成前不会启动新的推理实例。
+  let engineDisposePromise = null;
 
   function beginUploadTask() {
     // 新任务开始时必须清除上一次“取消”状态，否则取消后立即二次上传
@@ -83,6 +86,12 @@
   }
 
   async function loadEngine() {
+    // 立即二次上传时，先等待上一任务的引擎释放；不要求用户等待，也不与旧引擎并发。
+    if (engineDisposePromise) {
+      const disposeWait = engineDisposePromise;
+      try { await disposeWait; } catch (_) {}
+      if (engineDisposePromise === disposeWait) engineDisposePromise = null;
+    }
     if (enginePromise) return enginePromise;
     const PaddleOCR = await loadSdk();
     const generation = engineGeneration;
@@ -104,8 +113,6 @@
       }
     };
 
-    // 保存本次创建任务的 Promise 身份。取消后旧任务即使晚到，也绝不能
-    // 把新任务的 enginePromise / engineInstance 清掉。
     let creationPromise;
     creationPromise = PaddleOCR.create(createOptions).catch(async error => {
       if (generation !== engineGeneration) {
@@ -127,7 +134,6 @@
       engineInstance = engine;
       return engine;
     }).catch(error => {
-      // 只有当前这一代、且仍然是同一个创建任务，才允许清理全局引用。
       if (enginePromise === creationPromise) {
         enginePromise = null;
         engineInstance = null;
@@ -345,21 +351,24 @@
     engineInstance = null;
     enginePromise = null;
 
-    // 如果取消发生在模型创建阶段，等待旧创建任务自然结束；它会因 generation
-    // 失效而自动释放，避免新任务与旧任务同时争抢 OCR 引擎资源。
-    if (pendingCreation) {
-      try {
-        const pendingEngine = await pendingCreation;
-        if (pendingEngine && pendingEngine !== engine) {
-          try { await pendingEngine.dispose?.(); } catch (_) {}
-        }
-      } catch (_) {}
-    }
-    if (engine?.dispose) {
-      try { await engine.dispose(); } catch (_) {}
+    const cleanup = (async () => {
+      // 如果旧引擎仍在创建，generation 失效后 creationPromise 会自行释放它。
+      if (pendingCreation) {
+        try { await pendingCreation; } catch (_) {}
+      }
+      // 已经创建完成并挂在 engineInstance 的旧引擎在这里释放。
+      if (engine?.dispose) {
+        try { await engine.dispose(); } catch (_) {}
+      }
+    })();
+
+    engineDisposePromise = cleanup;
+    try {
+      await cleanup;
+    } finally {
+      if (engineDisposePromise === cleanup) engineDisposePromise = null;
     }
   }
-
   window.cancelOCR = async function() {
     if (!busy) {
       invalidateUploadTask();
