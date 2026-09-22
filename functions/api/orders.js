@@ -1,13 +1,14 @@
 // Zhipei One - 用户独立订单 API
 // 订单按用户ID+线路+日期存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
+import { canUseRoute, legacyUserOrderKey, loadRouteBase, routeBaseKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 8000;
 
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
-  const session = await authRequired(request, env);
-  if (!session?.route || !session?.id) return json({ error: '登录已失效或权限信息不完整' }, 401);
+  const session = await authRequired(request, env, { allowAnyRoute: true });
+  if (!session?.id) return json({ error: '登录已失效或权限信息不完整' }, 401);
   try {
     if (request.method === 'POST') return await saveOrder(request, env, session);
     if (request.method === 'GET') return await readOrder(request, env, session);
@@ -19,15 +20,16 @@ export async function onRequest({ request, env }) {
 }
 
 async function saveOrder(request, env, session) {
-  const route = normalizeRoute(session.route), userId = normalizeUserId(session.id);
   const body = await request.json().catch(() => ({}));
+  const route = normalizeRoute(body.route || session.route), userId = normalizeUserId(session.id);
+  if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
   if (!Array.isArray(body.orders) || !body.orders.length) return json({ error: '缺少订单数据' }, 400);
   const date = normalizeDate(body.date) || businessDate();
   const key = scopedKey(userId, route, `today:${date}`), latestKey = scopedKey(userId, route, 'latest');
   const lockKey = scopedKey(userId, route, `lock:${date}`), lockToken = createLockToken();
   if (!(await acquireLock(env, lockKey, lockToken, 15))) return json({ error: '当前用户正在保存订单，请稍后再试' }, 409);
   try {
-    const existing = await redisGet(env, key);
+    const existing = await redisGet(env, key) || await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
     // 订单详情页的“更换车辆”只是修改当日车辆，不应重新按当前基准库计算订单。
     // 历史/今日订单必须继续使用原批次已经确认的门店顺序与匹配结果。
@@ -93,15 +95,18 @@ async function saveOrder(request, env, session) {
 }
 
 async function readOrder(request, env, session) {
-  const route = normalizeRoute(session.route), userId = normalizeUserId(session.id);
   const url = new URL(request.url), requestedDate = normalizeDate(url.searchParams.get('date'));
+  const route = normalizeRoute(url.searchParams.get('route') || session.route), userId = normalizeUserId(session.id);
+  if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
   const batch = String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim();
 
   // 未指定日期时只读取业务日，避免明日预上传通过 latest 提前进入首页“今日任务”。
   // 需要读取历史或明日数据的页面必须显式传 date。
   const date = requestedDate || businessDate();
-  const today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
-  const historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
+  let today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
+  let historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
+  if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+  if (!historyData) historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
   const history = Array.isArray(historyData) ? historyData : [];
   let selected = today;
   if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
@@ -164,8 +169,8 @@ function extractBusinessCode(value) { const match = String(value || '').toUpperC
 function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[【】\[\]]/g, '').toLowerCase().replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/谊品鲜/g, '谊品生鲜'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
-function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:base`; }
-function scopedKey(userId, route, suffix) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:orders:${suffix}`; }
+function scopedBaseKey(userId, route) { return routeBaseKey(route); }
+function scopedKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/,'').replace(/\.$/,'') || '0'}t`; }
 function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d+)?/); return !m || Number(m[0]) === 0; }
 function parseWeightToTons(value) { const s = String(value ?? '').trim().replace(/,/g, ''); const m = s.match(/[\\d]+(?:\\.\\d+)?/); if (!m) return 0; const n = Number(m[0]); if (!Number.isFinite(n)) return 0; if (/吨|\\bt\\b/i.test(s)) return n; if (/kg|千克|公斤/i.test(s)) return n / 1000; return n >= 1000 ? n / 1000 : n; }

@@ -1,5 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
+import { canUseRoute, legacyUserOrderKey, loadRouteBase, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 
@@ -8,14 +9,15 @@ export async function onRequest({ request, env }) {
   try {
     if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
     stage = 'auth';
-    const session = await authRequired(request, env);
-    if (!session?.route || !session?.id) return json({ success: false, error: '登录已失效或权限信息不完整', stage }, 401);
+    const session = await authRequired(request, env, { allowAnyRoute: true });
+    if (!session?.id) return json({ success: false, error: '登录已失效或权限信息不完整', stage }, 401);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: 'Redis not configured', stage }, 500);
 
-    const route = normalizeRoute(session.route);
-    const userId = normalizeUserId(session.id);
     stage = 'request-body';
     const body = await request.json().catch(() => ({}));
+    const route = normalizeRoute(body.route || session.route);
+    const userId = normalizeUserId(session.id);
+    if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该路线', stage }, 403);
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
 
     const pending = body.orders.filter(item => item?.needsReview === true || item?.matchType === 'review' || String(item?.candidate || '').trim());
@@ -135,9 +137,9 @@ export async function onRequest({ request, env }) {
 }
 
 async function loadBase(env, route, userId) {
-  const raw = await redisGet(env, scopedBaseKey(userId, route));
+  const raw = await loadRouteBase(env, route, { allowLegacyUserId: userId });
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
-  if (!stores.length) throw new Error(`未找到${route}独立基准数据库`);
+  if (!stores.length) throw new Error(`未找到${route}路线基准数据库`);
   return stores.map((store, index) => ({
     name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
     code: String(store?.code || index + 1).padStart(2, '0'),
@@ -272,7 +274,9 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
 async function findDuplicateOrder(env, userId, route, date, candidate) {
   const todayKey = scopedKey(userId, route, `today:${date}`);
   const historyKey = scopedKey(userId, route, `history:${date}`);
-  const [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
+  let [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
+  if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+  if (!Array.isArray(history) || !history.length) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
   if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) return today;
   if (Array.isArray(history)) {
     const signature = businessOrderSignature(candidate);
@@ -335,9 +339,9 @@ async function getLearning(env, keyName) {
   return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
-function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:base`; }
-function scopedKey(userId, route, suffix) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:orders:${suffix}`; }
-function scopedLearningKey(userId, route, suffix = '') { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:learning${suffix ? `:${suffix}` : ''}`; }
+function scopedBaseKey(userId, route) { return routeBaseKey(route); }
+function scopedKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
+function scopedLearningKey(userId, route, suffix = '') { return `${routeLearningKey(route)}${suffix ? `:${suffix}` : ''}`; }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function key(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]{}]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/客户中心/g, '客服中心').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase(); }

@@ -1,135 +1,97 @@
-// 天友智配One - 线路基准数据库 API
-// 基准库按线路独立保存于 Upstash，代码仓库不再内置任何线路门店数据。
+// 天友智配One V1.0 - 唯一路线与基准数据库 API
 import { authRequired } from './_auth.js';
+import {
+  canManageRoute, getRoute, getUser, loadRouteBase, normalizeRoute,
+  normalizeStores, routeBaseKey, saveRoute, redisSet, scanUsers
+} from './_data.js';
 
-const LOCK_TTL_SECONDS = 15;
+const LOCK_TTL_SECONDS = 20;
 
 export async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const route = normalizeRoute(url.searchParams.get('route'));
-  if (!route) return json({ error: 'Missing route parameter' }, 400);
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
 
-  const session = await authRequired(request, env, { route });
-  if (!session) return json({ error: '未登录或无权访问该线路数据' }, 401);
+  const session = await authRequired(request, env, { allowAnyRoute: true });
+  if (!session) return json({ error: '未登录或登录已失效' }, 401);
 
-  const userId = normalizeUserId(session.id);
-  if (!userId) return json({ error: '用户身份信息不完整，无法访问线路基准数据库' }, 403);
-  const key = scopedBaseKey(userId, route);
   try {
+    // GET：所有正常用户都可以读取任意路线的基准库，用于调度。
     if (request.method === 'GET') {
-      const result = await redisGet(env, key);
-      if (!result.ok) return json({ error: '线路基准数据库读取失败' }, 502);
-      const hasCurrentValue = result.result !== null && result.result !== undefined && result.result !== '';
-      const record = parseRecord(result.result);
-
-      // 只有“真正不存在”时才允许初始化/进入旧库迁移流程。
-      // 如果账号独立库已经存在但格式损坏，必须明确报错，绝不能静默当成空库，
-      // 否则前端可能显示“暂无门店”，并在下一次保存时覆盖真实数据。
-      if (hasCurrentValue && (!record || typeof record !== 'object' || Array.isArray(record))) {
-        return json({ error: '线路基准数据库格式异常，请先修复该账号的数据' }, 500);
-      }
-
-      if (!hasCurrentValue) {
-        const legacy = await redisGet(env, `route:${route}:base`);
-        if (!legacy.ok) return json({ error: '线路基准数据库读取失败' }, 502);
-        const legacyHasValue = legacy.result !== null && legacy.result !== undefined && legacy.result !== '';
-        const legacyRecord = parseRecord(legacy.result);
-        if (legacyHasValue && (!legacyRecord || typeof legacyRecord !== 'object' || Array.isArray(legacyRecord))) {
-          return json({ error: '旧版线路基准数据库格式异常，无法迁移' }, 500);
-        }
-        const hasLegacy = Array.isArray(legacyRecord?.stores) && legacyRecord.stores.length > 0;
-        if (hasLegacy) {
-          return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0, migrationRequired: true });
-        }
-        const now = new Date().toISOString();
-        const initialized = {
-          userId, route, stores: [], dataVersion: 1, updatedAt: now, source: 'auto-init'
-        };
-        const created = await redisSetIfAbsent(env, key, initialized);
-        if (!created.ok) return json({ error: '线路基准数据库初始化失败' }, 500);
-        if (created.created) {
-          return json({ route, stores: [], source: 'server', updatedAt: now, dataVersion: 1, migrationRequired: false, initialized: true });
-        }
-        // 并发情况下，其他请求可能已先创建/保存真实基准库；重新读取，绝不覆盖对方数据。
-        const current = parseRecord(created.result);
-        if (!current || typeof current !== 'object' || Array.isArray(current)) {
-          return json({ error: '线路基准数据库初始化后格式异常，请稍后重试' }, 500);
-        }
-        const currentStores = normalizeStores(current.stores);
-        return json({ route, stores: currentStores, source: 'server', updatedAt: current.updatedAt || null,
-          dataVersion: Number(current.dataVersion) || 1, migrationRequired: false, initialized: false });
-      }
-
-      if (!Array.isArray(record.stores)) {
-        return json({ error: '线路基准数据库格式异常：stores 必须是数组' }, 500);
-      }
-      const stores = normalizeStores(record.stores);
-      const recordUserId = normalizeUserId(record?.userId);
-      const recordRoute = normalizeRoute(record?.route);
-      // 防止历史/手工写入的错误记录被当前账号误读；只有明确属于当前用户+当前线路的数据才可使用。
-      if (recordUserId && recordUserId !== userId) {
-        return json({ error: '线路基准数据库归属校验失败' }, 403);
-      }
-      if (recordRoute && recordRoute !== route) {
-        return json({ error: '线路基准数据库线路校验失败' }, 409);
-      }
-      return json({ route, stores, source: 'server', updatedAt: record?.updatedAt || null,
-        dataVersion: Number(record?.dataVersion) || 1, migrationRequired: false });
+      if (!route) return json({ success: true, routes: await listRoutes(env) });
+      const base = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId || session.id });
+      if (!base) return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0, migrationRequired: true });
+      return json({
+        route,
+        stores: normalizeStores(base.stores),
+        source: base.source || 'route',
+        updatedAt: base.updatedAt || null,
+        dataVersion: Number(base.dataVersion) || 1,
+        schemaVersion: Number(base.schemaVersion) || 1,
+        editable: canManageRoute(session.user || session, route)
+      });
     }
 
     if (request.method === 'PUT') {
-      const body = await request.json().catch(() => ({}));
-      const isLegacyMigration = body.migrateLegacy === true;
-      if (!isLegacyMigration && !Array.isArray(body.stores)) {
-        return json({ error: 'stores 必须是数组' }, 400);
+      if (!route) return json({ error: 'Missing route parameter' }, 400);
+      // 只有该路线绑定的驾驶员/配送员可以修改基准库。
+      if (!canManageRoute(session.user || session, route)) {
+        return json({ error: '当前账号可以调度该路线，但无权修改该路线基准数据库' }, 403);
       }
 
-      const lockKey = `lock:route-base:${encodeKey(userId)}:${encodeKey(route)}`;
+      const body = await request.json().catch(() => ({}));
+      if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
+
+      const lockKey = `lock:route-base:${encodeURIComponent(route)}`;
       const lockValue = crypto.randomUUID();
       if (!(await acquireLock(env, lockKey, lockValue, LOCK_TTL_SECONDS))) {
-        return json({ error: '该线路基准库正在被修改，请稍后重试' }, 409);
+        return json({ error: '该路线基准库正在被修改，请稍后重试' }, 409);
       }
 
       try {
-        let stores;
-        let dataVersion = 1;
-        if (isLegacyMigration) {
-          const current = await redisGet(env, key);
-          const currentRecord = parseRecord(current.result);
-          const currentStores = Array.isArray(currentRecord?.stores) ? currentRecord.stores : null;
-          const canReplaceAutoInit = currentRecord
-            && Array.isArray(currentStores)
-            && currentStores.length === 0
-            && currentRecord.source === 'auto-init';
-          if (current.ok && current.result && !canReplaceAutoInit) {
-            return json({ error: '当前账号已经存在线路基准数据库，无需迁移' }, 409);
-          }
-          const legacy = await redisGet(env, `route:${route}:base`);
-          const legacyRecord = parseRecord(legacy.result);
-          if (!Array.isArray(legacyRecord?.stores) || !legacyRecord.stores.length) return json({ error: '未找到可迁移的旧版线路基准数据库' }, 404);
-          stores = normalizeStores(legacyRecord.stores);
-          dataVersion = Math.max(1, Number(legacyRecord?.dataVersion) || 1);
-        } else {
-          stores = normalizeStores(body.stores);
-          const current = await redisGet(env, key);
-          const currentRecord = parseRecord(current.result);
-          dataVersion = Math.max(1, Number(currentRecord?.dataVersion) || 0) + 1;
+        const current = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId || session.id });
+        const currentVersion = Number(current?.dataVersion) || 0;
+        const expectedVersion = body.expectedDataVersion === undefined || body.expectedDataVersion === null
+          ? null : Number(body.expectedDataVersion);
+
+        if (expectedVersion !== null && expectedVersion !== currentVersion) {
+          return json({
+            error: '路线基准库已被其他维护用户更新，请刷新后再保存',
+            code: 'DATA_CONFLICT',
+            dataVersion: currentVersion
+          }, 409);
         }
+
+        const stores = normalizeStores(body.stores);
         const updatedAt = new Date().toISOString();
-        const value = { userId, route, stores, dataVersion, updatedAt,
-          source: isLegacyMigration ? 'legacy-migration' : 'route-editor' };
-        const saved = await redisSet(env, key, value);
-        if (!saved.ok) return json({ error: '线路基准数据库保存失败' }, 500);
+        const value = {
+          schemaVersion: 1,
+          route,
+          stores,
+          dataVersion: currentVersion + 1 || 1,
+          updatedAt,
+          updatedBy: session.id,
+          source: 'route-editor'
+        };
+        await redisSet(env, routeBaseKey(route), value);
+
+        // 路线实体不存在时自动建立，但不会改变其他绑定。
+        const routeRecord = await getRoute(env, route);
+        if (!routeRecord) await saveRoute(env, route, {
+          driverUserId: '',
+          deliveryUserId: '',
+          createdAt: updatedAt
+        });
 
         return json({
           success: true,
           route,
           stores,
           storeCount: stores.length,
-          source: 'server',
+          source: 'route',
           updatedAt,
-          dataVersion
+          dataVersion: value.dataVersion,
+          editable: true
         });
       } finally {
         await releaseLock(env, lockKey, lockValue).catch(() => {});
@@ -143,42 +105,10 @@ export async function onRequest({ request, env }) {
   }
 }
 
-
-
-function normalizeUserId(value) {
-  return String(value || '').trim();
-}
-
-function scopedBaseKey(userId, route) {
-  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`;
-}
-
-function encodeKey(value) {
-  return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_');
-}
-
-function normalizeStores(stores) {
-  if (!Array.isArray(stores)) return [];
-  return stores
-    .map((store, index) => ({
-      ...store,
-      code: String(store?.code || index + 1).padStart(2, '0'),
-      routeOrder: index + 1,
-      name: String(store?.name || '').trim(),
-      nav: String(store?.nav || '').trim(),
-      note: String(store?.note || '').trim()
-    }))
-    .filter(store => store.name);
-}
-
 async function acquireLock(env, key, value, ttl) {
   const response = await fetch(
     `${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}/NX/EX/${ttl}`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-      cache: 'no-store'
-    }
+    { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }
   );
   if (!response.ok) return false;
   const data = await response.json().catch(() => ({}));
@@ -187,7 +117,7 @@ async function acquireLock(env, key, value, ttl) {
 
 async function releaseLock(env, key, value) {
   const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, {
+  await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
@@ -196,93 +126,51 @@ async function releaseLock(env, key, value) {
     body: JSON.stringify([script, 1, key, value]),
     cache: 'no-store'
   });
-  if (response.ok) await response.json().catch(() => null);
-}
-
-async function redisGet(env, key) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(
-      `${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`,
-      {
-        headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-        cache: 'no-store',
-        signal: controller.signal
-      }
-    );
-    const data = await response.json().catch(() => ({}));
-    return { ok: response.ok, result: data.result };
-  } catch (error) {
-    if (error?.name === 'AbortError') return { ok: false, result: null, timeout: true };
-    return { ok: false, result: null, error: error?.message || 'network error' };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function redisSetIfAbsent(env, key, value) {
-  const response = await fetch(
-    `${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}/NX`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-      cache: 'no-store'
-    }
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) return { ok: false, created: false, result: null };
-  if (data.result === 'OK') return { ok: true, created: true, result: value };
-  if (data.result === null) {
-    const current = await redisGet(env, key);
-    return { ok: current.ok, created: false, result: current.result };
-  }
-  return { ok: false, created: false, result: data.result };
-}
-
-async function redisSet(env, key, value) {
-  const response = await fetch(
-    `${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(value),
-      cache: 'no-store'
-    }
-  );
-  const data = await response.json().catch(() => ({}));
-  return { ok: response.ok && (data.result === undefined || data.result === 'OK') };
-}
-
-function parseRecord(value) {
-  if (!value) return null;
-  if (typeof value !== 'string') return value;
-  try {
-    const first = JSON.parse(value);
-    if (typeof first === 'string') {
-      try { return JSON.parse(first); } catch { return first; }
-    }
-    return first;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeRoute(value) {
-  const s = String(value || '').trim();
-  const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
-  return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s;
 }
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store'
-    }
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
   });
+}
+
+
+async function listRoutes(env) {
+  let cursor = '0';
+  const records = [];
+  do {
+    const response = await fetch(env.UPSTASH_REDIS_REST_URL + '/', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + env.UPSTASH_REDIS_REST_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SCAN', cursor, 'MATCH', 'route:*', 'COUNT', '200']),
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error('路线列表读取失败');
+    const data = await response.json().catch(() => ({}));
+    cursor = String(data?.result?.[0] || '0');
+    const keys = Array.isArray(data?.result?.[1]) ? data.result[1] : [];
+    for (const key of keys) {
+      if (key.includes(':base') || key.includes(':orders:') || key.includes(':learning')) continue;
+      const value = await fetch(env.UPSTASH_REDIS_REST_URL + '/get/' + encodeURIComponent(key), {
+        headers: { Authorization: 'Bearer ' + env.UPSTASH_REDIS_REST_TOKEN },
+        cache: 'no-store'
+      }).then(r => r.json()).catch(() => ({}));
+      const record = typeof value?.result === 'string' ? (() => { try { return JSON.parse(value.result); } catch { return null; } })() : value?.result;
+      if (record?.id) records.push(record);
+    }
+  } while (cursor !== '0');
+  const users = await scanUsers(env);
+  const byId = new Map(records.map(record => [String(record.id), record]));
+  for (const user of users) {
+    const id = normalizeRoute(user?.boundRouteId || user?.route);
+    if (!id) continue;
+    if (!byId.has(id)) byId.set(id, { id, name: id, driverUserId: '', deliveryUserId: '', boundUserIds: [] });
+    const record = byId.get(id);
+    if (user.routeDuty === 'driver') record.driverUserId = user.id;
+    if (user.routeDuty === 'delivery') record.deliveryUserId = user.id;
+    if (!Array.isArray(record.boundUserIds)) record.boundUserIds = [];
+    if (!record.boundUserIds.includes(user.id)) record.boundUserIds.push(user.id);
+  }
+  return [...byId.values()].sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }));
 }

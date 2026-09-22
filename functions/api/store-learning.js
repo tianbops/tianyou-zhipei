@@ -2,6 +2,7 @@
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
 // 学习数据按用户ID+线路写入 Upstash Redis，任何账号之间互不共享。
 import { authRequired } from './_auth.js';
+import { canManageRoute, legacyUserLearningKey, loadRouteBase, routeLearningKey } from './_data.js';
 
 const MAX_ALIASES = 1000;
 const MAX_BATCH = 100;
@@ -9,13 +10,14 @@ const LOCK_SECONDS = 10;
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
-  const session = await authRequired(request, env);
-  if (!session?.route || !session?.id) return json({ success: false, error: '登录已失效或权限信息不完整' }, 401);
+  const session = await authRequired(request, env, { allowAnyRoute: true });
+  if (!session?.id) return json({ success: false, error: '登录已失效或权限信息不完整' }, 401);
   try {
     const body = await request.json().catch(() => ({}));
-    const route = normalizeRoute(session.route);
+    const route = normalizeRoute(body.route || session.route);
     const userId = normalizeUserId(session.id);
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
+    if (!canManageRoute(session.user || session, route)) return json({ success: false, error: '只有绑定该路线的用户可以维护门店学习数据' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '学习数据库不可用' }, 500);
 
     const input = Array.isArray(body.items) ? body.items : [body];
@@ -94,20 +96,21 @@ function resolveTarget(base, item) {
 }
 
 async function getBaseStores(env, route, userId) {
-  const data = await redisGet(env, scopedBaseKey(userId, route));
+  const data = await loadRouteBase(env, route, { allowLegacyUserId: userId });
   if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${route}独立基准数据库`);
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
 async function getLearning(env, key, userId, route) {
-  const data = await redisGet(env, key);
+  let data = await redisGet(env, key);
+  if (!data || typeof data !== 'object') data = await redisGet(env, legacyUserLearningKey(userId, route));
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
-function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:base`; }
+function scopedBaseKey(userId, route) { return `route:${encodeKey(route)}:base`; }
 function learningKey(userId, route) {
-  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:learning`;
+  return routeLearningKey(route);
 }
 
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }

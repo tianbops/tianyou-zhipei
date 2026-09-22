@@ -5,7 +5,7 @@
   let parsedState=[];
   let metaState={};
   const $=id=>document.getElementById(id);
-  const routeContext=()=>typeof Auth!=='undefined'&&Auth.getCurrentRoute?Auth.getCurrentRoute():'';
+  const routeContext=()=>typeof Auth!=='undefined'?(Auth.getDispatchRoute?Auth.getDispatchRoute():Auth.getCurrentRoute()):'';
   function candidateList(item){
     const names=[item?.candidate,...(Array.isArray(item?.candidates)?item.candidates:[])].map(v=>String(v||'').trim()).filter(Boolean);
     const codes=[String(item?.candidateCode||'').trim(),...(Array.isArray(item?.candidateCodes)?item.candidateCodes.map(v=>String(v||'').trim()):[])];

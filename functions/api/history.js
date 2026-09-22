@@ -1,17 +1,19 @@
 // Zhipei One - 用户独立历史查询 API
 // 历史数据按用户ID+线路+日期独立存储；允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
+import { canUseRoute, legacyUserOrderKey, routeOrderKey } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
 
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
-  const session = await authRequired(request, env);
-  if (!session?.route || !session?.id) return json({ error: '登录已失效或权限信息不完整' }, 401);
+  const session = await authRequired(request, env, { allowAnyRoute: true });
+  if (!session?.id) return json({ error: '登录已失效或权限信息不完整' }, 401);
   const url = new URL(request.url);
   const date = normalizeDate(url.searchParams.get('date'));
-  const route = normalizeRoute(session.route), userId = normalizeUserId(session.id);
+  const route = normalizeRoute(url.searchParams.get('route') || session.route), userId = normalizeUserId(session.id);
+  if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
 
   try {
     if (request.method === 'DELETE') {
@@ -38,13 +40,14 @@ export async function onRequest({ request, env }) {
 }
 
 async function readHistoryOrRecover(env, userId, route, date, key) {
-  const result = await redisGet(env, key);
+  let result = await redisGet(env, key);
+  if (!Array.isArray(result) || !result.length) result = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
   let records = Array.isArray(result) ? result : [];
   if (records.length) return records;
 
   // 兼容旧版本半成功数据：历史没有记录，但同日期 today 数据仍存在。
   const todayKey = scopedKey(userId, route, `today:${date}`);
-  const today = await redisGet(env, todayKey);
+  const today = await redisGet(env, todayKey) || await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
   if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
     const recovered = recoverFromToday(today, userId, route, date);
     if (historySignature(recovered)) {
@@ -82,10 +85,17 @@ function recoverFromToday(today, userId, route, date) {
 async function listAllHistory(env, userId, route) {
   const historyPattern = scopedKey(userId, route, 'history:*');
   const todayPattern = scopedKey(userId, route, 'today:*');
-  const [historyKeys, todayKeys] = await Promise.all([
+  let [historyKeys, todayKeys] = await Promise.all([
     scanKeys(env, historyPattern),
     scanKeys(env, todayPattern)
   ]);
+  if (!historyKeys.length && !todayKeys.length) {
+    const legacyPrefix = 'user:' + encodeKey(userId) + ':route:' + encodeKey(route) + ':orders:';
+    [historyKeys, todayKeys] = await Promise.all([
+      scanKeys(env, legacyPrefix + 'history:*'),
+      scanKeys(env, legacyPrefix + 'today:*')
+    ]);
+  }
   const keyMap = new Map();
   historyKeys.forEach(key => keyMap.set(key, 'history'));
   todayKeys.forEach(key => keyMap.set(key, 'today'));
@@ -188,7 +198,7 @@ function normalizeWeight(value) { if (value === null || value === undefined || v
 function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0) - (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
-function scopedKey(userId, route, suffix) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:orders:${suffix}`; }
+function scopedKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
 function normalizeRoute(value) { const s = String(value || '').trim(), m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function addDays(date, days) { const d = new Date(`${date}T00:00:00+08:00`); d.setUTCDate(d.getUTCDate() + days); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); }
