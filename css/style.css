@@ -1135,3 +1135,37 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 #manualOrderInput:focus{border-color:rgba(208,215,220,.46)!important;box-shadow:0 0 0 3px rgba(208,215,220,.10)!important}
 .toast{background:var(--one-surface);border:1px solid var(--one-line);box-shadow:0 14px 36px rgba(0,0,0,.45)}
 @media(max-width:380px){.app-container,.page-container{padding-left:14px;padding-right:14px}.task-card{padding:16px}.function-btn{height:56px;min-height:56px}}
+
+
+/* UI 2.0 · 第二轮移动端精修
+   目标：更接近 Uber 式“内容优先、少装饰、强层级、统一触控反馈”。
+   仅覆盖 UI，不改变业务逻辑。 */
+:root{
+  --one-bg:#05070A;--one-surface:#151D26;--one-surface-2:#1B2530;--one-surface-3:#202A34;
+  --one-text:#F2F5F7;--one-body:#D5DCE2;--one-secondary:#9AA6B2;--one-tertiary:#75818D;
+  --one-line:rgba(255,255,255,.075);--one-primary:#D0D7DC;--one-primary-text:#0B1015;
+  --one-pressed:#AEB8C0;--one-danger:#FF6B5E;
+}
+*{-webkit-tap-highlight-color:transparent}
+button,a,[role="button"]{touch-action:manipulation;-webkit-user-select:none;user-select:none}
+button{transition:background-color .12s ease,color .12s ease,border-color .12s ease,transform .08s ease}
+.task-card{margin-top:22px;padding:17px;border-radius:18px}
+.task-title{font-size:17px;line-height:22px}.task-name{gap:9px}
+.status-dot{width:19px;height:19px;font-size:10px}
+.task-main{margin-top:14px}.task-info{line-height:28px}.task-info strong{font-size:15px}
+.function-list{margin-top:14px}.function-btn{height:56px;min-height:56px;margin-bottom:8px;border-radius:14px;padding:0 15px}
+.function-btn:last-child{margin-bottom:0}
+.home-menu{right:14px;top:64px;width:202px;border-radius:16px}
+.home-menu-item{height:46px}.current-line{height:50px}
+.upload-overlay{padding:0 10px calc(10px + env(safe-area-inset-bottom))}
+.upload-sheet{max-width:430px;width:min(100%,430px);border-radius:22px}
+.sheet-footer{gap:8px}.sheet-footer button{min-height:46px;height:46px}
+.parse-status{border-radius:13px}
+@media(max-width:380px){
+  .task-card{margin-top:18px;padding:15px}
+  .task-title{font-size:16px}.function-btn{height:54px;min-height:54px}
+  .upload-overlay{padding-left:8px;padding-right:8px}
+}
+@media(prefers-reduced-motion:reduce){
+  button{transition:none!important}
+}
