@@ -754,3 +754,32 @@ body{color:var(--text-body)}
   .source-option{height:72px!important;min-height:72px!important}
   .source-menu-cancel{height:44px!important}
 }
+
+
+/* 2026-09-22 修复：规划详情按钮上下被裁切
+   父容器与按钮统一44px高度，取消内部高度错位导致的overflow裁切。 */
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .input-area{
+  height:44px!important;
+  min-height:44px!important;
+  max-height:44px!important;
+  padding:0!important;
+  overflow:visible!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  align-items:stretch!important;
+  justify-content:center!important;
+}
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .detail-toggle{
+  width:100%!important;
+  height:44px!important;
+  min-height:44px!important;
+  max-height:44px!important;
+  margin:0!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  line-height:20px!important;
+  overflow:visible!important;
+}
