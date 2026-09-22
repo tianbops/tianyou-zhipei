@@ -224,3 +224,22 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 .date-sheet-head strong{line-height:22px!important}
 .delete-sheet{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important}
 .delete-actions{width:100%!important;display:grid!important;align-items:center!important}
+
+/* 历史查询标题：按顶部边框几何中心对齐 */
+.history-page .top-bar{
+  position:relative!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+}
+.history-page .top-bar .app-title{
+  position:absolute!important;
+  left:50%!important;
+  top:50%!important;
+  transform:translate(-50%,-50%)!important;
+  margin:0!important;
+  width:max-content!important;
+  max-width:calc(100% - 96px)!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+}
