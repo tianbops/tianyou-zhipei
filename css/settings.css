@@ -20,3 +20,24 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .settings-page .page-title,.settings-page .section-title,.settings-page .profile-name{color:var(--text-primary);font-weight:700}
 .settings-page .setting-label,.settings-page .setting-row{color:var(--text-body)}
 .settings-page .setting-desc,.settings-page .hint,.settings-page .muted{color:var(--text-secondary)}
+
+
+/* UI 2.0 · 账户设置 */
+:root{
+  --bg:#05070A;--card:#151D26;--line:rgba(255,255,255,.075);--muted:#9AA6B2;--blue:#D0D7DC;--danger:#FF6B5E;
+}
+.settings-page{max-width:430px;padding-left:14px;padding-right:14px}.settings-header{height:50px;margin-bottom:10px}
+.header-title{font-size:18px;color:#F2F5F7}.back-btn{width:42px;height:42px;border-radius:13px;background:#151D26;border:1px solid var(--line)}
+.back-btn:active{background:#AEB8C0;color:#0B1015}
+.profile-hero{background:#151D26;border-color:var(--line);border-radius:18px;padding:17px 18px;margin-bottom:20px}.profile-hero:after{display:none}
+.avatar{width:48px;height:48px;border-radius:14px;background:#D0D7DC;color:#0B1015;font-size:20px;margin-bottom:11px}
+.profile-name{font-size:18px}.profile-meta{color:#9AA6B2}
+.group{margin-bottom:17px}.group-title{padding:0 4px 7px;color:#75818D}
+.settings-card{border-radius:15px;border-color:var(--line);background:#151D26}.setting-row{min-height:58px;padding:10px 13px}.setting-row:active{background:#202A34}
+.row-icon{width:34px;height:34px;flex-basis:34px;border-radius:10px;background:#0D1319}.row-title{font-size:14px;color:#D5DCE2}.row-sub{color:#75818D}
+.logout-btn{height:46px;border-radius:12px;background:transparent;border-color:rgba(255,107,94,.22);color:#FF8278}
+.sheet{max-width:430px;background:#151D26;border-color:var(--line);border-radius:22px 22px 0 0}.grabber{background:#4B5662}
+.sheet-title{font-size:16px}.close-btn{background:#202A34;border-radius:10px}.close-btn:active{background:#313C47}
+.input-wrap input{height:48px;border-radius:12px;background:#0D1319;border-color:var(--line)}.input-wrap input:focus{border-color:rgba(208,215,220,.48);box-shadow:0 0 0 3px rgba(208,215,220,.10)}
+.sheet-actions{gap:8px}.secondary-btn,.primary-btn,.danger-btn{height:46px;border-radius:12px;font-size:14px}
+.secondary-btn{background:#202A34!important;color:#E3E8ED!important}.primary-btn{background:#D0D7DC!important;color:#0B1015!important}.danger-btn{background:transparent!important;border:1px solid rgba(255,107,94,.38)!important;color:#FF8278!important}
