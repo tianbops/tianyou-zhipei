@@ -28,7 +28,7 @@ export async function onRequest({ request, env }) {
       getLearning(env, route, deadline)
     ]);
     const dataReadyAt = Date.now();
-    const base = getCachedBaseMatchIndex(userId, route, baseRecord.dataVersion, baseRecord.stores);
+    const base = getCachedBaseMatchIndex(route, baseRecord.dataVersion, baseRecord.stores);
     const indexReadyAt = Date.now();
     const parsed = parseDeterministic(text);
     const extractionDoneAt = Date.now();
