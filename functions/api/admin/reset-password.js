@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理员重置用户密码
 import { requireSystemAdmin } from '../_auth.js';
-import { redisGet, redisSet } from '../_data.js';
+import { redisGet, redisSet, recordAdminLog } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -20,6 +20,7 @@ export async function onRequest({ request, env }) {
     user.updatedAt = new Date().toISOString();
     user.sessionVersion = Number(user.sessionVersion || 1) + 1;
     await redisSet(env, 'user:' + userId, user);
+    await recordAdminLog(env, admin, 'reset_password', 'user', userId);
 
     return json({ success: true, message: '密码已重置，旧设备会话已全部失效' });
   } catch (error) {
