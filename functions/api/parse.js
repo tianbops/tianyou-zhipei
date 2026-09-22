@@ -83,6 +83,8 @@ function normalizeOcrText(value) {
     .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ')
     .replace(/[＞》➜➤⇒↦]/g, '->').replace(/→/g, '->')
     .replace(/[-﹣－—–]\s*\n?\s*[>＞]/g, '->').replace(/-\s*>/g, '->')
+    // OCR 常把门店之间的“→”识别成单独的“>”；在门店文字之间时按分隔符处理，避免把两家门店合并成一个名称。
+    .replace(/\s*>\s*(?=[\u4e00-\u9fffA-Za-z0-9])/g, '->')
     .replace(/\s*->\s*/g, '->').replace(/[｜|]/g, '|').replace(/[，]/g, ',').replace(/[：]/g, ':')
     .replace(/总\s*\n\s*(数量|重量|体积)/g, '总$1').replace(/总\s*数\s*量/g, '总数量')
     .replace(/总\s*重\s*量/g, '总重量').replace(/总\s*体\s*积/g, '总体积')
