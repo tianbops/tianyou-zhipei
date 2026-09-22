@@ -125,3 +125,16 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
   border-bottom:1px solid var(--line)!important;
   box-sizing:border-box!important;
 }
+
+
+/* UI 2.0 · 第二十二轮：设置页视觉基线统一 2026-09-22 */
+.settings-header{align-items:center!important}
+.header-title{line-height:24px!important;display:flex!important;align-items:center!important;justify-content:center!important}
+.back-btn,.close-btn{display:flex!important;align-items:center!important;justify-content:center!important}
+.setting-row{align-items:center!important}
+.row-main{display:flex!important;flex-direction:column!important;justify-content:center!important}
+.sheet-head{align-items:center!important}
+.sheet-actions{align-items:center!important}
+.sheet-actions button{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+.modal{align-items:center!important;justify-content:center!important}
+.modal .sheet{margin:0 auto!important}
