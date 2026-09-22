@@ -1793,3 +1793,12 @@ a:focus-visible,
   align-items:center!important;
   justify-content:center!important;
 }
+
+/* UI 2.0 · 第二十一轮：识别读取中状态文字垂直居中 2026-09-22 */
+/* 处理状态框保持现有高度，只修正文字与状态图标在行内的垂直位置 */
+.upload-sheet.processing .parse-status .status-row{
+  align-items:center!important;
+}
+.upload-sheet.processing .parse-status .status-row #statusText{
+  line-height:22px!important;
+}
