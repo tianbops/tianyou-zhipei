@@ -29,7 +29,12 @@ function setReviewText(data){
   orderedStores.forEach((item,index)=>{const prefix=String(index+1).padStart(2,'0');const mark=noBase?'':item?.isNew?'⚠️ 新增：':'';const review=noBase?'':item?.needsReview?'⚠️ 待定：':'';lines.push(`${prefix}. ${mark||review}${storeName(item)}`)});
   const value=lines.join('\\n');reviewMode=true;input.value=value;input.removeAttribute('placeholder');input.scrollTop=0;return true
 }
-window.openPendingReview=()=>{const pending=parsedOrders.filter(item=>item?.needsReview===true);if(pending.length)window.renderReviewStores?.(pending);};
+window.openPendingReview=()=>{
+  const pending=parsedOrders.filter(item=>item?.needsReview===true);
+  if(!pending.length)return;
+  if(typeof window.openPendingReviewDetail==='function')window.openPendingReviewDetail(pending);
+  else window.renderReviewStores?.(pending);
+};
 function parseWeightFromText(text){const source=String(text||'').replace(/\s+/g,' ');const match=source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i)||source.match(/([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)\b/i);return match?`${match[1]}${match[2]||''}`:''}
 function parseDateFromText(text){const match=String(text||'').match(/(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?/);return match?`${match[1]}-${String(match[2]).padStart(2,'0')}-${String(match[3]).padStart(2,'0')}`:''}
 function parseVehicleFromText(text){const match=String(text||'').match(/(?:车牌号\s*[:：]?\s*)?(渝\s*[A-Z0-9]{5,7})/i);return match?match[1].replace(/\s+/g,'').toUpperCase():''}
