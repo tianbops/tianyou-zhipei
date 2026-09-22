@@ -926,10 +926,20 @@ body{color:var(--text-body)}
    初始上传、识别/规划进行中均不显示“规划路线/取消”底部操作；
    避免弹窗刚打开时出现与当前阶段无关的操作。 */
 .upload-sheet.waiting .sheet-footer,
-.upload-sheet.processing .sheet-footer,
 .upload-sheet.error .sheet-footer,
 .upload-sheet.cancelled .sheet-footer{
   display:none!important;
+}
+/* 识别/提取进行中保留“取消”，隐藏尚未可用的“规划路线” */
+.upload-sheet.processing .sheet-footer{
+  display:flex!important;
+}
+.upload-sheet.processing .sheet-footer .btn-primary-action{
+  display:none!important;
+}
+.upload-sheet.processing .sheet-footer .btn-cancel{
+  display:flex!important;
+  flex:1 1 100%!important;
 }
 .upload-sheet.success .sheet-footer{
   display:flex!important;
