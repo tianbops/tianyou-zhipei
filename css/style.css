@@ -935,14 +935,18 @@ body{color:var(--text-body)}
   display:flex!important;
 }
 
-/* 主操作按钮降低视觉重量：保留业务蓝，但降低明度与阴影存在感。 */
+/* 2026-09-22 产品UX：主要按钮跟随全局按钮色
+   已取消业务蓝作为按钮主色；上传弹窗主按钮与全局 primary-action 保持一致。 */
 .upload-sheet.success .btn-primary-action{
-  background:#1D477F!important;
-  box-shadow:0 4px 10px rgba(29,71,127,.14)!important;
+  background:var(--primary-action)!important;
+  color:var(--primary-action-text)!important;
+  box-shadow:none!important;
 }
 .upload-sheet.success .btn-primary-action:hover{
-  background:#214F8D!important;
+  background:var(--primary-action)!important;
+  filter:brightness(1.04)!important;
 }
 .upload-sheet.success .btn-primary-action:active{
-  background:#183B6A!important;
+  background:var(--control-pressed)!important;
+  color:#fff!important;
 }
