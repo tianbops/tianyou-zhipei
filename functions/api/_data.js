@@ -223,7 +223,7 @@ export async function redisGet(env, key) {
   if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`);
   const data = await response.json().catch(() => ({}));
   if (data.result === null || data.result === undefined || data.result === '') return null;
-  try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
+  try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return data.result; }
 }
 
 export async function redisSet(env, key, value) {
