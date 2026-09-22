@@ -1,7 +1,7 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
 
-const REDIS_TIMEOUT_MS = 8000;
+const REDIS_TIMEOUT_MS = 5000;
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
