@@ -1574,3 +1574,47 @@ a:focus-visible,
   box-shadow:none!important;
   outline:none!important;
 }
+
+
+/* UI 2.0 · 第十四轮：确认录入/取消操作区全面消除方形外框 2026-09-22 */
+/* 成功、失败、取消等最终操作状态：操作区只保留按钮本身，不再显示矩形容器边框/背景 */
+.upload-sheet.success .sheet-footer,
+.upload-sheet.error .sheet-footer,
+.upload-sheet.cancelled .sheet-footer{
+  background:transparent!important;
+  border-top:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+}
+.upload-sheet.success .sheet-footer button,
+.upload-sheet.error .sheet-footer button,
+.upload-sheet.cancelled .sheet-footer button{
+  -webkit-appearance:none!important;
+  appearance:none!important;
+  outline:none!important;
+  box-shadow:none!important;
+}
+/* 键盘/系统焦点也不能在按钮外再生成第二层方框 */
+.upload-sheet.success .sheet-footer button:focus,
+.upload-sheet.success .sheet-footer button:focus-visible,
+.upload-sheet.error .sheet-footer button:focus,
+.upload-sheet.error .sheet-footer button:focus-visible,
+.upload-sheet.cancelled .sheet-footer button:focus,
+.upload-sheet.cancelled .sheet-footer button:focus-visible{
+  outline:none!important;
+  box-shadow:none!important;
+}
+/* 确认录入保持单一圆角按钮；取消按钮同样只保留自身形状 */
+.upload-sheet.success .sheet-footer .btn-primary-action,
+.upload-sheet.success .sheet-footer .btn-cancel,
+.upload-sheet.error .sheet-footer .btn-primary-action,
+.upload-sheet.error .sheet-footer .btn-cancel,
+.upload-sheet.cancelled .sheet-footer .btn-primary-action,
+.upload-sheet.cancelled .sheet-footer .btn-cancel{
+  border-radius:11px!important;
+  border:0!important;
+}
+/* 成功态按钮区与详情入口保持自然间距，不让透明 footer 产生“方框感” */
+.upload-sheet.success .sheet-footer{
+  padding:8px 12px calc(8px + env(safe-area-inset-bottom))!important;
+}
