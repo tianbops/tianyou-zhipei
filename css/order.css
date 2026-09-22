@@ -39,3 +39,23 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .order-detail-page .date-title,.order-detail-page .summary-title,.order-detail-page .card-title{color:var(--text-primary);font-weight:700}
 .order-detail-page .store-name{color:var(--text-primary);font-weight:600}
 .order-detail-page .store-note,.order-detail-page .store-address,.order-detail-page .meta,.order-detail-page .summary-label{color:var(--text-secondary)}
+
+
+/* UI 2.0 · 订单详情/通用移动页 */
+:root{
+  --bg:#05070A;--card:#151D26;--card2:#0D1319;--blue:#D0D7DC;--text:#F2F5F7;--muted:#9AA6B2;
+  --line:rgba(255,255,255,.075);--warn:#FFB020;--one-surface-2:#1B2530;--one-pressed:#AEB8C0;
+}
+.app-container{max-width:430px;padding-left:14px;padding-right:14px}
+.top-bar{height:50px;margin-bottom:10px}.app-title{font-size:18px;color:#F2F5F7}.back-btn,.menu-btn{width:42px;height:42px;flex-basis:42px;border-radius:13px;background:#151D26;border-color:var(--line)}
+.back-btn:active,.menu-btn:active{background:var(--one-pressed);color:#0B1015}
+.task-card{background:#151D26;border-color:var(--line);border-radius:16px;box-shadow:none}
+.order-detail-page .summary-card{padding:11px 13px 12px}.date-title{font-size:15px;color:#F2F5F7}.label{color:#9AA6B2}.value{color:#F2F5F7}
+.order-detail-page .route-card{border-radius:16px;padding:13px 12px 0}.route-title{font-size:16px;color:#F2F5F7}
+.order-detail-page .store-item{min-height:58px;padding:9px 0;border-bottom-color:rgba(255,255,255,.055)}
+.store-index{color:#75818D;font-size:12px}.store-name{font-size:15px;color:#F2F5F7;font-weight:600}.store-note{color:#9AA6B2;font-size:11px}
+.dialog{background:rgba(0,0,0,.70);backdrop-filter:blur(5px)}.dialog-box{background:#151D26;border-color:var(--line);border-radius:18px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.dialog-box input{height:48px;border-radius:12px;background:#0D1319;border-color:var(--line)}
+.dialog-box input:focus{border-color:rgba(208,215,220,.48)!important;box-shadow:0 0 0 3px rgba(208,215,220,.10)!important}
+.dialog-btn{gap:8px}.dialog-btn button{height:46px;border-radius:12px;font-size:14px}
+.dialog-btn button:first-child{background:#202A34!important;color:#E3E8ED!important}.dialog-btn button:last-child{background:#D0D7DC!important;color:#0B1015!important}
