@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：用户
 import { requireSystemAdmin } from '../_auth.js';
-import { normalizeRoute, normalizeRole, publicUser, redisCommand, redisGet, redisSet, scanUsers } from '../_data.js';
+import { normalizeRole, publicUser, redisGet, redisSet, scanUsers, recordAdminLog } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -44,6 +44,7 @@ export async function onRequest({ request, env }) {
     updated.updatedAt = new Date().toISOString();
     updated.sessionVersion = Number(updated.sessionVersion || 1) + 1;
     await redisSet(env, `user:${encodeURIComponent(userId).replace(/%/g, '_')}`, updated);
+    await recordAdminLog(env, admin, 'update_user', 'user', userId, { fields: Object.keys(body).filter(key => key !== 'userId') });
 
     return json({ success: true, user: publicUser(updated) });
   } catch (error) {
