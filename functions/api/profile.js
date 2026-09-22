@@ -1,5 +1,6 @@
 // 天友智配One - 用户资料设置
 import { authRequired, createSession, sessionCookie } from './_auth.js';
+import { normalizeRoute, publicUser, redisGet, redisSet } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (!redisReady(env)) return json({ success: false, error: '资料服务未配置，请检查 Upstash 配置' }, 500);
@@ -15,7 +16,6 @@ export async function onRequest({ request, env }) {
 
     const body = await request.json().catch(() => ({}));
     const name = String(body.name || '').trim();
-    const route = normalizeRoute(body.route);
     const vehicle = String(body.vehicle || '').trim();
 
     if (!name) return json({ success: false, error: '请输入姓名' }, 400);
