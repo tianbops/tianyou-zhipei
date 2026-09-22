@@ -10,6 +10,8 @@ export async function onRequest({ request, env }) {
   if (!supplied || supplied !== setupKey) return json({ success: false, error: '初始化密钥错误' }, 403);
 
   try {
+    const alreadyUsed = await redisGet(env, 'system:admin:bootstrap:used');
+    if (alreadyUsed) return json({ success: false, error: '系统管理员初始化密钥已经使用过，请先轮换 ADMIN_BOOTSTRAP_KEY 后再操作' }, 409);
     const body = await request.json().catch(() => ({}));
     const userId = String(body.userId || '').trim();
     const username = String(body.username || '').trim().toLowerCase();
@@ -29,6 +31,7 @@ export async function onRequest({ request, env }) {
       sessionVersion: Number(target.sessionVersion || 1) + 1
     };
     await redisSet(env, `user:${encodeURIComponent(target.id).replace(/%/g, '_')}`, updated);
+    await redisSet(env, 'system:admin:bootstrap:used', { usedAt: new Date().toISOString(), userId: target.id });
     return json({ success: true, user: publicUser(updated), message: '系统管理员初始化成功；请立即轮换 ADMIN_BOOTSTRAP_KEY' });
   } catch (error) {
     return json({ success: false, error: error?.message || '初始化失败' }, 503);
