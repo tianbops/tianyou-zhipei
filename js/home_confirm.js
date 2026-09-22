@@ -6,7 +6,11 @@
   let metaState={};
   const $=id=>document.getElementById(id);
   const routeContext=()=>typeof Auth!=='undefined'&&Auth.getCurrentRoute?Auth.getCurrentRoute():'';
-  function candidateList(item){const values=[item?.candidate,...(Array.isArray(item?.candidates)?item.candidates:[])].map(v=>String(v||'').trim()).filter(Boolean);return [...new Set(values)];}
+  function candidateList(item){
+    const names=[item?.candidate,...(Array.isArray(item?.candidates)?item.candidates:[])].map(v=>String(v||'').trim()).filter(Boolean);
+    const codes=[String(item?.candidateCode||'').trim(),...(Array.isArray(item?.candidateCodes)?item.candidateCodes.map(v=>String(v||'').trim()):[])];
+    return [...new Map(names.map((name,index)=>[name,{name,code:codes[index]||''}])).values()];
+  }
   function renderReview(items){
     reviewState=(Array.isArray(items)?items:[]).filter(item=>item?.needsReview);
     const box=$('statusDetail');
@@ -21,15 +25,20 @@
       const label=document.createElement('div');label.className='review-name';label.textContent=`${item.code||`R${String(index+1).padStart(2,'0')}`} · ${String(item.name||'').trim()}`;
       const select=document.createElement('select');select.className='review-select';
       const candidates=candidateList(item);
-      select.innerHTML='<option value="">选择处理方式</option>'+candidates.map((name,i)=>`<option value="candidate:${i}">采用候选：${name}</option>`).join('')+'<option value="new">作为新增门店</option>';
+      select.innerHTML='<option value="">选择处理方式</option>'+candidates.map((candidate,i)=>`<option value="candidate:${i}">采用候选：${candidate.name}</option>`).join('')+'<option value="new">作为新增门店</option>';
       select.value=item._choice||'';
-      select.addEventListener('change',()=>{item._choice=select.value;item._selectedCandidate=select.value.startsWith('candidate:')?candidates[Number(select.value.slice(10))]||'':'';});
+      select.addEventListener('change',()=>{
+        item._choice=select.value;
+        const selected=select.value.startsWith('candidate:')?candidates[Number(select.value.slice(10))]:null;
+        item._selectedCandidate=selected?.name||'';
+        item._selectedCandidateCode=selected?.code||'';
+      });
       row.append(label,select);list.appendChild(row);
     });
     box.appendChild(list);
     const button=document.createElement('button');button.type='button';button.className='review-apply';button.textContent='✓ 应用确认';button.addEventListener('click',applyReview);box.appendChild(button);
   }
-  async function applyReview(){let pending=0;for(const item of reviewState)if(!item._choice)pending++;if(pending){window.renderUnifiedStatus?.('error',100,`还有 ${pending} 家门店未确认`);return;}const button=document.querySelector('.review-apply');if(button){button.disabled=true;button.textContent='正在应用…';}try{for(const item of reviewState){const target=parsedState.find(store=>store===item||store.code===item.code||store.name===item.name);if(!target)continue;if(item._choice==='new'){target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='new';target.matched=false;target.isNew=true;target.matchScore=0;}else{const selected=String(item._selectedCandidate||'').trim();if(!selected)throw Error('请选择正确的候选门店');const rawName=String(item.name||'').trim();const rawNames=Array.isArray(target.rawNames)?target.rawNames.filter(Boolean):[];if(rawName&&!rawNames.includes(rawName))rawNames.push(rawName);target.rawNames=rawNames.slice(-5);target.baseName=selected;target.baseCode=item.candidateCode||'';target.name=selected;target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='confirmed';target.matched=true;target.isNew=false;target.matchScore=1;}}renderReview([]);writeReviewText(parsedState);window.renderUnifiedStatus?.('success',100,'待定门店已处理');
+  async function applyReview(){let pending=0;for(const item of reviewState)if(!item._choice)pending++;if(pending){window.renderUnifiedStatus?.('error',100,`还有 ${pending} 家门店未确认`);return;}const button=document.querySelector('.review-apply');if(button){button.disabled=true;button.textContent='正在应用…';}try{for(const item of reviewState){const target=parsedState.find(store=>store===item||store.code===item.code||store.name===item.name);if(!target)continue;if(item._choice==='new'){target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='new';target.matched=false;target.isNew=true;target.matchScore=0;}else{const selected=String(item._selectedCandidate||'').trim();if(!selected)throw Error('请选择正确的候选门店');const rawName=String(item.name||'').trim();const rawNames=Array.isArray(target.rawNames)?target.rawNames.filter(Boolean):[];if(rawName&&!rawNames.includes(rawName))rawNames.push(rawName);target.rawNames=rawNames.slice(-5);target.baseName=selected;target.baseCode=item._selectedCandidateCode||item.candidateCode||'';target.name=selected;target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='confirmed';target.matched=true;target.isNew=false;target.matchScore=1;}}renderReview([]);writeReviewText(parsedState);window.renderUnifiedStatus?.('success',100,'待定门店已处理');
     window.updatePendingReviewCount?.(0);}catch(error){window.renderUnifiedStatus?.('error',100,error.message||'处理失败，请重试');}finally{if(button){button.disabled=false;button.textContent='✓ 应用确认';}}}
   function writeReviewText(stores){const input=$('manualOrderInput');if(!input)return;const lines=[`日期：${metaState.date||'未识别'}`,`线路：${metaState.route||routeContext()||'未识别'}`,`车辆：${metaState.vehicle||'未识别'}`,`门店：${stores.length}家`,`重量：${metaState.totalWeight||'未识别'}`,'',`【门店列表】`];stores.forEach((store,index)=>{const mark=store?.isNew?'⚠️ 新增：':store?.needsReview?'⚠️ 待定：':'';lines.push(`${String(index+1).padStart(2,'0')}. ${mark}${String(store?.name||'').trim()}`);});input.value=lines.join('\\n');}
   function syncParsed(data){const d=data||{};parsedState=Array.isArray(d.stores)?d.stores.map(item=>({...item})):[];metaState={route:d.route||routeContext()||'',date:d.date||'',vehicle:d.vehicle||'',totalWeight:String(d.totalWeight||''),rawOrderCount:Number(d.rawOrderCount)||0,recognizedCount:Number(d.recognizedCount)||parsedState.length,baseDatabaseAvailable:d.baseDatabaseAvailable!==false,source:d.source||'web-confirm'};renderReview(parsedState);}
