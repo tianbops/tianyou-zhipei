@@ -1757,3 +1757,10 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 .home-menu-item{align-items:center!important}
 .toast{line-height:20px!important}
 @media(max-width:380px){.upload-sheet.processing .parse-status{min-height:42px!important;max-height:42px!important;height:42px!important}}
+
+/* 2026-09-22 状态框统计：仅显示实际发生项目，新增→更正→合并 */
+.parse-status.success{min-height:0!important;height:auto!important;max-height:none!important;overflow:visible!important}
+.parse-status.success .status-detail.active{display:flex!important;flex-direction:column!important;gap:3px!important;margin-top:5px!important;padding-top:5px!important;max-height:none!important;overflow:visible!important}
+.parse-status.success .status-detail .detail-row{min-height:18px!important;height:18px!important;justify-content:flex-start!important}
+.parse-status.success .status-detail .detail-line{font-size:14px!important;line-height:18px!important;flex:0 0 auto!important;color:#AAB6C2!important}
+@media(max-width:430px){.parse-status.success{min-height:0!important;height:auto!important;max-height:none!important}.parse-status.success .status-detail .detail-line{font-size:14px!important}}
