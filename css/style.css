@@ -1060,3 +1060,29 @@ body{color:var(--text-body)}
   margin:0!important;
   text-align:center!important;
 }
+
+
+/* 2026-09-22 产品UX：今日任务运单笔数状态圆点
+   不改变今日任务原有结构；圆点内部直接显示当日运单笔数。 */
+.task-title .status-dot{
+  width:18px!important;
+  height:18px!important;
+  min-width:18px!important;
+  min-height:18px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 18px!important;
+  border-radius:50%!important;
+  color:#FFFFFF!important;
+  font-size:10px!important;
+  line-height:18px!important;
+  font-weight:700!important;
+  font-family:Arial,"Microsoft YaHei",sans-serif!important;
+  text-align:center!important;
+  box-shadow:0 0 0 3px rgba(255,255,255,.035)!important;
+}
+.task-info{
+  font-size:17px;
+  line-height:42px;
+}
