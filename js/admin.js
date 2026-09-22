@@ -33,7 +33,8 @@ function renderUsers(){
     <div class="user-main"><div><div class="name">${esc(u.name||u.username)}</div><div class="meta">${esc(u.username)} · ${esc(u.id)}</div></div><span class="badge">${esc(u.status==='active'?'正常':'停用')}</span></div>
     <div class="meta">角色：${esc(u.role)} · 绑定：${esc(u.boundRouteId||'未绑定')} ${u.routeDuty?'· '+esc(u.routeDuty):''}</div>
     <div class="actions">
-      <button onclick="resetPassword('${escAttr(u.id)}','${u.status==='active'?'disabled':'active'}')">${u.status==='active'?'停用':'启用'}</button>
+      <button onclick="toggleUser('${escAttr(u.id)}','${u.status==='active'?'disabled':'active'}')">${u.status==='active'?'停用':'启用'}</button>
+      <button onclick="resetPassword('${escAttr(u.id)}')">重置密码</button>
       <button onclick="setRole('${escAttr(u.id)}','${u.role==='system_admin'?'driver':'system_admin'}')">${u.role==='system_admin'?'取消管理员':'设为管理员'}</button>
     </div>
   </article>`).join('')||'<div class="meta">暂无用户</div>';
