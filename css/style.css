@@ -1618,3 +1618,61 @@ a:focus-visible,
 .upload-sheet.success .sheet-footer{
   padding:8px 12px calc(8px + env(safe-area-inset-bottom))!important;
 }
+
+
+/* UI 2.0 · 第十五轮：修正详情展开态层级收口 2026-09-22 */
+/* 展开修正详情后，“规划详情”只保留内层按钮边框，外层 input-area 不再形成第二个方框 */
+.upload-sheet.detail-view-open .input-area,
+.upload-sheet.detail-view-open .review-summary{
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  outline:none!important;
+}
+.upload-sheet.detail-view-open .input-area .detail-toggle,
+.upload-sheet.detail-view-open .review-summary{
+  border:1px solid rgba(255,255,255,.055)!important;
+  border-radius:10px!important;
+  background:#151D26!important;
+  box-shadow:none!important;
+  outline:none!important;
+  box-sizing:border-box!important;
+}
+.upload-sheet.detail-view-open .input-area .detail-toggle:focus,
+.upload-sheet.detail-view-open .input-area .detail-toggle:focus-visible,
+.upload-sheet.detail-view-open .review-summary:focus,
+.upload-sheet.detail-view-open .review-summary:focus-visible{
+  outline:none!important;
+  box-shadow:none!important;
+}
+/* 右上角关闭按钮：覆盖全局 button 最小高度，确保始终是真正的正圆 */
+.upload-sheet.detail-view-open .upload-detail-close{
+  width:36px!important;
+  height:36px!important;
+  min-width:36px!important;
+  min-height:36px!important;
+  max-width:36px!important;
+  max-height:36px!important;
+  aspect-ratio:1 / 1!important;
+  padding:0!important;
+  margin:0!important;
+  box-sizing:border-box!important;
+  border:0!important;
+  border-radius:50%!important;
+  outline:none!important;
+  box-shadow:none!important;
+  -webkit-appearance:none!important;
+  appearance:none!important;
+}
+.upload-sheet.detail-view-open .upload-detail-close:focus,
+.upload-sheet.detail-view-open .upload-detail-close:focus-visible{
+  width:36px!important;
+  height:36px!important;
+  min-width:36px!important;
+  min-height:36px!important;
+  max-width:36px!important;
+  max-height:36px!important;
+  border-radius:50%!important;
+  outline:none!important;
+  box-shadow:none!important;
+}
