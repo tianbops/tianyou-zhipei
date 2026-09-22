@@ -373,17 +373,25 @@
   function bindUploadInput(id) {
     const input = $(id);
     if (!input) return;
+    let selectionSeq = 0;
     input.addEventListener('change', () => {
       window.closeUploadSource?.();
       const files = Array.from(input.files || []);
       if (!files.length) return;
+      const selectionId = ++selectionSeq;
+      const selectedSignature = files.map(file => [file.name, file.size, file.lastModified].join('|')).join(';;');
       processFiles(files).catch(error => {
         if (error?.code !== 'OCR_CANCELLED' && !/已取消/.test(String(error?.message || ''))) {
           console.error('[PaddleOCR batch]', error);
           setStatus(error?.message || '图片读取失败，请重试', 100, false, true);
         }
       }).finally(() => {
-        input.value = '';
+        // 取消旧任务后立即重新选择时，旧任务的 finally 不能清掉新选择的文件。
+        // 只有当前选择仍是这一次任务，才允许清空 input。
+        if (selectionId !== selectionSeq) return;
+        const currentFiles = Array.from(input.files || []);
+        const currentSignature = currentFiles.map(file => [file.name, file.size, file.lastModified].join('|')).join(';;');
+        if (currentSignature === selectedSignature) input.value = '';
       });
     });
   }
