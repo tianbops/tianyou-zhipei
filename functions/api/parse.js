@@ -835,9 +835,14 @@ function extractBusinessCode(value) {
 
 function matchKey(value) {
   const romanMap = { 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V', 'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X' };
-  return cleanStoreName(value).replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => romanMap[roman] || roman)
+  return cleanStoreName(value)
+    // 统一全角/兼容字符，避免 OCR 把“Ⅲ”识别成“ⅡI”等混合形态后无法进入同一匹配键。
+    .normalize('NFKC')
+    .replace(/Ⅱ\s*I(?=类)/gi, 'Ⅲ')
+    .replace(/Ⅱ\s*l(?=类)/gi, 'Ⅱl')
+    .replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => romanMap[roman] || roman)
     .replace(/[∥〢丨]/g, 'II')
-    // OCR可能把罗马数字 II 后的“类”识别成类似小写 l；仅在“II/l + 类”结构中做通用归一化。
+    // OCR可能把罗马数字后混入一个小写 l；仅在“罗马数字 + l + 类”结构中去除该误识别。
     .replace(/((?:ii|iii|iv|v|vi|vii|viii|ix|x))l(?=类)/gi, '$1')
     .replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '')
     .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
