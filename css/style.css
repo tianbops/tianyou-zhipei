@@ -191,125 +191,27 @@ body{color:var(--text-body)}
 .quick-actions button,.source-menu-cancel{font-size:13px}
 
 
-/* 2026-09-21 识别提取中取消按钮：强制内容几何居中 */
+/* 2026-09-22 产品UX：读取中取消按钮与状态框同宽，恢复正常按钮高度 */
 .upload-sheet.processing .sheet-footer{
   width:100%;
-  justify-content:center;
-  align-items:center;
+  display:flex!important;
+  justify-content:flex-start!important;
+  align-items:center!important;
 }
 .upload-sheet.processing .sheet-footer .btn-cancel{
-  flex:0 0 100%;
-  width:100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  padding:0;
-  margin:0;
-  box-sizing:border-box;
-}
-
-
-/* 2026-09-21 识别提取状态框下方取消按钮：按钮本体居中 */
-.upload-sheet.processing .sheet-footer{
-  width:100%;
-  display:flex;
-  justify-content:center!important;
-  align-items:center;
-}
-.upload-sheet.processing .sheet-footer .btn-cancel{
-  flex:0 0 120px!important;
-  width:120px!important;
-  max-width:120px!important;
-  min-width:120px!important;
-  margin:0 auto!important;
+  flex:1 1 auto!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  height:44px!important;
+  margin:0!important;
   padding:0!important;
   display:flex!important;
   align-items:center!important;
   justify-content:center!important;
   text-align:center!important;
   line-height:1!important;
-}
-
-
-/* 2026-09-21 识别中取消按钮最终微调：修正滚动区域造成的视觉左偏 */
-.upload-sheet.processing .sheet-footer .btn-cancel{
-  position:relative;
-  left:5px;
-}
-
-
-/* 2026-09-21 识别中取消按钮：恢复严格水平居中，不再右移 */
-.upload-sheet.processing .sheet-footer .btn-cancel{
-  left:0!important;
-}
-
-/* 2026-09-22 详情展开最终布局：修正详情/规划详情统一 */
-.upload-sheet.detail-view-open{
-  display:flex!important;
-  flex-direction:column;
-  overflow:hidden!important;
-}
-.upload-sheet.detail-view-open .upload-detail-view{
-  display:flex!important;
-  flex:1 1 auto;
-  min-height:0;
-  flex-direction:column;
-  margin-top:0;
-  overflow:hidden;
-}
-.upload-sheet.detail-view-open .upload-detail-header{flex:0 0 52px}
-.upload-sheet.detail-view-open .upload-detail-body{
-  flex:1 1 auto;
-  min-height:0;
-  max-height:none!important;
-  overflow-y:auto;
-  overscroll-behavior:contain;
-}
-.upload-sheet.detail-view-open .input-area,
-.upload-sheet.detail-view-open .review-summary{
-  display:flex!important;
-  flex:0 0 40px;
-  min-height:40px;
-  margin-top:10px;
-  justify-content:center;
-  overflow:hidden;
-}
-.upload-sheet.detail-view-open .input-area .detail-toggle,
-.upload-sheet.detail-view-open .review-summary{width:100%;justify-content:center}
-.upload-sheet.detail-view-open .input-area #manualOrderInput{display:none!important}
-/* 详情页只保留“另一详情”的入口，当前详情标题本身不重复 */
-.upload-sheet.detail-view-open.detail-mode-planning .input-area{display:none!important}
-.upload-sheet.detail-view-open.detail-mode-correction .review-summary{display:none!important}
-.upload-sheet.detail-view-open .sheet-footer{
-  flex:0 0 auto;
-  position:relative;
-  z-index:20;
-  margin-top:0;
-  background:rgba(28,37,48,.98);
-}
-.upload-sheet .upload-detail-view[hidden]{display:none!important}
-/* 2026-09-21 状态框弹窗取消按钮：大按钮并严格居中 */
-.upload-sheet.processing .sheet-footer{
-  width:100%;
-  display:flex!important;
-  justify-content:center!important;
-  align-items:center!important;
-}
-.upload-sheet.processing .sheet-footer .btn-cancel{
-  flex:0 0 180px!important;
-  width:180px!important;
-  min-width:180px!important;
-  max-width:180px!important;
-  height:48px!important;
-  margin:0 auto!important;
-  padding:0!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  text-align:center!important;
-  line-height:1!important;
-  left:0!important;
+  position:static!important;
 }
 .upload-sheet.processing .sheet-footer .btn-primary-action{
   display:none!important;
