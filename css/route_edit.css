@@ -70,3 +70,13 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 #editDeleteArea{border-top:1px solid var(--line);margin-top:20px!important;padding-top:16px!important}
 #deleteStoreBtn{height:44px!important;min-height:44px!important;border-radius:12px!important;border:1px solid rgba(255,107,94,.38)!important;background:transparent!important;color:#FF8278!important;font-size:14px!important}
 .status{border-radius:12px!important;font-size:12px;line-height:1.5}
+
+
+/* UI 2.0 · 第四轮：线路维护操作区精修 */
+.route-edit-page .card{border:1px solid var(--line)!important}
+.route-edit-page .store-row{border-bottom:1px solid rgba(255,255,255,.055)!important}
+.route-edit-page .store-row:active{background:#1B2530!important;border-radius:10px}
+.route-edit-page .store-actions button{min-height:36px!important}
+.route-edit-page .btn-group{position:sticky;bottom:0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));background:linear-gradient(to top,#05070A 72%,rgba(5,7,10,0));z-index:10}
+.route-edit-page .save-btn,.route-edit-page .cancel-btn{margin-top:0!important}
+.route-edit-page #editDeleteArea{margin-bottom:12px!important}
