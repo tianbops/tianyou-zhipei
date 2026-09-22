@@ -1787,3 +1787,66 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
   .upload-sheet.detail-view-open.detail-mode-review .pending-review-select{flex-basis:124px;width:124px;font-size:11px}
   .upload-sheet.detail-view-open.detail-mode-review .pending-review-name{font-size:13px}
 }
+
+/* 2026-09-22 UI 2.1：详情页最终固定结构
+   详情内容独立滚动；X始终固定在标题右上；底部确认/取消始终固定。 */
+.upload-sheet.detail-view-open{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.upload-sheet.detail-view-open .upload-detail-view{
+  display:flex!important;
+  flex:1 1 auto!important;
+  flex-direction:column!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0!important;
+  overflow:hidden!important;
+}
+.upload-sheet.detail-view-open .upload-detail-header{
+  position:relative!important;
+  flex:0 0 52px!important;
+  min-height:52px!important;
+  padding:0 52px 0 14px!important;
+}
+.upload-sheet.detail-view-open .upload-detail-close{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  position:absolute!important;
+  top:50%!important;
+  right:8px!important;
+  transform:translateY(-50%)!important;
+  z-index:100!important;
+}
+.upload-sheet.detail-view-open .upload-detail-body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+.upload-sheet.detail-view-open .detail-entry-row{
+  flex:0 0 auto!important;
+}
+.upload-sheet.detail-view-open .sheet-footer{
+  flex:0 0 auto!important;
+  position:relative!important;
+  z-index:100!important;
+  margin-top:0!important;
+  padding-top:10px!important;
+  border-top:1px solid rgba(255,255,255,.055)!important;
+  background:rgba(28,37,48,.99)!important;
+}
+.upload-sheet.detail-view-open .sheet-footer button{
+  flex:1 1 0!important;
+  height:48px!important;
+  min-height:48px!important;
+}
+.upload-sheet.detail-view-open.detail-mode-review .sheet-footer .btn-primary-action{
+  background:var(--primary-action)!important;
+  color:var(--primary-action-text)!important;
+}
