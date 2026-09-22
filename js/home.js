@@ -15,7 +15,7 @@ function parseWeight(value){if(value===null||value===undefined||value==='')retur
 function formatWeight(value){const tons=parseWeight(value);if(!(tons>0))return '暂无数据';const rounded=Math.round((tons+Number.EPSILON)*100)/100;return `${rounded.toFixed(2)}t`}
 function updateSummary(){const hasToday=!!serverOrder&&Array.isArray(serverOrder.orders)&&serverOrder.orders.length>0;const route=serverOrder?.route||currentRoute()||'';const vehicle=serverOrder?.vehicle||'';if($('taskCard'))$('taskCard').style.display='block';if($('menuRoute'))$('menuRoute').textContent=route||'未选择线路';if(!hasToday){if($('homeRoute')){const text=$('homeRoute').querySelector('.vehicle-text');if(text)text.textContent='';}if($('storeCount'))$('storeCount').textContent='';if($('totalWeight'))$('totalWeight').textContent='';if($('statusDot'))$('statusDot').style.background='#5A6A7A';return}const orders=serverOrder.orders;const count=Number(serverOrder.uniqueStoreCount||serverOrder.count)||orders.length;if($('homeRoute')){const text=$('homeRoute').querySelector('.vehicle-text');if(text)text.textContent=vehicle||route||'未绑定车辆';}if($('storeCount'))$('storeCount').textContent=count?`${count}家`:'暂无当日订单';if($('totalWeight'))$('totalWeight').textContent=formatWeight(serverOrder.totalWeight);if($('statusDot'))$('statusDot').style.background=count?'#27AE60':'#5A6A7A'}
 function setOCRText(text){const input=$('manualOrderInput');if(!input)return false;const value=String(text??'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');input.value=value;input.removeAttribute('placeholder');input.dispatchEvent(new Event('input',{bubbles:true}));input.scrollTop=0;return !!value.trim()}
-function setReviewText(data){const input=$('manualOrderInput');if(!input)return false;const stores=Array.isArray(data?.stores)?data.stores:[];const route=data?.route||currentRoute()||'';const date=data?.date||pendingMeta.date||currentDate();const vehicle=data?.vehicle||pendingMeta.vehicle||'';const totalWeight=data?.totalWeight||pendingMeta.totalWeight||'';const uniqueCount=Number(data?.uniqueStoreCount)||stores.length;const rawCount=Number(data?.recognizedCount)||Number(data?.rawOrderCount)||stores.length;const noBase=data?.baseDatabaseAvailable===false;const lines=[`【当日订单信息】`,`日期：${date}`,`线路：${route}`,`车辆：${vehicle||'未识别'}`,noBase?'基准库：⚠️ 未建立，以下按本次运单识别顺序显示':`原始门店记录：${rawCount}条`,`唯一门店：${uniqueCount}家`,`总重量：${totalWeight||'未识别'}`,'',`【门店列表】`];stores.forEach((item,index)=>{const prefix=String(index+1).padStart(2,'0');const mark=noBase?'':item?.isNew?'⚠️ 新增：':'';const review=noBase?'':item?.needsReview?'⚠️ 待确认：':'';lines.push(`${prefix}. ${mark||review}${storeName(item)}`)});const value=lines.join('\n');reviewMode=true;input.value=value;input.removeAttribute('placeholder');input.scrollTop=0;return true}
+function setReviewText(data){const input=$('manualOrderInput');if(!input)return false;const stores=Array.isArray(data?.stores)?data.stores:[];const route=data?.route||currentRoute()||'';const date=data?.date||pendingMeta.date||currentDate();const vehicle=data?.vehicle||pendingMeta.vehicle||'';const totalWeight=data?.totalWeight||pendingMeta.totalWeight||'';const uniqueCount=Number(data?.uniqueStoreCount)||stores.length;const noBase=data?.baseDatabaseAvailable===false;const lines=[`日期：${date}`,`线路：${route}`,`车辆：${vehicle||'未识别'}`,noBase?'基准库：⚠️ 未建立，以下按本次运单识别顺序显示':`门店：${uniqueCount}家`,`重量：${totalWeight||'未识别'}`,'',`【门店列表】`];stores.forEach((item,index)=>{const prefix=String(index+1).padStart(2,'0');const mark=noBase?'':item?.isNew?'⚠️ 新增：':'';const review=noBase?'':item?.needsReview?'⚠️ 待确认：':'';lines.push(`${prefix}. ${mark||review}${storeName(item)}`)});const value=lines.join('\\n');reviewMode=true;input.value=value;input.removeAttribute('placeholder');input.scrollTop=0;return true}
 function parseWeightFromText(text){const source=String(text||'').replace(/\s+/g,' ');const match=source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i)||source.match(/([\d,]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)\b/i);return match?`${match[1]}${match[2]||''}`:''}
 function parseDateFromText(text){const match=String(text||'').match(/(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?/);return match?`${match[1]}-${String(match[2]).padStart(2,'0')}-${String(match[3]).padStart(2,'0')}`:''}
 function parseVehicleFromText(text){const match=String(text||'').match(/(?:车牌号\s*[:：]?\s*)?(渝\s*[A-Z0-9]{5,7})/i);return match?match[1].replace(/\s+/g,'').toUpperCase():''}
@@ -77,10 +77,13 @@ function renderUploadDetail(mode){
   title.textContent=uploadDetailMode==='correction'?'修正详情':'规划详情';
   body.textContent='';
   if(uploadDetailMode==='planning'){
-    const pre=document.createElement('pre');
-    pre.className='upload-detail-text';
-    pre.textContent=String($('manualOrderInput')?.value||'').trim()||'暂无规划详情';
-    body.appendChild(pre);
+    const sectionTitle=document.createElement('div');sectionTitle.className='detail-section-title';sectionTitle.textContent='当日订单信息';body.appendChild(sectionTitle);
+    const info=document.createElement('div');info.className='order-info-list';
+    const lines=String($('manualOrderInput')?.value||'').split(/\\n/).map(v=>v.trim()).filter(Boolean);const values={};
+    lines.forEach(line=>{const m=line.match(/^(日期|线路|车辆|门店|重量|门店数|总重量)\\s*[:：]\\s*(.+)$/);if(m)values[m[1]]=m[2];});
+    [['日期',values.日期||pendingMeta.date||'未识别'],['线路',values.线路||currentRoute()||'未识别'],['车辆',values.车辆||pendingMeta.vehicle||'未识别'],['门店',values.门店||`${Number(pendingMeta.uniqueStoreCount)||parsedOrders.length}家`],['重量',values.重量||pendingMeta.totalWeight||'未识别']].forEach(([label,value])=>{const row=document.createElement('div');row.className='order-info-row';const left=document.createElement('span');left.textContent=`${label}：`;const right=document.createElement('strong');right.textContent=String(value||'未识别');row.append(left,right);info.appendChild(row);});
+    body.appendChild(info);const listTitle=document.createElement('div');listTitle.className='detail-subtitle';listTitle.textContent='门店列表';body.appendChild(listTitle);
+    const pre=document.createElement('pre');pre.className='upload-detail-text';const marker=lines.findIndex(v=>v.includes('门店列表'));pre.textContent=marker>=0?(lines.slice(marker+1).join('\\n')||'暂无门店列表'):'暂无门店列表';body.appendChild(pre);
   }else{
     const items=getCorrectionDetailText();
     if(!items.length){
@@ -146,7 +149,7 @@ window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
 window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','ocr-text-open','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.(); const modal=$('correctionModal');if(modal){modal.classList.remove('active');modal.setAttribute('aria-hidden','true')}};
-let correctionDetails=[];function setCorrectionSummary(count){
+let correctionDetails=[];let correctionStats={raw:0,corrected:0,merged:0};function setCorrectionSummary(count){
   const row=$('reviewSummary');
   if(row)row.hidden=count<=0;
 }
@@ -188,11 +191,12 @@ if(parsedOrders.length){
   const resultWeight=weightT>0?`${(Math.round((weightT+Number.EPSILON)*100)/100).toFixed(2)}t`:'未识别';
   const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
   correctionDetails=[...correctionLines,...mergeLines];
+  correctionStats={raw:rawCount,corrected:correctionCount,merged:mergeCount};
   setCorrectionSummary(1);
   const structuredStatus={left:resultDate,right:`${uniqueCount}家 · ${resultWeight}`,compact:true,details:[`原始${rawCount}家`,`更正${correctionCount}家`,`合并${mergeCount}家`]};
   window.renderUnifiedStatus('success',100,structuredStatus);
   window.renderStatusDetail?.(structuredStatus.details);
-}else{window.clearStatusDetail?.();correctionDetails=[];setCorrectionSummary(0);}
+}else{window.clearStatusDetail?.();correctionDetails=[];correctionStats={raw:0,corrected:0,merged:0};setCorrectionSummary(0);}
 if(parsedOrders.length)setPrimaryActionMode('confirm');return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
 const HOME_ORDER_CACHE_PREFIX='zsp_home_order_v1';
 function homeCacheScope(){const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};const identity=String(user.id||user.username||user.account||user.route||'').trim();const route=String(user.route||currentRoute()||'').trim();return identity&&route?HOME_ORDER_CACHE_PREFIX+':'+encodeURIComponent(identity)+':'+encodeURIComponent(route):''}
