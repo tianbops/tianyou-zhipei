@@ -41,6 +41,61 @@
   }
   async function applyReview(){let pending=0;for(const item of reviewState)if(!item._choice)pending++;if(pending){window.renderUnifiedStatus?.('error',100,`还有 ${pending} 家门店未确认`);return;}const button=document.querySelector('.review-apply');if(button){button.disabled=true;button.textContent='正在应用…';}try{for(const item of reviewState){const target=parsedState.find(store=>store===item||store.code===item.code||store.name===item.name);if(!target)continue;if(item._choice==='new'){target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='new';target.matched=false;target.isNew=true;target.matchScore=0;}else{const selected=String(item._selectedCandidate||'').trim();if(!selected)throw Error('请选择正确的候选门店');const rawName=String(item.name||'').trim();const rawNames=Array.isArray(target.rawNames)?target.rawNames.filter(Boolean):[];if(rawName&&!rawNames.includes(rawName))rawNames.push(rawName);target.rawNames=rawNames.slice(-5);target.baseName=selected;target.baseCode=item._selectedCandidateCode||item.candidateCode||'';target.name=selected;target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='confirmed';target.matched=true;target.isNew=false;target.matchScore=1;}}renderReview([]);writeReviewText(parsedState);window.renderUnifiedStatus?.('success',100,'待定门店已处理');
     window.updatePendingReviewCount?.(0);}catch(error){window.renderUnifiedStatus?.('error',100,error.message||'处理失败，请重试');}finally{if(button){button.disabled=false;button.textContent='✓ 应用确认';}}}
+  function renderPendingReviewDetail(items){
+    const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody');
+    if(!view||!title||!body)return;
+    reviewState=(Array.isArray(items)?items:[]).filter(item=>item?.needsReview);
+    if(!reviewState.length)return;
+    title.textContent='待定门店确认';
+    body.textContent='';
+    const hint=document.createElement('div');hint.className='pending-review-summary';
+    hint.innerHTML=`<strong>还有 ${reviewState.length} 家门店需要确认</strong><span>请选择对应门店，或作为新增门店处理</span>`;
+    body.appendChild(hint);
+    const list=document.createElement('div');list.className='pending-review-list';
+    reviewState.forEach((item,index)=>{
+      const card=document.createElement('div');card.className='pending-review-card';
+      const top=document.createElement('div');top.className='pending-review-card-top';
+      const name=document.createElement('button');name.type='button';name.className='pending-review-name';
+      name.textContent=`${String(index+1).padStart(2,'0')} · ${String(item.name||'').trim()}`;
+      const select=document.createElement('select');select.className='pending-review-select';
+      const candidates=candidateList(item);
+      select.innerHTML='<option value="">选择门店</option>'+candidates.map((candidate,i)=>`<option value="candidate:${i}">${candidate.name}</option>`).join('')+'<option value="new">作为新增门店</option>';
+      select.value=item._choice||'';
+      const applyChoice=()=>{
+        item._choice=select.value;
+        const selected=select.value.startsWith('candidate:')?candidates[Number(select.value.slice(10))]:null;
+        item._selectedCandidate=selected?.name||'';
+        item._selectedCandidateCode=selected?.code||'';
+        card.classList.toggle('is-selected',!!select.value);
+        if(select.value==='new'){item._selectedCandidate='';item._selectedCandidateCode='';}
+      };
+      select.addEventListener('change',applyChoice);
+      name.addEventListener('click',()=>{select.focus();select.click?.();});
+      top.append(name,select);card.appendChild(top);
+      const hintLine=document.createElement('div');hintLine.className='pending-review-choice-hint';hintLine.textContent='点击门店名称也可直接选择';card.appendChild(hintLine);
+      list.appendChild(card);
+    });
+    body.appendChild(list);
+    const button=$('primaryActionBtn'),cancel=$('.sheet-footer .btn-cancel');
+    if(button){button.textContent='完成确认';button.disabled=false;button.classList.add('ready');}
+    window.__pendingReviewFooterMode=true;
+    if(cancel){cancel.textContent='返回';cancel.onclick=()=>window.closePendingReviewDetail?.();}
+    view.hidden=false;view.setAttribute('aria-hidden','false');
+    const sheet=document.querySelector('.upload-sheet');
+    sheet?.classList.add('detail-view-open','detail-mode-review');
+    window.renderUnifiedStatus?.('success',100,`还有 ${reviewState.length} 家门店需要确认`);
+  }
+  window.openPendingReviewDetail=renderPendingReviewDetail;
+  window.closePendingReviewDetail=()=>{
+    const view=$('uploadDetailView');if(!view)return;
+    view.hidden=true;view.setAttribute('aria-hidden','true');
+    const sheet=document.querySelector('.upload-sheet');
+    sheet?.classList.remove('detail-view-open','detail-mode-review');
+    const button=$('primaryActionBtn'),cancel=$('.sheet-footer .btn-cancel');
+    if(button){button.textContent='确认录入';button.classList.add('ready');button.disabled=false;}
+    if(cancel){cancel.textContent='取消';cancel.onclick=()=>window.cancelUpload?.();}
+    window.__pendingReviewFooterMode=false;
+  };
   function writeReviewText(stores){
     const input=$('manualOrderInput');if(!input)return;
     const ordered=[...stores.filter(item=>item?.needsReview===true),...stores.filter(item=>item?.isNew===true&&item?.needsReview!==true),...stores.filter(item=>item?.needsReview!==true&&item?.isNew!==true)];
@@ -78,6 +133,7 @@
       if(pending.length){
         window.renderUnifiedStatus?.('error',100,`还有 ${pending.length} 家门店待定`);
         renderReview(pending);
+        window.openPendingReviewDetail?.(pending);
         return;
       }
 
