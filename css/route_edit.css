@@ -40,3 +40,33 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .store-meta,.store-address,.store-note,.base-hint{color:var(--text-secondary)}
 .dialog-box h3,.dialog-box .title{color:var(--text-primary)}
 .dialog-box p,.dialog-box .hint{color:var(--text-secondary)}
+
+
+/* UI 2.0 · 线路基准维护 */
+:root{
+  --bg:#05070A;--card:#151D26;--card2:#0D1319;--blue:#D0D7DC;--text:#F2F5F7;--muted:#9AA6B2;
+  --line:rgba(255,255,255,.075);--danger:#FF6B5E;
+}
+.app-container{max-width:430px;padding-left:14px;padding-right:14px}.top-bar{height:50px}
+.app-title{font-size:18px;color:#F2F5F7}.back-btn{width:42px;height:42px;flex-basis:42px;border-radius:13px;background:#151D26;border:1px solid var(--line)}
+.back-btn:active{background:#AEB8C0;color:#0B1015}
+.card{background:#151D26;border-color:var(--line);border-radius:16px;box-shadow:none;padding:15px 14px}.card-title{font-size:15px;color:#F2F5F7}.info-row{min-height:42px;border-bottom-color:rgba(255,255,255,.055)}
+.label{color:#9AA6B2;font-size:13px}.value{font-size:13px;color:#F2F5F7}
+.card-header{padding-bottom:12px;border-bottom-color:var(--line)}.base-actions{gap:7px}
+.add-btn{height:40px!important;min-height:40px!important;padding:0 12px!important;border-radius:11px!important;background:#202A34!important;color:#D5DCE2!important;border:1px solid var(--line)!important;font-size:13px}
+.add-btn:active{background:#313C47!important;transform:scale(.985)}
+.store-row{min-height:58px;padding:9px 0;border-bottom-color:rgba(255,255,255,.055)}.store-name-clickable{color:#F2F5F7;font-size:14px}
+.store-actions{gap:6px}.store-actions button{width:68px!important;min-width:68px!important;height:36px!important;min-height:36px!important;border-radius:10px!important;background:#202A34!important;border:1px solid var(--line)!important;color:#D5DCE2!important;font-size:13px!important}
+.store-actions button:active{background:#313C47!important;transform:scale(.985)}
+.btn-group{grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:16px!important}
+.btn-group>button{height:46px!important;min-height:46px!important;border-radius:12px!important;font-size:14px!important;font-weight:650!important}
+.btn-group .save-btn{background:#D0D7DC!important;color:#0B1015!important}.btn-group .cancel-btn{background:#202A34!important;color:#E3E8ED!important}
+.btn-group>button:active{transform:scale(.99)}
+.dialog{background:rgba(0,0,0,.70);backdrop-filter:blur(5px)}.dialog-box{background:#151D26;border-color:var(--line);border-radius:18px;padding:20px}
+.dialog-box input,.edit-textarea{background:#0D1319;border-color:var(--line);border-radius:12px}.dialog-box input{height:48px}.edit-textarea{min-height:210px}
+.dialog-box input:focus,.edit-textarea:focus{border-color:rgba(208,215,220,.48)!important;box-shadow:0 0 0 3px rgba(208,215,220,.10)!important}
+.dialog-btn{gap:8px!important;margin-top:16px!important}.dialog-btn button{height:46px!important;border-radius:12px!important;font-size:14px!important}
+.dialog-btn button:first-child{background:#202A34!important;color:#E3E8ED!important}.dialog-btn button:last-child{background:#D0D7DC!important;color:#0B1015!important}
+#editDeleteArea{border-top:1px solid var(--line);margin-top:20px!important;padding-top:16px!important}
+#deleteStoreBtn{height:44px!important;min-height:44px!important;border-radius:12px!important;border:1px solid rgba(255,107,94,.38)!important;background:transparent!important;color:#FF8278!important;font-size:14px!important}
+.status{border-radius:12px!important;font-size:12px;line-height:1.5}
