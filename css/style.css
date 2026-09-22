@@ -1764,3 +1764,26 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 .parse-status.success .status-detail .detail-row{min-height:18px!important;height:18px!important;justify-content:flex-start!important}
 .parse-status.success .status-detail .detail-line{font-size:14px!important;line-height:18px!important;flex:0 0 auto!important;color:#AAB6C2!important}
 @media(max-width:430px){.parse-status.success{min-height:0!important;height:auto!important;max-height:none!important}.parse-status.success .status-detail .detail-line{font-size:14px!important}}
+
+/* 2026-09-22 待定门店确认：沿用全局One详情页结构与控件规范 */
+.upload-sheet.detail-view-open.detail-mode-review .upload-detail-body{padding:16px!important}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-summary{display:flex;flex-direction:column;gap:4px;margin-bottom:14px;padding:13px 14px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-summary strong{font-size:15px;line-height:22px;color:#F2F5F7;font-weight:650}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-summary span{font-size:12px;line-height:18px;color:#9AA6B2}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-list{display:flex;flex-direction:column;gap:10px}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-card{padding:12px;border-radius:14px;background:#151D26;border:1px solid rgba(255,255,255,.065)}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-card.is-selected{border-color:rgba(255,255,255,.14)}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-card-top{display:flex;align-items:center;gap:10px;min-width:0}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-name{flex:1 1 auto;min-width:0;padding:0;border:0;background:transparent;color:#F2F5F7;text-align:left;font-size:14px;line-height:20px;font-weight:600;overflow-wrap:anywhere;cursor:pointer}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-name:active{opacity:.72}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-select{flex:0 0 138px;width:138px;height:40px;padding:0 9px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:#10161D;color:#F2F5F7;font-size:12px;outline:none}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-select:focus{border-color:rgba(255,255,255,.22)}
+.upload-sheet.detail-view-open.detail-mode-review .pending-review-choice-hint{margin-top:6px;color:#75818D;font-size:11px;line-height:16px}
+.upload-sheet.detail-view-open.detail-mode-review .sheet-footer{padding-top:10px}
+.upload-sheet.detail-view-open.detail-mode-review .sheet-footer .btn-primary-action{flex:3;height:46px;border-radius:14px;background:var(--blue);color:#fff}
+.upload-sheet.detail-view-open.detail-mode-review .sheet-footer .btn-cancel{flex:1;height:46px;border-radius:14px;background:rgba(255,255,255,.04);color:#9AA6B2}
+@media(max-width:380px){
+  .upload-sheet.detail-view-open.detail-mode-review .pending-review-card-top{gap:7px}
+  .upload-sheet.detail-view-open.detail-mode-review .pending-review-select{flex-basis:124px;width:124px;font-size:11px}
+  .upload-sheet.detail-view-open.detail-mode-review .pending-review-name{font-size:13px}
+}
