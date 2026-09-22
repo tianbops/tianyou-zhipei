@@ -1,4 +1,5 @@
-:root{
+ :root{
+  --line:rgba(255,255,255,.075);
   --blue:#C8D0D6;
   --primary-action:#C8D0D6;
   --primary-action-text:#0B1015;
