@@ -250,24 +250,6 @@ body{color:var(--text-body)}
 }
 
 
-/* 2026-09-22 规划完成状态框精简：仅保留日期、核心结果、解析统计 */
-.parse-status.success.compact-result-layout{min-height:0;max-height:none}
-.status-row #statusText.structured-status.compact-result{display:flex;align-items:center;justify-content:flex-start;gap:0;width:100%;white-space:nowrap}
-.status-row #statusText.structured-status.compact-result .status-content-left{flex:1 1 auto;min-width:0;text-align:left;white-space:nowrap;font-size:14px;color:var(--text-secondary,#9AA6B2);font-weight:500}
-.status-row #statusText.structured-status.compact-result .status-content-right{display:none}
-.parse-status.success:has(.compact-result){min-height:0;max-height:none;padding-top:10px;padding-bottom:10px}
-.parse-status.success:has(.compact-result) .status-detail.active{margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.05);gap:2px}
-.parse-status.success:has(.compact-result) .status-detail .detail-row{justify-content:flex-start;min-height:20px}
-.parse-status.success:has(.compact-result) .status-detail .detail-line{font-size:14px;line-height:20px;white-space:nowrap;overflow:visible;text-overflow:clip}
-.parse-status.success:has(.compact-result) .status-detail .detail-row:first-child .detail-line{font-size:17px;line-height:22px;color:var(--text-primary,#F2F5F7);font-weight:650}
-.parse-status.success:has(.compact-result) .status-detail .detail-row:nth-child(2) .detail-line{font-size:12px;line-height:18px;color:var(--text-secondary,#9AA6B2)}
-@media(max-width:430px){
-  .parse-status.success:has(.compact-result){padding-top:9px;padding-bottom:9px}
-  .parse-status.success:has(.compact-result) .status-detail .detail-row:first-child .detail-line{font-size:16px}
-  .parse-status.success:has(.compact-result) .status-detail .detail-row:nth-child(2) .detail-line{font-size:12px}
-}
-
-
 /* 规划完成结果栏 V2：日期/核心结果左右一排，统计左中右一排 */
 .status-row #statusText.structured-status.compact-result{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;white-space:nowrap}
 .status-row #statusText.structured-status.compact-result .status-content-left{flex:1 1 50%;min-width:0;text-align:left;font-size:14px;line-height:22px;color:#B8C2CC;font-weight:600;white-space:nowrap}
