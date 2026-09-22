@@ -177,6 +177,23 @@ export async function listUsersByRoute(env, route) {
   return users.filter(user => normalizeRoute(user?.boundRouteId || user?.route) === normalized);
 }
 
+
+export async function recordAdminLog(env, actor, action, targetType, targetId, detail = {}) {
+  const key = 'system:admin:logs';
+  const current = await redisGet(env, key);
+  const list = Array.isArray(current) ? current : [];
+  list.unshift({
+    id: crypto.randomUUID(),
+    actorUserId: String(actor?.id || ''),
+    action: String(action || ''),
+    targetType: String(targetType || ''),
+    targetId: String(targetId || ''),
+    detail,
+    createdAt: new Date().toISOString()
+  });
+  await redisSet(env, key, list.slice(0, 500));
+}
+
 export async function scanUsers(env) {
   const users = [];
   let cursor = '0';
