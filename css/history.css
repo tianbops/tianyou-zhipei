@@ -160,3 +160,20 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 .history-page .history-view:last-child{margin-bottom:8px!important}
 .history-page .empty-tip{padding:28px 12px!important;color:#75818D!important}
 .history-page .date-sheet,.history-page .delete-sheet{border-radius:20px!important}
+
+
+/* UI 2.0 · 第十轮：历史查询残留品牌蓝收口 2026-09-22 */
+.history-page .date-picker-btn{
+  background:#D0D7DC!important;
+  color:#0B1015!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  box-shadow:none!important;
+}
+.history-page .date-picker-btn:active{
+  background:#AEB8C0!important;
+  color:#0B1015!important;
+}
+.history-page .history-date-item:active{
+  border-color:rgba(208,215,220,.20)!important;
+  background:#10161D!important;
+}
