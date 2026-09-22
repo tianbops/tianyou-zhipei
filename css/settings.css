@@ -65,3 +65,17 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .setting-row:active{transform:none!important}
 .logout-btn{background:transparent!important}
 .danger-btn:active{background:rgba(255,107,94,.10)!important;color:#FF9A92!important}
+
+
+/* UI 2.0 · 第八轮：账户设置页面统一精修 2026-09-22 */
+.settings-page{padding-bottom:calc(28px + env(safe-area-inset-bottom))!important}
+.settings-page .settings-header{margin-bottom:8px!important}
+.settings-page .profile-hero{margin-bottom:16px!important}
+.settings-page .group{margin-bottom:14px!important}
+.settings-page .group-title{font-size:11px!important}
+.settings-page .setting-row{min-height:56px!important;padding:9px 12px!important}
+.settings-page .row-icon{width:33px!important;height:33px!important;flex-basis:33px!important}
+.settings-page .row-title{font-size:14px!important}
+.settings-page .row-sub{font-size:11px!important}
+.settings-page .row-arrow{font-size:20px!important}
+.settings-page .logout-btn{margin-top:2px!important}
