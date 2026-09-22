@@ -118,3 +118,12 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .order-detail-page .store-name{font-size:14px!important}
 .order-detail-page .store-address{font-size:11px!important;color:#9AA6B2!important}
 .order-detail-page .menu-panel{top:58px!important;right:14px!important;width:210px!important}
+
+
+/* UI 2.0 · 第十二轮：修复订单页按钮外层方形焦点框 2026-09-22 */
+.order-detail-page button:focus-visible,
+.order-detail-page a:focus-visible,
+.order-detail-page [role="button"]:focus-visible{
+  outline:none!important;
+  box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
+}
