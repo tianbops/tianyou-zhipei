@@ -10,13 +10,13 @@ export async function onRequest({ request, env }) {
     if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
     stage = 'auth';
     const session = await authRequired(request, env, { allowAnyRoute: true });
-    if (!session?.route || !session?.id) return json({ success: false, error: '登录已失效或权限信息不完整', stage }, 401);
+    if (!session?.id) return json({ success: false, error: '登录已失效或权限信息不完整', stage }, 401);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: 'Redis not configured', stage }, 500);
 
-    const route = normalizeRoute(body.route || session.route);
-    const userId = normalizeUserId(session.id);
     stage = 'request-body';
     const body = await request.json().catch(() => ({}));
+    const route = normalizeRoute(body.route || session.route);
+    const userId = normalizeUserId(session.id);
     if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该路线', stage }, 403);
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
 
