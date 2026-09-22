@@ -106,3 +106,15 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .route-edit-page .save-btn{font-weight:650!important}
 .route-edit-page .cancel-btn{font-weight:600!important}
 .route-edit-page #deleteStoreBtn{background:transparent!important}
+
+
+/* UI 2.0 · 第八轮：线路维护页面统一精修 2026-09-22 */
+.route-edit-page{padding-bottom:calc(90px + env(safe-area-inset-bottom))!important}
+.route-edit-page .top-bar{margin-bottom:10px!important}
+.route-edit-page .card{border-radius:16px!important;background:#151D26!important}
+.route-edit-page .store-row{min-height:58px!important;padding:9px 12px!important}
+.route-edit-page .store-name{font-size:14px!important;font-weight:600!important}
+.route-edit-page .store-note{font-size:11px!important;color:#75818D!important}
+.route-edit-page .store-actions button{min-width:38px!important;height:36px!important;border-radius:10px!important}
+.route-edit-page .btn-group{padding-top:9px!important}
+.route-edit-page .save-btn,.route-edit-page .cancel-btn{height:44px!important;min-height:44px!important;border-radius:11px!important}
