@@ -102,3 +102,19 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .menu-panel>div:focus-visible,.dialog-btn button:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:-2px!important}
 .menu-panel .logout-item{color:#FF8278!important}
 .dialog-btn button{font-weight:600!important}
+
+
+/* UI 2.0 · 第八轮：订单详情页面统一精修 2026-09-22 */
+.order-detail-page .summary-card{padding:15px 16px!important;border-radius:17px!important}
+.order-detail-page .date-title{font-size:16px!important;font-weight:650!important}
+.order-detail-page .summary-grid{margin-top:12px!important;gap:8px!important}
+.order-detail-page .summary-item{padding:10px 8px!important;border-radius:11px!important;background:#10161D!important}
+.order-detail-page .summary-item .label{font-size:11px!important;color:#75818D!important}
+.order-detail-page .summary-item .value{font-size:15px!important;font-weight:650!important}
+.order-detail-page .route-card{margin-top:10px!important;padding:14px!important;border-radius:17px!important}
+.order-detail-page .route-title{font-size:15px!important;font-weight:650!important;margin-bottom:7px!important}
+.order-detail-page .store-item{min-height:56px!important;padding:8px 4px!important}
+.order-detail-page .store-index{font-size:12px!important;color:#75818D!important}
+.order-detail-page .store-name{font-size:14px!important}
+.order-detail-page .store-address{font-size:11px!important;color:#9AA6B2!important}
+.order-detail-page .menu-panel{top:58px!important;right:14px!important;width:210px!important}
