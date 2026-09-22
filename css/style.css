@@ -780,7 +780,7 @@ body{color:var(--text-body)}
 .upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary{height:44px!important;min-height:44px!important;border-radius:12px!important;font-size:14px!important;line-height:20px!important}
 @media(max-width:360px){
   .upload-source-menu{padding:14px!important}
-  .source-menu-options{gap:7px!important}
+  
   .source-option{height:72px!important;min-height:72px!important}
   .source-menu-cancel{height:44px!important}
 }
@@ -1142,7 +1142,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .back-btn{width:42px;height:42px;flex-basis:42px;border-radius:13px;background:var(--one-surface-2);border:1px solid var(--one-line)}
 .back-btn:hover{background:var(--one-surface-3)}.back-btn:active{background:var(--one-pressed);color:var(--one-primary-text);transform:scale(.97)}
 .parse-status{background:#0E141B;border:1px solid var(--one-line);border-radius:13px}
-.sheet-footer{gap:8px}.sheet-footer button{height:46px;min-height:46px;border-radius:12px;font-size:14px;font-weight:600}
+.sheet-footer button{height:46px;min-height:46px;border-radius:12px;font-size:14px;font-weight:600}
 .btn-primary-action{background:var(--one-primary)!important;color:var(--one-primary-text)!important;flex:3}
 .btn-primary-action:active{background:var(--one-pressed)!important;color:var(--one-primary-text)!important}
 .btn-cancel{background:var(--one-surface-3)!important;color:var(--one-body)!important;flex:1}
