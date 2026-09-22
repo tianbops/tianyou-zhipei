@@ -127,3 +127,12 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
   outline:none!important;
   box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
 }
+
+/* UI 2.0 · 第二十轮：订单页弹出层统一居中 2026-09-22 */
+.dialog{
+  align-items:center!important;
+  justify-content:center!important;
+}
+.dialog-box{
+  margin:0 auto!important;
+}
