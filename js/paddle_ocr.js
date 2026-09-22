@@ -370,7 +370,7 @@
     if (input) input.click();
   };
 
-  function bindUploadInput(id, type) {
+  function bindUploadInput(id) {
     const input = $(id);
     if (!input) return;
     input.addEventListener('change', () => {
@@ -388,8 +388,8 @@
     });
   }
 
-  bindUploadInput('ocrCameraInput', 'camera');
-  bindUploadInput('ocrAlbumInput', 'album');
-  bindUploadInput('ocrFileInput', 'file');
+  bindUploadInput('ocrCameraInput');
+  bindUploadInput('ocrAlbumInput');
+  bindUploadInput('ocrFileInput');
 
 })();
