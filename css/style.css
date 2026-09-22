@@ -971,9 +971,6 @@ body{color:var(--text-body)}
 .upload-sheet.processing .sheet-footer{
   display:flex!important;
 }
-.upload-sheet.processing .sheet-footer .btn-primary-action{
-  display:none!important;
-}
 .upload-sheet.processing .sheet-footer .btn-cancel{
   display:flex!important;
   flex:1 1 100%!important;
