@@ -39,8 +39,7 @@
     box.appendChild(list);
     const button=document.createElement('button');button.type='button';button.className='review-apply';button.textContent='✓ 应用确认';button.addEventListener('click',applyReview);box.appendChild(button);
   }
-  async function applyReview(){let pending=0;for(const item of reviewState)if(!item._choice)pending++;if(pending){window.renderUnifiedStatus?.('error',100,`还有 ${pending} 家门店未确认`);return;}const button=document.querySelector('.review-apply');if(button){button.disabled=true;button.textContent='正在应用…';}try{for(const item of reviewState){const target=parsedState.find(store=>store===item||store.code===item.code||store.name===item.name);if(!target)continue;if(item._choice==='new'){target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='new';target.matched=false;target.isNew=true;target.matchScore=0;}else{const selected=String(item._selectedCandidate||'').trim();if(!selected)throw Error('请选择正确的候选门店');const rawName=String(item.name||'').trim();const rawNames=Array.isArray(target.rawNames)?target.rawNames.filter(Boolean):[];if(rawName&&!rawNames.includes(rawName))rawNames.push(rawName);target.rawNames=rawNames.slice(-5);target.baseName=selected;target.baseCode=item._selectedCandidateCode||item.candidateCode||'';target.name=selected;target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='confirmed';target.matched=true;target.isNew=false;target.matchScore=1;}}renderReview([]);writeReviewText(parsedState);window.renderUnifiedStatus?.('success',100,'待定门店已处理');
-    window.updatePendingReviewCount?.(0);}catch(error){window.renderUnifiedStatus?.('error',100,error.message||'处理失败，请重试');}finally{if(button){button.disabled=false;button.textContent='✓ 应用确认';}}}
+  async function applyReview(){let pending=0;for(const item of reviewState)if(!item._choice)pending++;if(pending){window.renderUnifiedStatus?.('error',100,`还有 ${pending} 家门店未确认`);return;}const button=document.querySelector('.review-apply');if(button){button.disabled=true;button.textContent='正在应用…';}try{for(const item of reviewState){const target=parsedState.find(store=>store===item||store.code===item.code||store.name===item.name);if(!target)continue;if(item._choice==='new'){target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='new';target.matched=false;target.isNew=true;target.matchScore=0;}else{const selected=String(item._selectedCandidate||'').trim();if(!selected)throw Error('请选择正确的候选门店');const rawName=String(item.name||'').trim();const rawNames=Array.isArray(target.rawNames)?target.rawNames.filter(Boolean):[];if(rawName&&!rawNames.includes(rawName))rawNames.push(rawName);target.rawNames=rawNames.slice(-5);target.baseName=selected;target.baseCode=item._selectedCandidateCode||item.candidateCode||'';target.name=selected;target.needsReview=false;target.candidate='';target.candidates=[];target.matchType='confirmed';target.matched=true;target.isNew=false;target.matchScore=1;}}renderReview([]);writeReviewText(parsedState);window.updatePendingReviewCount?.(0);window.closePendingReviewDetail?.();window.renderUnifiedStatus?.('success',100,'待定门店已处理');}catch(error){window.renderUnifiedStatus?.('error',100,error.message||'处理失败，请重试');}finally{if(button){button.disabled=false;button.textContent='✓ 应用确认';}}}
   function renderPendingReviewDetail(items){
     const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody');
     if(!view||!title||!body)return;
@@ -77,7 +76,7 @@
     });
     body.appendChild(list);
     const button=$('primaryActionBtn'),cancel=$('.sheet-footer .btn-cancel');
-    if(button){button.textContent='完成确认';button.disabled=false;button.classList.add('ready');}
+    if(button){button.textContent='完成确认';button.disabled=false;button.classList.add('ready');button.onclick=applyReview;}
     window.__pendingReviewFooterMode=true;
     if(cancel){cancel.textContent='返回';cancel.onclick=()=>window.closePendingReviewDetail?.();}
     view.hidden=false;view.setAttribute('aria-hidden','false');
@@ -92,7 +91,7 @@
     const sheet=document.querySelector('.upload-sheet');
     sheet?.classList.remove('detail-view-open','detail-mode-review');
     const button=$('primaryActionBtn'),cancel=$('.sheet-footer .btn-cancel');
-    if(button){button.textContent='确认录入';button.classList.add('ready');button.disabled=false;}
+    if(button){button.textContent='确认录入';button.classList.add('ready');button.disabled=false;button.onclick=()=>window.handlePrimaryAction?.();}
     if(cancel){cancel.textContent='取消';cancel.onclick=()=>window.cancelUpload?.();}
     window.__pendingReviewFooterMode=false;
   };
