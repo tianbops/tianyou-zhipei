@@ -105,7 +105,7 @@ export async function onRequest({ request, env }) {
 
       // 今日订单和历史记录必须一次提交，避免出现“今日有数据、历史没记录”的半成功状态。
       stage = 'write-order-history';
-      const writeResult = await redisPipeline(env, [
+      const writeResult = await redisTransaction(env, [
         ['SET', todayKey, JSON.stringify(todayData)],
         ['SET', historyKey, JSON.stringify(historyPayload)],
         ['SET', scopedKey(userId, route, 'latest'), JSON.stringify({ date, orderBatchId, updatedAt: saved.updatedAt })]
@@ -380,6 +380,23 @@ function createLockToken() { return `${Date.now()}-${Math.random().toString(36).
 async function acquireLock(env, keyName, token, seconds) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST' }); if (!response.ok) return false; const data = await response.json().catch(() => ({})); return data.result === 'OK'; }
 async function releaseLock(env, keyName, token) { const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"; await redisFetch(env, '/eval', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, keyName, token]) }); }
 async function redisFetch(env, path, options = {}) { const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, ''); if (!base) throw new Error('Redis URL 未配置'); const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), REDIS_TIMEOUT_MS); try { return await fetch(`${base}${path}`, { ...options, headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, ...(options.headers || {}) }, cache: 'no-store', signal: controller.signal }); } catch (error) { if (error?.name === 'AbortError') throw new Error('Redis 请求超时'); throw new Error(`Redis 网络请求失败：${error?.message || 'unknown error'}`); } finally { clearTimeout(timer); } }
+async function redisTransaction(env, commands) {
+  const response = await redisFetch(env, '/multi-exec', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(commands)
+  });
+  if (!response.ok) throw new Error(`Redis事务失败（HTTP ${response.status}）`);
+  const data = await response.json().catch(() => null);
+  if (!Array.isArray(data)) {
+    if (data?.error) throw new Error(String(data.error));
+    throw new Error('Redis事务返回格式异常');
+  }
+  const failed = data.find(item => item && item.error);
+  if (failed) throw new Error(String(failed.error));
+  return data;
+}
+
 async function redisPipeline(env, commands) {
   const response = await redisFetch(env, '/pipeline', {
     method: 'POST',
