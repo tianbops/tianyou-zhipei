@@ -752,3 +752,39 @@ body{color:var(--text-body)}
     padding-top:10px!important;
   }
 }
+
+
+/* 2026-09-22 产品UX：未展开时“规划详情/修正详情”改为左右一排；展开后的详情布局保持不变 */
+.upload-sheet:not(.detail-view-open) .input-area,
+.upload-sheet:not(.detail-view-open) .review-summary{
+  display:inline-flex!important;
+  vertical-align:top!important;
+  width:calc(50% - 6px)!important;
+  min-height:40px!important;
+  height:40px!important;
+  margin-top:12px!important;
+  margin-bottom:0!important;
+  padding:0 4px!important;
+  align-items:center!important;
+  justify-content:center!important;
+  overflow:hidden!important;
+}
+.upload-sheet:not(.detail-view-open) .input-area{
+  margin-right:8px!important;
+}
+.upload-sheet:not(.detail-view-open) .input-area .detail-toggle,
+.upload-sheet:not(.detail-view-open) .review-summary{
+  width:100%!important;
+  min-height:40px!important;
+  height:40px!important;
+  margin:0!important;
+  padding:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  white-space:nowrap!important;
+}
+.upload-sheet:not(.detail-view-open) .input-area #manualOrderInput{
+  display:none!important;
+}
+/* 展开详情后完全沿用现有 detail-view-open 规则，不受本次左右布局影响 */
