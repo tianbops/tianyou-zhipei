@@ -1498,3 +1498,24 @@ input:focus,textarea:focus,select:focus{
   .parse-status{margin-left:12px!important;margin-right:12px!important}
   .sheet-footer{padding-left:12px!important;padding-right:12px!important}
 }
+
+
+/* UI 2.0 · 第六轮：全局触控与层级收口 2026-09-22 */
+html{scroll-behavior:smooth}
+button,a,[role="button"]{touch-action:manipulation}
+button:disabled{filter:none!important}
+.function-btn:focus-visible,.menu-btn:focus-visible,.source-option:focus-within,.btn-primary-action:focus-visible,.btn-cancel:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:2px!important}
+.function-btn:hover{border-color:rgba(255,255,255,.09)!important;background:#1B2530!important}
+.function-btn:active{background:#202A34!important;transform:scale(.985)}
+.task-card{box-shadow:0 10px 28px rgba(0,0,0,.16)!important}
+.function-btn{box-shadow:none!important}
+.source-option:active{background:#202A34!important;transform:scale(.98)}
+.source-menu-cancel:active{background:#313C47!important;transform:scale(.99)}
+.sheet-footer .btn-primary-action,.sheet-footer .btn-cancel{border-radius:12px!important}
+.sheet-footer .btn-primary-action{font-weight:650!important}
+.parse-status.success{background:#10161D!important;border:1px solid rgba(255,255,255,.055)!important}
+.parse-status.success .status-row #statusText.structured-status{font-weight:600!important;color:#F2F5F7!important}
+.detail-toggle,.review-summary{border-radius:12px!important;background:#151D26!important;border:1px solid rgba(255,255,255,.055)!important}
+.detail-toggle:active,.review-summary:active{background:#202A34!important}
+.upload-sheet{border-color:rgba(255,255,255,.085)!important}
+@media(max-width:380px){.app-container,.page-container{padding-left:12px!important;padding-right:12px!important}.task-card{border-radius:16px!important}}
