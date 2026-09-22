@@ -68,42 +68,99 @@
     box.innerHTML='<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="13" rx="2"/><path d="m7 10 3 3 2-2 5 5"/></svg></span>暂无配送记录</div>';
     return;
   }
+
   box.innerHTML='';
   const currentMonth=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit'}).format(new Date());
+  const months=new Map();
+
   entries.sort((a,b)=>b.date.localeCompare(a.date)).forEach(entry=>{
-    const card=document.createElement('div');
-    card.className='history-date-item';
-    const head=document.createElement('button');
-    head.type='button';
-    head.className='history-head';
-    const expanded=entry.date.slice(0,7)===currentMonth;
-    head.setAttribute('aria-expanded',expanded?'true':'false');
-    head.innerHTML='<span class="history-date">'+escapeHtml(entry.date)+'</span><span class="history-count">'+dedupeDateRecords(entry.records).length+'笔</span>';
-    card.appendChild(head);
-    const list=document.createElement('div');
-    list.className='history-records';
-    list.hidden=!expanded;
-    card.appendChild(list);
-    if(expanded) renderDateRecords(entry.records,list,head.querySelector('.history-count'),entry.date);
-    head.addEventListener('click',()=>{
-      const isExpanded=head.getAttribute('aria-expanded')==='true';
-      if(isExpanded){
-        head.setAttribute('aria-expanded','false');
+    const month=String(entry.date||'').slice(0,7);
+    if(!/^\\d{4}-\\d{2}$/.test(month))return;
+    if(!months.has(month))months.set(month,[]);
+    months.get(month).push(entry);
+  });
+
+  months.forEach((monthEntries,month)=>{
+    const monthCard=document.createElement('div');
+    monthCard.className='history-month-item';
+
+    const monthHead=document.createElement('button');
+    monthHead.type='button';
+    monthHead.className='history-head history-month-head';
+    const monthExpanded=month===currentMonth;
+    monthHead.setAttribute('aria-expanded',monthExpanded?'true':'false');
+    const monthParts=month.split('-');
+    monthHead.innerHTML='<span class="history-date">'+escapeHtml(monthParts[0]+'年'+monthParts[1]+'月')+'</span>';
+    monthCard.appendChild(monthHead);
+
+    const days=document.createElement('div');
+    days.className='history-month-days';
+    days.hidden=!monthExpanded;
+    monthCard.appendChild(days);
+
+    const renderDays=()=>{
+      days.innerHTML='';
+      monthEntries.sort((a,b)=>b.date.localeCompare(a.date)).forEach(entry=>{
+        const dayCard=document.createElement('div');
+        dayCard.className='history-date-item history-day-item';
+
+        const dayHead=document.createElement('button');
+        dayHead.type='button';
+        dayHead.className='history-head history-day-head';
+        dayHead.setAttribute('aria-expanded','false');
+        const day=String(entry.date).slice(8,10);
+        dayHead.innerHTML='<span class="history-date">'+escapeHtml(monthParts[0]+'年'+monthParts[1]+'月'+day+'日')+'</span>';
+        dayCard.appendChild(dayHead);
+
+        const list=document.createElement('div');
+        list.className='history-records';
         list.hidden=true;
+        dayCard.appendChild(list);
+
+        dayHead.addEventListener('click',()=>{
+          const expanded=dayHead.getAttribute('aria-expanded')==='true';
+          if(expanded){
+            dayHead.setAttribute('aria-expanded','false');
+            list.hidden=true;
+            return;
+          }
+          days.querySelectorAll('.history-day-head[aria-expanded="true"]').forEach(openHead=>{
+            openHead.setAttribute('aria-expanded','false');
+            const openList=openHead.parentElement?.querySelector('.history-records');
+            if(openList)openList.hidden=true;
+          });
+          dayHead.setAttribute('aria-expanded','true');
+          list.hidden=false;
+          renderDateRecords(entry.records,list,null,entry.date);
+        });
+
+        days.appendChild(dayCard);
+      });
+    };
+
+    if(monthExpanded)renderDays();
+
+    monthHead.addEventListener('click',()=>{
+      const expanded=monthHead.getAttribute('aria-expanded')==='true';
+      if(expanded){
+        monthHead.setAttribute('aria-expanded','false');
+        days.hidden=true;
         return;
       }
-      box.querySelectorAll('.history-head[aria-expanded="true"]').forEach(openHead=>{
+      box.querySelectorAll('.history-month-head[aria-expanded="true"]').forEach(openHead=>{
         openHead.setAttribute('aria-expanded','false');
-        const openList=openHead.parentElement?.querySelector('.history-records');
-        if(openList)openList.hidden=true;
+        const openDays=openHead.parentElement?.querySelector('.history-month-days');
+        if(openDays)openDays.hidden=true;
       });
-      head.setAttribute('aria-expanded','true');
-      list.hidden=false;
-      renderDateRecords(entry.records,list,head.querySelector('.history-count'),entry.date);
+      monthHead.setAttribute('aria-expanded','true');
+      days.hidden=false;
+      if(!days.childElementCount)renderDays();
     });
-    box.appendChild(card);
+
+    box.appendChild(monthCard);
   });
 }
+
 function historySignature(item){const batch=String(item?.orderBatchId||'').trim();if(batch)return `batch:${batch}`;const vehicle=String(item?.vehicle||'').trim().toLowerCase(),weight=String(item?.totalWeight??item?.weight??'').trim(),orders=Array.isArray(item?.orders)?item.orders.map(order=>({name:String(order?.name||order?.storeName||order?.shopName||order?.['门店名称']||'').trim().replace(/[\\s\\u3000（）()【】\\[\\]]/g,'').toLowerCase(),weight:Number(order?.weight)||0})).filter(order=>order.name).sort((a,b)=>String(a.name+'|'+a.weight).localeCompare(String(b.name+'|'+b.weight))):[];return JSON.stringify({vehicle,weight,orders})}
   function dedupeDateRecords(records){const map=new Map();records.forEach(item=>{const signature=historySignature(item);if(signature&&!map.has(signature))map.set(signature,item)});return [...map.values()]}
   async function deleteRecord(date,item,button){if(!item?.orderBatchId)return;button.disabled=true;button.classList.add('deleting');try{const r=await fetch('/api/history?date='+encodeURIComponent(date)+'&orderBatchId='+encodeURIComponent(item.orderBatchId),{method:'DELETE',cache:'no-store',headers:authHeaders(),credentials:'same-origin'});const payload=await r.json().catch(()=>({}));if(!r.ok||payload?.success!==true)throw new Error(payload?.error||'删除失败');const records=await requestHistory(date);const list=button.parentElement,headCount=list?.previousElementSibling?.querySelector('.history-count');renderDateRecords(records,list,headCount,date)}catch(e){console.error(e);alert(e.message||'删除失败');button.disabled=false;button.classList.remove('deleting')}}
