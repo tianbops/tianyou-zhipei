@@ -1,3 +1,16 @@
+:root{
+  --blue:#C8D0D6;
+  --primary-action:#C8D0D6;
+  --primary-action-text:#0B1015;
+  --control-dark:#202A34;
+  --control-hover:#28343F;
+  --control-pressed:#313E49;
+  --focus-neutral:rgba(220,227,232,.18);
+  --text-primary:#F2F5F7;
+  --text-body:#D5DCE2;
+  --text-secondary:#9AA6B2;
+  --text-tertiary:#75818D;
+}
 .history-page{padding-top:18px;padding-bottom:32px!important;box-sizing:border-box;min-height:0;height:calc(100dvh - 32px)}
 .history-page .top-bar{margin-bottom:13px}
 .history-filter-card{flex:0 0 auto;margin-bottom:12px;padding:12px}
@@ -33,7 +46,7 @@
 
 
 /* 2026-09-21 全局按钮色彩统一：弱化/取消业务蓝，仅调整颜色，不改变布局与尺寸 */
-:root{--blue:#C8D0D6;--primary-action:#C8D0D6;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
+
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control-dark)!important;color:#E3E8ED!important}
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
@@ -79,7 +92,7 @@ button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn b
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44px!important}
 
 /* 2026-09-21 历史页文字层级统一：仅调整文字表现，不改变布局/功能 */
-:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D}
+
 .history-page{color:var(--text-body)}
 .history-title,.history-header,.date-title{color:var(--text-primary)}
 .history-meta,.history-subtitle,.empty-tip,.history-info,.date-sheet-head{color:var(--text-secondary)}
