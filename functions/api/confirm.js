@@ -1,7 +1,7 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
 
-const REDIS_TIMEOUT_MS = 5000;
+const REDIS_TIMEOUT_MS = 4000;
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -63,15 +63,13 @@ export async function onRequest({ request, env }) {
     const lockKey = scopedKey(userId, route, `lock:${date}`);
     const token = createLockToken();
     stage = 'acquire-lock';
-    if (!(await acquireLock(env, lockKey, token, 15))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试', stage }, 409);
+    if (!(await acquireLock(env, lockKey, token, 60))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试', stage }, 409);
     try {
       // 重复运单必须在日期锁内判断，避免两个相同确认请求并发穿透。
       // 命中后直接复用第一笔已有批次，不覆盖今日数据、不新增历史记录。
       stage = 'duplicate-check';
       const duplicate = await findDuplicateOrder(env, userId, route, date, todayData);
       if (duplicate) {
-        // 即使今日数据已经存在，也要确保历史索引存在。
-        // 这样可修复“今日数据已写入、历史写入中断”后的重试，不会因为重复判断而永久跳过历史记录。
         stage = 'duplicate-history';
         await saveHistory(env, userId, route, date, duplicate);
         await redisSet(env, scopedKey(userId, route, 'latest'), {
@@ -82,23 +80,39 @@ export async function onRequest({ request, env }) {
         return json({ success: true, duplicate: true, data: duplicate });
       }
 
+      // Redis SET 成功响应即表示命令已执行，不再额外 GET 三次验证，避免确认录入长时间等待。
       stage = 'write-today';
       await redisSet(env, todayKey, todayData);
-      stage = 'verify-today';
-      const saved = await readAfterWrite(env, todayKey, orderBatchId, orders.length);
-      if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
 
-      // 历史记录是确认入库的核心结果，必须先于非核心的学习库更新。
+      stage = 'prepare-history';
+      const historyKey = scopedKey(userId, route, `history:${date}`);
+      const oldHistory = await redisGet(env, historyKey);
+      const list = Array.isArray(oldHistory) ? oldHistory : [];
+      const saved = todayData;
+      const record = {
+        orderBatchId: saved.orderBatchId, date, route, userId, vehicle: saved.vehicle,
+        count: saved.count, uniqueStoreCount: saved.uniqueStoreCount ?? saved.count,
+        weight: saved.totalWeight, totalWeight: saved.totalWeight, orders: saved.orders,
+        matchedCount: saved.matchedCount, newStoreCount: saved.newStoreCount, reviewCount: 0,
+        duplicateCount: saved.duplicateCount || 0, recognizedCount: saved.recognizedCount,
+        rawOrderCount: saved.rawOrderCount, baseDatabaseAvailable: saved.baseDatabaseAvailable !== false,
+        source: saved.source, updatedAt: saved.updatedAt
+      };
+      const signature = historySignature(record);
+      const index = list.findIndex(item => historySignature(item) === signature);
+      if (index >= 0) list[index] = record;
+      else list.push(record);
+      list.sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')));
+
       stage = 'write-history';
-      await saveHistory(env, userId, route, date, saved);
+      await redisPipeline([
+        ['SET', historyKey, JSON.stringify(list.slice(0, 90))],
+        ['SET', scopedKey(userId, route, 'latest'), JSON.stringify({ date, orderBatchId, updatedAt: saved.updatedAt })]
+      ]);
 
       // 门店学习由前端 /api/store-learning 独立执行，不能阻断核心入库链路。
-      // confirm 只负责：今日数据 → 历史记录 → latest → 返回成功。
-      stage = 'write-latest';
-      await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt })
-        .catch(error => console.warn('latest 索引更新失败，不影响订单确认成功', error));
       return json({ success: true, data: saved });
-    } finally {
+        } finally {
       // 锁只用于并发保护；释放失败不应让已经成功写入的订单变成“确认失败”。
       releaseLock(env, lockKey, token).catch(() => {});
     }
@@ -246,17 +260,13 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
 async function findDuplicateOrder(env, userId, route, date, candidate) {
   const todayKey = scopedKey(userId, route, `today:${date}`);
   const historyKey = scopedKey(userId, route, `history:${date}`);
-  const today = await redisGet(env, todayKey);
-  if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) {
-    return today;
-  }
-  const history = await redisGet(env, historyKey);
+  const [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
+  if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) return today;
   if (Array.isArray(history)) {
     const signature = businessOrderSignature(candidate);
     if (signature) {
-      const match = history
-        .filter(item => businessOrderSignature(item) === signature)
-        .sort((a, b) => String(a?.updatedAt || '').localeCompare(String(b?.updatedAt || '')))[0];
+      const match = history.filter(item => businessOrderSignature(item) === signature)
+        .sort((x, y) => String(x?.updatedAt || '').localeCompare(String(y?.updatedAt || '')))[0];
       if (match) return match;
     }
   }
@@ -358,6 +368,27 @@ function createLockToken() { return `${Date.now()}-${Math.random().toString(36).
 async function acquireLock(env, keyName, token, seconds) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST' }); if (!response.ok) return false; const data = await response.json().catch(() => ({})); return data.result === 'OK'; }
 async function releaseLock(env, keyName, token) { const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"; await redisFetch(env, '/eval', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([script, 1, keyName, token]) }); }
 async function redisFetch(env, path, options = {}) { const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, ''); if (!base) throw new Error('Redis URL 未配置'); const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), REDIS_TIMEOUT_MS); try { return await fetch(`${base}${path}`, { ...options, headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, ...(options.headers || {}) }, cache: 'no-store', signal: controller.signal }); } catch (error) { if (error?.name === 'AbortError') throw new Error('Redis 请求超时'); throw new Error(`Redis 网络请求失败：${error?.message || 'unknown error'}`); } finally { clearTimeout(timer); } }
+async function redisPipeline(env, commands) {
+  const response = await redisFetch(env, '/pipeline', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(commands)
+  });
+  if (!response.ok) throw new Error(`Redis批量操作失败（HTTP ${response.status}）`);
+  const data = await response.json().catch(() => []);
+  if (!Array.isArray(data)) throw new Error('Redis批量操作返回格式异常');
+  const failed = data.find(item => item && item.error);
+  if (failed) throw new Error(String(failed.error));
+  return data;
+}
+async function redisPipelineGet(env, keys) {
+  const results = await redisPipeline(env, keys.map(keyName => ['GET', keyName]));
+  return results.map(item => {
+    const value = item?.result;
+    if (value === null || value === undefined || value === '') return null;
+    try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
+  });
+}
 async function redisGet(env, keyName) { const response = await redisFetch(env, `/get/${encodeURIComponent(keyName)}`); if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
 async function redisSet(env, keyName, value) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }); if (!response.ok) throw new Error(`Redis保存失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
