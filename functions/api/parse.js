@@ -584,7 +584,8 @@ function findMatch(raw, byName, byCode, used, byLearning, byWeakName, byNameLeng
       type: 'review',
       item: best.item,
       score: best.score,
-      alternatives: alternatives.map(candidate => candidate.item)
+      alternatives: alternatives.map(candidate => candidate.item),
+      candidateCodes: alternatives.map(candidate => String(candidate.item.code || '').trim())
     };
   }
   return { type: 'new', score: best.score };
