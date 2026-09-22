@@ -100,3 +100,12 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 #deleteAccountModal .sheet-actions{
   flex-direction:row!important;
 }
+
+
+/* UI 2.0 · 第十二轮：修复设置页按钮外层方形焦点框 2026-09-22 */
+.settings-page button:focus-visible,
+.settings-page a:focus-visible,
+.settings-page [role="button"]:focus-visible{
+  outline:none!important;
+  box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
+}
