@@ -62,3 +62,20 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 .input-box input{color:var(--text-primary)}
 .input-box input::placeholder{color:var(--text-tertiary)}
 .input-label,.form-label{color:var(--text-secondary)}
+
+
+/* UI 2.0 · 登录页 */
+:root{
+  --bg:#05070A;--card:#151D26;--blue:#D0D7DC;--text:#F2F5F7;--muted:#9AA6B2;
+  --line:rgba(255,255,255,.075);--one-surface-2:#1B2530;--one-pressed:#AEB8C0;
+}
+.login-container{max-width:430px;padding:24px 18px calc(28px + env(safe-area-inset-bottom));justify-content:center}
+.logo-area{margin-bottom:26px}.logo{width:148px;height:148px;margin-bottom:8px}.brand-sub{font-size:12px;letter-spacing:2.2px;color:#9AA6B2}
+.form-title{font-size:20px;margin-bottom:16px;color:#F2F5F7}
+.input-box{margin-bottom:10px}.input-box input{height:52px;line-height:52px;border-radius:14px;background:#151D26;border:1px solid rgba(255,255,255,.075);font-size:15px;text-align:left;padding:0 15px}
+.input-box input::placeholder{text-align:left;color:#75818D}.input-box input:focus{border-color:rgba(208,215,220,.48)!important;box-shadow:0 0 0 3px rgba(208,215,220,.10)!important;background:#18212B}
+.login-btn{height:50px;margin-top:7px;border-radius:13px;background:#D0D7DC!important;color:#0B1015!important;font-size:15px;font-weight:650}
+.login-btn:active{background:#AEB8C0!important;color:#0B1015!important;transform:scale(.99)}
+.switch-btn{margin-top:16px;color:#B8C2CC!important;font-size:13px}
+.switch-btn:active{background:#202A34!important;color:#fff!important}
+.bottom-actions{gap:20px}.form-tip{font-size:11px;color:#75818D}
