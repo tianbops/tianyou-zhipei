@@ -91,7 +91,7 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .upload-source-menu .source-menu-options{gap:10px}
 .upload-source-menu .source-menu-cancel{font-size:13px}
 .parse-status.detail-hidden{display:none!important}
-.parse-status.success{min-height:112px;max-height:150px;overflow:visible}
+.parse-status.success{min-height:0!important;max-height:86px!important;height:auto!important;overflow:visible!important}
 .parse-status.success .status-row{min-height:20px}
 .status-row #statusText.structured-status{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;white-space:nowrap;overflow:visible}
 .status-row #statusText.structured-status .status-content-left{min-width:0;flex:1 1 auto;text-align:left;white-space:nowrap}
