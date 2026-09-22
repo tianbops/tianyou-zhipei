@@ -105,7 +105,7 @@ export async function onRequest({ request, env }) {
 
       // 今日订单和历史记录必须一次提交，避免出现“今日有数据、历史没记录”的半成功状态。
       stage = 'write-order-history';
-      const writeResult = await redisPipeline([
+      const writeResult = await redisPipeline(env, [
         ['SET', todayKey, JSON.stringify(todayData)],
         ['SET', historyKey, JSON.stringify(historyPayload)],
         ['SET', scopedKey(userId, route, 'latest'), JSON.stringify({ date, orderBatchId, updatedAt: saved.updatedAt })]
