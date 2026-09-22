@@ -950,3 +950,85 @@ body{color:var(--text-body)}
   background:var(--control-pressed)!important;
   color:#fff!important;
 }
+
+
+/* 2026-09-22 产品UX：规划详情 / 修正详情信息层级优化 */
+.upload-sheet.detail-view-open .detail-section-title{
+  width:100%!important;
+  margin:2px 0 14px!important;
+  color:#F2F5F7!important;
+  font-size:15px!important;
+  line-height:22px!important;
+  font-weight:600!important;
+  text-align:center!important;
+}
+.upload-sheet.detail-view-open .order-info-list{
+  width:100%!important;
+  display:flex!important;
+  flex-direction:column!important;
+  gap:0!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.025)!important;
+  border:1px solid rgba(255,255,255,.05)!important;
+  overflow:hidden!important;
+}
+.upload-sheet.detail-view-open .order-info-row{
+  min-height:40px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  padding:0 13px!important;
+  border-bottom:1px solid rgba(255,255,255,.045)!important;
+  color:#9AA6B2!important;
+  font-size:14px!important;
+  line-height:20px!important;
+}
+.upload-sheet.detail-view-open .order-info-row:last-child{border-bottom:0!important}
+.upload-sheet.detail-view-open .order-info-row strong{
+  min-width:0!important;
+  color:#E7EDF3!important;
+  font-size:14px!important;
+  font-weight:500!important;
+  text-align:right!important;
+  overflow-wrap:anywhere!important;
+}
+.upload-sheet.detail-view-open .detail-subtitle{
+  margin:16px 2px 8px!important;
+  color:#9AA6B2!important;
+  font-size:13px!important;
+  line-height:20px!important;
+  font-weight:500!important;
+}
+.upload-sheet.detail-view-open .correction-stats{
+  width:100%!important;
+  min-height:42px!important;
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  align-items:center!important;
+  gap:0!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.025)!important;
+  border:1px solid rgba(255,255,255,.05)!important;
+  overflow:hidden!important;
+}
+.upload-sheet.detail-view-open .correction-stat{
+  min-width:0!important;
+  min-height:42px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0 5px!important;
+  color:#D5DCE2!important;
+  font-size:13px!important;
+  line-height:18px!important;
+  white-space:nowrap!important;
+  border-right:1px solid rgba(255,255,255,.045)!important;
+}
+.upload-sheet.detail-view-open .correction-stat:last-child{border-right:0!important}
+.upload-sheet.detail-view-open .correction-stat span{font-size:13px!important;font-weight:500!important}
+@media(max-width:360px){
+  .upload-sheet.detail-view-open .order-info-row{padding:0 11px!important;font-size:13px!important}
+  .upload-sheet.detail-view-open .order-info-row strong{font-size:13px!important}
+  .upload-sheet.detail-view-open .correction-stat,.upload-sheet.detail-view-open .correction-stat span{font-size:12px!important}
+}
