@@ -31,6 +31,10 @@ export function legacyUserBaseKey(userId, route) {
   return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:base`;
 }
 
+export function legacyUserOrderKey(userId, route, suffix) {
+  return `user:${encodeKey(userId)}:route:${encodeKey(normalizeRoute(route))}:orders:${suffix}`;
+}
+
 export function routeOrderKey(route, suffix) {
   return `route:${encodeKey(normalizeRoute(route))}:orders:${suffix}`;
 }
