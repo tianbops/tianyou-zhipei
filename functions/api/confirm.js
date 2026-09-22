@@ -282,18 +282,18 @@ async function saveHistory(env, userId, route, date, today) {
   if (index >= 0) list[index] = record;
   else list.push(record);
   list.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
-  let lastError = null;
+  let saveError = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       await redisSet(env, keyName, list.slice(0, 90));
-      lastError = null;
+      saveError = null;
       break;
     } catch (error) {
-      lastError = error;
+      saveError = error;
       if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 120));
     }
   }
-  if (lastError) throw lastError;
+  if (saveError) throw saveError;
 }
 
 async function getLearning(env, keyName) {
