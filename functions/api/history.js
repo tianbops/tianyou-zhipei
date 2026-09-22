@@ -17,7 +17,43 @@ export async function onRequest({ request, env }) {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
     await purgeExpiredHistory(env, userId, route);
     if (!isWithinRetention(date)) return json([]);
-    const key = scopedKey(userId, route, `history:${date}`), result = await redisGet(env, key), records = Array.isArray(result) ? result : [];
+    const key = scopedKey(userId, route, `history:${date}`), result = await redisGet(env, key);
+    let records = Array.isArray(result) ? result : [];
+
+    // 兼容旧版本“今日已写入、历史未写入”的半成功订单：
+    // 历史查询发现当天没有记录时，从同一用户/线路的 today 数据自动补建历史。
+    if (!records.length) {
+      const todayKey = scopedKey(userId, route, `today:${date}`);
+      const today = await redisGet(env, todayKey);
+      if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
+        const recovered = {
+          orderBatchId: String(today.orderBatchId || '').trim(),
+          date,
+          route,
+          userId,
+          vehicle: String(today.vehicle || '').trim(),
+          count: Number(today.count) || today.orders.length,
+          uniqueStoreCount: Number(today.uniqueStoreCount) || today.orders.length,
+          weight: today.totalWeight ?? today.weight ?? '',
+          totalWeight: today.totalWeight ?? today.weight ?? '',
+          orders: today.orders,
+          matchedCount: Number(today.matchedCount) || 0,
+          newStoreCount: Number(today.newStoreCount) || 0,
+          reviewCount: Number(today.reviewCount) || 0,
+          duplicateCount: Number(today.duplicateCount) || 0,
+          recognizedCount: Number(today.recognizedCount) || today.orders.length,
+          rawOrderCount: Number(today.rawOrderCount) || today.orders.length,
+          baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
+          source: String(today.source || 'recovered-from-today'),
+          updatedAt: today.updatedAt || new Date().toISOString()
+        };
+        if (historySignature(recovered)) {
+          await redisSet(env, key, [recovered]);
+          records = [recovered];
+        }
+      }
+    }
+
     const { records: cleaned, changed } = dedupeHistory(filterRetention(records));
     if (changed || cleaned.length !== records.length) await redisSet(env, key, cleaned);
     return json(cleaned);
