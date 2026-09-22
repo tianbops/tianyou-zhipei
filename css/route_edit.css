@@ -97,3 +97,12 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .route-edit-page .btn-group{position:sticky;bottom:0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));background:linear-gradient(to top,#05070A 72%,rgba(5,7,10,0));z-index:10}
 .route-edit-page .save-btn,.route-edit-page .cancel-btn{margin-top:0!important}
 .route-edit-page #editDeleteArea{margin-bottom:12px!important}
+
+
+/* UI 2.0 · 第六轮：线路维护触控与底部操作收口 2026-09-22 */
+.route-edit-page .card{box-shadow:none!important}
+.route-edit-page .store-row{transition:background-color .12s ease!important}
+.route-edit-page .store-actions button:focus-visible,.route-edit-page .save-btn:focus-visible,.route-edit-page .cancel-btn:focus-visible,#deleteStoreBtn:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:2px!important}
+.route-edit-page .save-btn{font-weight:650!important}
+.route-edit-page .cancel-btn{font-weight:600!important}
+.route-edit-page #deleteStoreBtn{background:transparent!important}
