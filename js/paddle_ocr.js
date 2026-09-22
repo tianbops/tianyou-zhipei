@@ -286,9 +286,9 @@
       const cancelled = error?.code === 'OCR_CANCELLED' || /已取消/.test(message) || !isUploadTaskActive(taskId);
       const timedOut = /读取运单时间较长|OCR读取\/识别超过2分钟/.test(message);
       if (cancelled) {
-        // 取消释放已经由 cancelOCR() 负责。旧任务不得在新任务启动后再次 disposeEngine()，
-        // 否则可能误释放/失效新任务刚建立的OCR引擎。
-        ++operationId;
+        // cancelOCR() 已经负责使当前 operation 失效。
+        // 如果新任务已经启动，旧任务不能再次递增 operationId，否则会误伤新任务。
+        if (currentOperation === operationId) ++operationId;
       } else if (timedOut) {
         cancelRequested = true;
         ++operationId;
