@@ -1,7 +1,7 @@
 // Zhipei One - 用户独立订单 API
 // 订单按用户ID+线路+日期存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
-import { canUseRoute, loadRouteBase, routeBaseKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, loadRouteBase, routeBaseKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 8000;
 
@@ -29,7 +29,7 @@ async function saveOrder(request, env, session) {
   const lockKey = scopedKey(userId, route, `lock:${date}`), lockToken = createLockToken();
   if (!(await acquireLock(env, lockKey, lockToken, 15))) return json({ error: '当前用户正在保存订单，请稍后再试' }, 409);
   try {
-    const existing = await redisGet(env, key);
+    const existing = await redisGet(env, key) || await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
     // 订单详情页的“更换车辆”只是修改当日车辆，不应重新按当前基准库计算订单。
     // 历史/今日订单必须继续使用原批次已经确认的门店顺序与匹配结果。
@@ -103,8 +103,10 @@ async function readOrder(request, env, session) {
   // 未指定日期时只读取业务日，避免明日预上传通过 latest 提前进入首页“今日任务”。
   // 需要读取历史或明日数据的页面必须显式传 date。
   const date = requestedDate || businessDate();
-  const today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
-  const historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
+  let today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
+  let historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
+  if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+  if (!historyData) historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
   const history = Array.isArray(historyData) ? historyData : [];
   let selected = today;
   if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
