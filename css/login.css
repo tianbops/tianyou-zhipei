@@ -108,3 +108,13 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
   outline:none!important;
   box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
 }
+
+
+/* UI 2.0 · 第二十二轮：登录页视觉基线统一 2026-09-22 */
+.login-container{justify-content:center!important}
+.logo-area{display:flex!important;flex-direction:column!important;align-items:center!important}
+.form-title{line-height:28px!important}
+.input-box input{display:block!important;line-height:normal!important}
+.login-btn{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+.bottom-actions{align-items:center!important}
+.bottom-actions button,.switch-btn{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
