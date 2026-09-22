@@ -1,7 +1,7 @@
 // Zhipei One - 用户独立历史查询 API
 // 历史数据按用户ID+线路+日期独立存储；允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
-import { canUseRoute, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, routeOrderKey } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
@@ -40,13 +40,14 @@ export async function onRequest({ request, env }) {
 }
 
 async function readHistoryOrRecover(env, userId, route, date, key) {
-  const result = await redisGet(env, key);
+  let result = await redisGet(env, key);
+  if (!Array.isArray(result) || !result.length) result = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
   let records = Array.isArray(result) ? result : [];
   if (records.length) return records;
 
   // 兼容旧版本半成功数据：历史没有记录，但同日期 today 数据仍存在。
   const todayKey = scopedKey(userId, route, `today:${date}`);
-  const today = await redisGet(env, todayKey);
+  const today = await redisGet(env, todayKey) || await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
   if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
     const recovered = recoverFromToday(today, userId, route, date);
     if (historySignature(recovered)) {
