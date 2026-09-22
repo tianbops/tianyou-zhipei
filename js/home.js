@@ -111,7 +111,19 @@ function renderUploadDetail(mode){
     lines.forEach(line=>{const m=line.match(/^(日期|线路|车辆|门店|重量|门店数|总重量)\\s*[:：]\\s*(.+)$/);if(m)values[m[1]]=m[2];});
     [['日期',values.日期||pendingMeta.date||'未识别'],['线路',values.线路||currentRoute()||'未识别'],['车辆',values.车辆||pendingMeta.vehicle||'未识别'],['门店',values.门店||`${Number(pendingMeta.uniqueStoreCount)||parsedOrders.length}家`],['重量',values.重量||pendingMeta.totalWeight||'未识别']].forEach(([label,value])=>{const row=document.createElement('div');row.className='order-info-row';const left=document.createElement('span');left.textContent=`${label}：`;const right=document.createElement('strong');right.textContent=String(value||'未识别');row.append(left,right);info.appendChild(row);});
     body.appendChild(info);const listTitle=document.createElement('div');listTitle.className='detail-subtitle';listTitle.textContent='门店列表';body.appendChild(listTitle);
-    const pre=document.createElement('pre');pre.className='upload-detail-text';const marker=lines.findIndex(v=>v.includes('门店列表'));pre.textContent=marker>=0?(lines.slice(marker+1).join('\n')||'暂无门店列表'):'暂无门店列表';body.appendChild(pre);
+    const pre=document.createElement('pre');pre.className='upload-detail-text';
+    const detailStores=Array.isArray(parsedOrders)?parsedOrders:[];
+    if(detailStores.length){
+      const orderedStores=[...detailStores.filter(item=>item?.needsReview===true),...detailStores.filter(item=>item?.isNew===true&&item?.needsReview!==true),...detailStores.filter(item=>item?.needsReview!==true&&item?.isNew!==true)];
+      pre.textContent=orderedStores.map((item,index)=>{
+        const mark=item?.needsReview?'⚠️ 待定：':item?.isNew?'⚠️ 新增：':'';
+        return `${String(index+1).padStart(2,'0')}. ${mark}${storeName(item)}`;
+      }).join('\n');
+    }else{
+      const marker=lines.findIndex(v=>v.includes('门店列表'));
+      pre.textContent=marker>=0?(lines.slice(marker+1).join('\n')||'暂无门店列表'):'暂无门店列表';
+    }
+    body.appendChild(pre);
   }else{
     const sectionTitle=document.createElement('div');
     sectionTitle.className='detail-section-title';
