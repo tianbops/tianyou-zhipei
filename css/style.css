@@ -783,3 +783,140 @@ body{color:var(--text-body)}
   line-height:20px!important;
   overflow:visible!important;
 }
+
+
+/* 2026-09-22 产品UX：上传弹窗整体视觉统一第二轮
+   目标：间距、圆角、层级、视觉重量统一；不触碰解析/业务逻辑。 */
+.upload-sheet{
+  padding:18px!important;
+  padding-bottom:calc(18px + env(safe-area-inset-bottom))!important;
+  border-radius:24px!important;
+  background:rgba(28,37,48,.98)!important;
+  border:1px solid rgba(255,255,255,.07)!important;
+  box-shadow:0 -12px 36px rgba(0,0,0,.34)!important;
+}
+.sheet-handle{
+  width:34px!important;
+  height:4px!important;
+  margin:0 auto 12px!important;
+  border-radius:999px!important;
+}
+.upload-source-menu{
+  margin:0!important;
+  padding:14px!important;
+  border-radius:16px!important;
+  background:rgba(17,24,32,.92)!important;
+  border:1px solid rgba(255,255,255,.075)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018)!important;
+}
+.source-menu-title{
+  height:22px!important;
+  line-height:22px!important;
+  margin:0 0 12px!important;
+  font-size:15px!important;
+  font-weight:600!important;
+  letter-spacing:.1px!important;
+}
+.source-menu-options{
+  gap:8px!important;
+}
+.source-option{
+  height:72px!important;
+  min-height:72px!important;
+  border-radius:12px!important;
+  border:1px solid rgba(255,255,255,.065)!important;
+  background:rgba(255,255,255,.035)!important;
+  gap:6px!important;
+}
+.source-option .z-icon{
+  width:24px!important;
+  height:24px!important;
+}
+.source-option .z-icon svg{
+  width:22px!important;
+  height:22px!important;
+}
+.source-option:active{
+  transform:scale(.98)!important;
+}
+.source-menu-cancel{
+  height:42px!important;
+  min-height:42px!important;
+  margin-top:10px!important;
+  border-radius:11px!important;
+  background:rgba(255,255,255,.025)!important;
+  border:1px solid rgba(255,255,255,.045)!important;
+  color:#9AA6B2!important;
+  font-size:14px!important;
+}
+.parse-status{
+  margin:12px 0!important;
+  border-radius:14px!important;
+  padding:9px 12px!important;
+  background:rgba(0,0,0,.22)!important;
+  border:1px solid rgba(255,255,255,.035)!important;
+}
+.parse-status.success{
+  border-color:rgba(255,255,255,.045)!important;
+}
+.detail-entry-row{
+  gap:10px!important;
+  margin-top:12px!important;
+}
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .input-area,
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary{
+  border-radius:11px!important;
+}
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .detail-toggle,
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary{
+  border-radius:11px!important;
+  background:rgba(255,255,255,.035)!important;
+  border-color:rgba(255,255,255,.075)!important;
+  color:#C9D1D9!important;
+}
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .detail-toggle span,
+.upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary span:last-child{
+  color:#7F8B98!important;
+}
+.sheet-footer{
+  gap:10px!important;
+  margin-top:12px!important;
+  padding-top:0!important;
+}
+.sheet-footer button{
+  height:46px!important;
+  min-height:46px!important;
+  border-radius:12px!important;
+}
+.btn-primary-action{
+  background:var(--blue)!important;
+  box-shadow:0 5px 14px rgba(36,87,166,.18)!important;
+}
+.btn-cancel{
+  background:rgba(255,255,255,.035)!important;
+  border:1px solid rgba(255,255,255,.055)!important;
+  color:#9AA6B2!important;
+}
+.upload-sheet.success .sheet-footer,
+.upload-sheet.error .sheet-footer{
+  margin-top:12px!important;
+}
+@media(max-width:360px){
+  .upload-sheet{
+    padding:16px!important;
+    padding-bottom:calc(16px + env(safe-area-inset-bottom))!important;
+    border-radius:22px!important;
+  }
+  .upload-source-menu{
+    padding:12px!important;
+    border-radius:15px!important;
+  }
+  .source-menu-options{gap:7px!important}
+  .source-option{
+    height:68px!important;
+    min-height:68px!important;
+    border-radius:11px!important;
+  }
+  .source-menu-cancel{height:40px!important;min-height:40px!important}
+  .sheet-footer button{height:44px!important;min-height:44px!important}
+}
