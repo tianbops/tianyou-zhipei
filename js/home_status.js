@@ -48,7 +48,7 @@ function renderDetail(details){
   row.textContent='';
   const items=Array.isArray(details)?details.filter(Boolean).map(value=>String(value)):[];
   const compact=$('statusText')?.classList.contains('compact-result');
-  const groups=compact?[items]:items.length>=5?[items.slice(0,2),items.slice(2,5)]:items.length===3?[items]:items.length===2?[items]:[items];
+  const groups=compact?items.map(item=>[item]):items.length>=5?[items.slice(0,2),items.slice(2,5)]:items.length===3?[items]:items.length===2?[items]:[items];
   groups.filter(group=>group.length).forEach(group=>{
     const line=document.createElement('div');
     line.className='detail-row';
