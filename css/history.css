@@ -198,3 +198,24 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
   outline:none!important;
   box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
 }
+
+/* UI 2.0 · 第二十轮：历史页弹出层统一居中 2026-09-22 */
+.date-modal{
+  align-items:center!important;
+  justify-content:center!important;
+  padding:16px!important;
+}
+.date-sheet{
+  width:min(100%,430px)!important;
+  max-height:88vh!important;
+  margin:0 auto!important;
+  border-radius:22px!important;
+  border-bottom:1px solid var(--line)!important;
+}
+.delete-modal{
+  align-items:center!important;
+  justify-content:center!important;
+}
+.delete-sheet{
+  margin:0 auto!important;
+}
