@@ -90,8 +90,6 @@
     const createOptions = {
       lang: 'ch',
       ocrVersion: 'PP-OCRv5',
-      // 优先使用独立 Worker，把 OpenCV/ONNX 推理移出主线程；失败时自动回退主线程。
-      // Worker 使用同源代理，避免第三方 CDN Worker 的跨域限制。
       worker: {
         createWorker: () => new Worker(OCR_WORKER_URL, { type: 'module' })
       },
@@ -105,19 +103,22 @@
         proxy: false
       }
     };
-    enginePromise = PaddleOCR.create(createOptions).catch(async error => {
+
+    // 保存本次创建任务的 Promise 身份。取消后旧任务即使晚到，也绝不能
+    // 把新任务的 enginePromise / engineInstance 清掉。
+    let creationPromise;
+    creationPromise = PaddleOCR.create(createOptions).catch(async error => {
       if (generation !== engineGeneration) {
         throw Object.assign(new Error('OCR任务已取消'), { code: 'OCR_CANCELLED' });
       }
       console.warn('[PaddleOCR worker] Worker模式加载失败，回退主线程:', error);
-      const fallback = await PaddleOCR.create({
+      return PaddleOCR.create({
         ...createOptions,
         worker: false,
         textDetectionBatchSize: 1,
         textRecognitionBatchSize: 4,
         ortOptions: { ...createOptions.ortOptions, numThreads: 1 }
       });
-      return fallback;
     }).then(async engine => {
       if (generation !== engineGeneration) {
         try { await engine?.dispose?.(); } catch (_) {}
@@ -126,13 +127,17 @@
       engineInstance = engine;
       return engine;
     }).catch(error => {
-      enginePromise = null;
-      engineInstance = null;
+      // 只有当前这一代、且仍然是同一个创建任务，才允许清理全局引用。
+      if (enginePromise === creationPromise) {
+        enginePromise = null;
+        engineInstance = null;
+      }
       throw error;
     });
-    return enginePromise;
-  }
 
+    enginePromise = creationPromise;
+    return creationPromise;
+  }
   async function readImage(file) {
     if (typeof createImageBitmap === 'function') {
       try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (_) {}
@@ -335,9 +340,21 @@
 
   async function disposeEngine() {
     ++engineGeneration;
+    const pendingCreation = enginePromise;
     const engine = engineInstance;
     engineInstance = null;
     enginePromise = null;
+
+    // 如果取消发生在模型创建阶段，等待旧创建任务自然结束；它会因 generation
+    // 失效而自动释放，避免新任务与旧任务同时争抢 OCR 引擎资源。
+    if (pendingCreation) {
+      try {
+        const pendingEngine = await pendingCreation;
+        if (pendingEngine && pendingEngine !== engine) {
+          try { await pendingEngine.dispose?.(); } catch (_) {}
+        }
+      } catch (_) {}
+    }
     if (engine?.dispose) {
       try { await engine.dispose(); } catch (_) {}
     }
