@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canUseRoute, loadRouteBase, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, loadRouteBase, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 
@@ -274,7 +274,9 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
 async function findDuplicateOrder(env, userId, route, date, candidate) {
   const todayKey = scopedKey(userId, route, `today:${date}`);
   const historyKey = scopedKey(userId, route, `history:${date}`);
-  const [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
+  let [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
+  if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+  if (!Array.isArray(history) || !history.length) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
   if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) return today;
   if (Array.isArray(history)) {
     const signature = businessOrderSignature(candidate);
