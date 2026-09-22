@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：路线绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { getRoute, getUser, normalizeRoute, redisSet, saveRoute, routeRecordKey, publicUser } from '../_data.js';
+import { getRoute, getUser, normalizeRoute, redisSet, saveRoute, publicUser, recordAdminLog } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -54,6 +54,8 @@ export async function onRequest({ request, env }) {
 
     // 清理本次解绑的旧用户绑定字段。
     const oldIds = Array.isArray(current?.boundUserIds) ? current.boundUserIds : [];
+    await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId });
+
     for (const oldId of oldIds) {
       if (ids.includes(oldId)) continue;
       const oldUser = await getUser(env, oldId);
