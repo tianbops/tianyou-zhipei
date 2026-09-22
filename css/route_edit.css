@@ -1,5 +1,25 @@
+:root{
+  --bg:#05070A;
+  --card:#151D26;
+  --card2:#0D1319;
+  --blue:#D0D7DC;
+  --text:#F2F5F7;
+  --muted:#9AA6B2;
+  --line:rgba(255,255,255,.075);
+  --danger:#FF6B5E;
+  --primary-action:#B8C1C8;
+  --primary-action-text:#0B1015;
+  --control-dark:#202A34;
+  --control-hover:#28343F;
+  --control-pressed:#313E49;
+  --focus-neutral:rgba(220,227,232,.18);
+  --text-primary:#F2F5F7;
+  --text-body:#D5DCE2;
+  --text-secondary:#9AA6B2;
+  --text-tertiary:#75818D;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#05070A;--card:#18212B;--card2:#10161D;--blue:#2457A6;--text:#fff;--muted:#7F8B98;--line:rgba(255,255,255,.07);--danger:#C0392B}
+
 html,body{width:100%;min-height:100%;background:var(--bg)}
 body{color:var(--text);font-family:"Microsoft YaHei",Arial,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparent}
@@ -19,7 +39,7 @@ to{opacity:1;transform:none}}
 
 
 /* 2026-09-21 全局按钮色彩统一：弱化/取消业务蓝，仅调整颜色，不改变布局与尺寸 */
-:root{--blue:#C8D0D6;--primary-action:#C8D0D6;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
+
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control-dark)!important;color:#E3E8ED!important}
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
@@ -28,12 +48,12 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 
 
 /* 2026-09-21 全局按钮层级微调：主要按钮再压暗一档，次要按钮高度降低一档 */
-:root{--blue:#B8C1C8;--primary-action:#B8C1C8}
+
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:#B8C1C8!important;color:#0B1015!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 
 /* 2026-09-21 线路编辑文字层级统一：仅调整文字表现，不改变布局/功能 */
-:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D}
+
 .route-edit-page{color:var(--text-body)}
 .card-header,.card-title,.route-title{color:var(--text-primary)}
 .store-name,.store-title{color:var(--text-primary);font-weight:600}
@@ -43,10 +63,7 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 
 
 /* UI 2.0 · 线路基准维护 */
-:root{
-  --bg:#05070A;--card:#151D26;--card2:#0D1319;--blue:#D0D7DC;--text:#F2F5F7;--muted:#9AA6B2;
-  --line:rgba(255,255,255,.075);--danger:#FF6B5E;
-}
+
 .app-container{max-width:430px;padding-left:14px;padding-right:14px}.top-bar{height:50px}
 .app-title{font-size:18px;color:#F2F5F7}.back-btn{width:42px;height:42px;flex-basis:42px;border-radius:13px;background:#151D26;border:1px solid var(--line)}
 .back-btn:active{background:#AEB8C0;color:#0B1015}
