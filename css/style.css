@@ -1678,6 +1678,48 @@ a:focus-visible,
 }
 
 
+/* UI 2.0 · 第十八轮：首页今日任务卡适度放大 2026-09-22 */
+/* 不增加新信息，只提升“今日任务”作为首页核心卡片的视觉占比 */
+.task-card{
+  padding:19px 18px 18px!important;
+  margin-top:22px!important;
+  border-radius:19px!important;
+}
+.task-title{
+  font-size:18px!important;
+  line-height:24px!important;
+}
+.task-name{gap:10px!important}
+.task-main{
+  margin-top:16px!important;
+  gap:10px!important;
+}
+.task-info{
+  font-size:15px!important;
+  line-height:28px!important;
+}
+.task-info strong{font-size:16px!important}
+.delivery-man{
+  width:92px!important;
+  height:70px!important;
+}
+.function-list{
+  margin-top:14px!important;
+}
+@media(max-width:380px){
+  .task-card{
+    padding:17px 16px 16px!important;
+    margin-top:18px!important;
+    border-radius:17px!important;
+  }
+  .task-title{font-size:17px!important}
+  .task-main{margin-top:14px!important}
+  .task-info{font-size:14px!important;line-height:27px!important}
+  .task-info strong{font-size:15px!important}
+  .delivery-man{width:78px!important;height:60px!important}
+  .function-list{margin-top:12px!important}
+}
+
 /* UI 2.0 · 第十七轮：首页今日运单笔数视觉收口 2026-09-22 */
 /* 降低蓝色饱和度，让运单数量圆点融入“今日任务”整体层级 */
 .status-dot{
