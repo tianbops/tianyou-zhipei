@@ -57,9 +57,23 @@ async function parseOrderText(text,taskId=0){
 window.cancelParse=async()=>{invalidateUploadTask();if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')await cancelOCR().catch(()=>{});};
 
 function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'plan';const button=$('primaryActionBtn');if(!button)return;button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'规划路线';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false}
+function ensureConfirmModule(){
+  if(typeof window.submitManualOrder==='function')return Promise.resolve(true);
+  return new Promise(resolve=>{
+    const existing=document.querySelector('script[data-home-confirm-loader="1"]');
+    if(existing){existing.addEventListener('load',()=>resolve(typeof window.submitManualOrder==='function'),{once:true});existing.addEventListener('error',()=>resolve(false),{once:true});setTimeout(()=>resolve(typeof window.submitManualOrder==='function'),1500);return;}
+    const script=document.createElement('script');
+    script.src='js/home_confirm.js?v=20260922-10';
+    script.async=false;
+    script.dataset.homeConfirmLoader='1';
+    script.onload=()=>resolve(typeof window.submitManualOrder==='function');
+    script.onerror=()=>resolve(false);
+    document.head.appendChild(script);
+  });
+}
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.add('waiting')}}
 window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
-window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder==='function')return window.submitManualOrder();window.renderUnifiedStatus?.('error',100,'确认录入模块未加载，请刷新页面后重试');window.homeToast?.('确认录入模块未加载，请刷新页面后重试','error');return}if(primaryActionMode==='error'){window.restartUpload?.();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
+window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder!=='function'){const loaded=await ensureConfirmModule();if(!loaded){window.renderUnifiedStatus?.('error',100,'确认录入模块加载失败，请刷新页面后重试');window.homeToast?.('确认录入模块加载失败，请刷新页面后重试','error');return}}return window.submitManualOrder();}if(primaryActionMode==='error'){window.restartUpload?.();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
 let uploadDetailMode='';
 function getCorrectionDetailText(){
   return Array.isArray(correctionDetails)&&correctionDetails.length?correctionDetails:[];
@@ -221,6 +235,6 @@ function readCachedHomeOrder(){try{const cacheKey=homeCacheScope();if(!cacheKey)
 function writeCachedHomeOrder(order){try{const cacheKey=homeCacheScope();if(!cacheKey)return;sessionStorage.setItem(cacheKey,JSON.stringify({date:currentDate(),route:String(currentRoute()||''),order}))}catch(_){}}
 async function refreshHomeOrder(){try{await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary()}catch(e){console.error('刷新当日任务失败',e)}}
 document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');
-if(!(await Auth.checkAuth()))return;const cached=readCachedHomeOrder();if(cached){serverOrder=cached;updateSummary()}await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary();$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];setPrimaryActionMode('plan');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新规划')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
+if(!(await Auth.checkAuth()))return;ensureConfirmModule().catch(()=>{});const cached=readCachedHomeOrder();if(cached){serverOrder=cached;updateSummary()}await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary();$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];setPrimaryActionMode('plan');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新规划')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
 window.addEventListener('pageshow',event=>{document.body.classList.remove('is-leaving');const menu=$('homeMenu');if(menu)menu.style.display='none';const overlay=$('uploadOverlay');if(event.persisted)window.clearManualInput?.();if(overlay)overlay.classList.remove('active');closeUploadSource();if(event.persisted&&typeof Auth!=='undefined')refreshHomeOrder()});
 })();
