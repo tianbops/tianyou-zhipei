@@ -1,6 +1,7 @@
 // Zhipei One - 多用户登录
 // Web 与微信小程序共用同一用户资料和密码体系。
-import { createMiniToken, createSession, sessionCookie } from './_auth.js';
+import { createAndroidToken, createMiniToken, createSession, sessionCookie } from './_auth.js';
+import { normalizeRoute, normalizeRole, publicUser, redisGet, redisSet } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -15,7 +16,7 @@ export async function onRequest({ request, env }) {
 
     if (!username) return json({ success: false, error: '用户名不能为空' }, 400);
     if (!password) return json({ success: false, error: '密码不能为空' }, 400);
-    if (client !== 'web' && client !== 'miniprogram') return json({ success: false, error: '不支持的登录客户端' }, 400);
+    if (!['web', 'miniprogram', 'android'].includes(client)) return json({ success: false, error: '不支持的登录客户端' }, 400);
 
     const userId = await redisGet(env, `user:username:${encodeURIComponent(username)}`);
     if (!userId) return json({ success: false, error: '用户名或密码错误' }, 401);
@@ -26,13 +27,19 @@ export async function onRequest({ request, env }) {
       return json({ success: false, error: '用户名或密码错误' }, 401);
     }
 
-    const safeUser = publicUser(user);
+    const updatedUser = { ...user, role: normalizeRole(user.role), boundRouteId: normalizeRoute(user.boundRouteId || user.route), route: normalizeRoute(user.boundRouteId || user.route), lastLoginAt: new Date().toISOString() };
+    await redisSet(env, `user:${userId}`, updatedUser);
+    const safeUser = publicUser(updatedUser);
     if (client === 'miniprogram') {
-      const token = await createMiniToken(env, user);
+      const token = await createMiniToken(env, updatedUser);
+      return json({ success: true, token, user: safeUser });
+    }
+    if (client === 'android') {
+      const token = await createAndroidToken(env, updatedUser);
       return json({ success: true, token, user: safeUser });
     }
 
-    const token = await createSession(env, user, { client: 'web' });
+    const token = await createSession(env, updatedUser, { client: 'web' });
     return new Response(JSON.stringify({ success: true, user: safeUser }), {
       status: 200,
       headers: {
