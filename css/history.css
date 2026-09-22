@@ -144,3 +144,19 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 .history-page .date-picker-btn,.history-page .query-btn,.history-page .history-btn,.history-page .history-delete{border-radius:12px!important}
 .history-page .date-picker-btn:focus-visible,.history-page .query-btn:focus-visible,.history-page .history-btn:focus-visible,.history-page .history-delete:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:2px!important}
 .history-page .history-view{border-radius:10px!important}
+
+
+/* UI 2.0 · 第八轮：历史查询页面统一精修 2026-09-22 */
+.history-page{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.history-page .top-bar{margin-bottom:10px!important}
+.history-page .history-filter-card{margin-top:0!important;padding:12px!important}
+.history-page .history-record-card{margin-top:10px!important;padding:14px!important}
+.history-page .route-title{font-size:15px!important;font-weight:650!important}
+.history-page .history-date-item{border-radius:13px!important;background:#151D26!important;overflow:hidden;margin-top:8px!important}
+.history-page .history-head{min-height:50px!important;padding:0 13px!important}
+.history-page .history-date{font-size:14px!important;font-weight:600!important}
+.history-page .history-count{font-size:12px!important;color:#9AA6B2!important}
+.history-page .history-view{height:44px!important;min-height:44px!important;margin:0 8px 6px!important;width:calc(100% - 16px)!important;background:#1B2530!important;border:1px solid rgba(255,255,255,.055)!important}
+.history-page .history-view:last-child{margin-bottom:8px!important}
+.history-page .empty-tip{padding:28px 12px!important;color:#75818D!important}
+.history-page .date-sheet,.history-page .delete-sheet{border-radius:20px!important}
