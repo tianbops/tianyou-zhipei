@@ -25,6 +25,9 @@
   let activeUploadTaskId = 0;
 
   function beginUploadTask() {
+    // 新任务开始时必须清除上一次“取消”状态，否则取消后立即二次上传
+    // 会在 processFiles() 的入口被旧的 cancelRequested 拦截。
+    cancelRequested = false;
     activeUploadTaskId = ++uploadTaskSeq;
     return activeUploadTaskId;
   }
