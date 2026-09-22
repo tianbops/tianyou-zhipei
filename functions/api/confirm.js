@@ -82,14 +82,11 @@ export async function onRequest({ request, env }) {
       }
 
       // Redis SET 成功响应即表示命令已执行，不再额外 GET 三次验证，避免确认录入长时间等待。
-      stage = 'write-today';
-      await redisSet(env, todayKey, todayData);
-
-      stage = 'prepare-history';
+      const saved = todayData;
       const historyKey = scopedKey(userId, route, `history:${date}`);
+      stage = 'prepare-history';
       const oldHistory = await redisGet(env, historyKey);
       const list = Array.isArray(oldHistory) ? oldHistory : [];
-      const saved = todayData;
       const record = {
         orderBatchId: saved.orderBatchId, date, route, userId, vehicle: saved.vehicle,
         count: saved.count, uniqueStoreCount: saved.uniqueStoreCount ?? saved.count,
@@ -104,12 +101,26 @@ export async function onRequest({ request, env }) {
       if (index >= 0) list[index] = record;
       else list.push(record);
       list.sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')));
+      const historyPayload = list.slice(0, 90);
 
-      stage = 'write-history';
-      await redisPipeline([
-        ['SET', historyKey, JSON.stringify(list.slice(0, 90))],
+      // 今日订单和历史记录必须一次提交，避免出现“今日有数据、历史没记录”的半成功状态。
+      stage = 'write-order-history';
+      const writeResult = await redisPipeline([
+        ['SET', todayKey, JSON.stringify(todayData)],
+        ['SET', historyKey, JSON.stringify(historyPayload)],
         ['SET', scopedKey(userId, route, 'latest'), JSON.stringify({ date, orderBatchId, updatedAt: saved.updatedAt })]
       ]);
+      if (!Array.isArray(writeResult) || writeResult.length !== 3 || writeResult.some(item => item && item.error)) {
+        throw new Error('今日订单与历史记录写入未完成');
+      }
+
+      // 返回成功前同时核验今日与历史，保证“确认成功”与两份核心数据一致。
+      stage = 'verify-order-history';
+      const [savedToday, savedHistory] = await redisPipelineGet(env, [todayKey, historyKey]);
+      const historyExists = Array.isArray(savedHistory) && savedHistory.some(item => String(item?.orderBatchId || '') === String(orderBatchId));
+      if (savedToday?.orderBatchId !== orderBatchId || !Array.isArray(savedToday?.orders) || !historyExists) {
+        throw new Error('订单已写入但今日/历史数据核验未通过，请重试');
+      }
 
       // 门店学习由前端 /api/store-learning 独立执行，不能阻断核心入库链路。
       return json({ success: true, data: saved });
