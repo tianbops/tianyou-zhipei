@@ -1678,6 +1678,16 @@ a:focus-visible,
 }
 
 
+/* UI 2.0 · 第十九轮：首页任务卡以下内容整体下移 2026-09-22 */
+.function-list{
+  margin-top:28px!important;
+}
+@media(max-width:380px){
+  .function-list{
+    margin-top:24px!important;
+  }
+}
+
 /* UI 2.0 · 第十八轮：首页今日任务卡适度放大 2026-09-22 */
 /* 不增加新信息，只提升“今日任务”作为首页核心卡片的视觉占比 */
 .task-card{
