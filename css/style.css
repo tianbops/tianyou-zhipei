@@ -295,11 +295,6 @@ body{color:var(--text-body)}
 }
 
 
-/* 2026-09-22 规划结果状态框最终统一字号与第二排三列布局 */
-.parse-status.success:has(.compact-result){
-  padding-top:9px;
-  padding-bottom:9px;
-}
 .parse-status.success:has(.compact-result) .status-row{
   height:22px;
   min-height:22px;
