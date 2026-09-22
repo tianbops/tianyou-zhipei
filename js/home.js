@@ -134,7 +134,7 @@ function closeUploadDetail(){
 window.closeUploadDetail=closeUploadDetail;
 window.toggleOCRText=()=>renderUploadDetail('planning');
 window.openCorrectionDetails=()=>renderUploadDetail('correction');
-window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');openUploadHistoryGuard();const sheet=overlay.querySelector('.upload-sheet');window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
+window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
 let uploadHistoryGuard=false;
 function openUploadHistoryGuard(){
   if(uploadHistoryGuard)return;
