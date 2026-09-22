@@ -55,7 +55,16 @@ function renderDetail(details){
     group.forEach(item=>{
       const cell=document.createElement('span');
       cell.className='detail-line';
-      cell.textContent=item;
+      if(/^待定\\d+家$/.test(item)){
+        cell.classList.add('pending-detail-link');
+        cell.setAttribute('role','button');
+        cell.setAttribute('tabindex','0');
+        cell.textContent=item;
+        cell.onclick=()=>window.openPendingReview?.();
+        cell.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openPendingReview?.();}};
+      }else{
+        cell.textContent=item;
+      }
       line.appendChild(cell);
     });
     row.appendChild(line);
