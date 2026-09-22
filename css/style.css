@@ -438,12 +438,8 @@ body{color:var(--text-body)}
   overflow:hidden!important;
 }
 .upload-sheet.detail-view-open > .parse-status{
-  flex:0 0 auto!important;
-  position:relative!important;
-  z-index:30!important;
-  display:block!important;
-  visibility:visible!important;
-  margin-bottom:12px!important;
+  /* 详情展开后隐藏顶部状态框；关闭详情时由 detail-view-open 移除自动恢复 */
+  display:none!important;
 }
 .upload-sheet.detail-view-open > .upload-detail-view{
   display:flex!important;
