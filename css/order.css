@@ -93,3 +93,12 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .menu-panel .logout-item{color:#FF8278!important}
 .dialog-btn button:first-child{background:#202A34!important;color:#E3E8ED!important}
 .dialog-btn button:last-child{background:#D0D7DC!important;color:#0B1015!important}
+
+
+/* UI 2.0 · 第六轮：订单详情触控与操作层级收口 2026-09-22 */
+.order-detail-page .summary-card,.order-detail-page .route-card{box-shadow:none!important}
+.order-detail-page .store-item{transition:background-color .12s ease!important}
+.order-detail-page .store-item:active{background:#1B2530!important}
+.menu-panel>div:focus-visible,.dialog-btn button:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:-2px!important}
+.menu-panel .logout-item{color:#FF8278!important}
+.dialog-btn button{font-weight:600!important}
