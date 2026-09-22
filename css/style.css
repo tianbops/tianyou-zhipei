@@ -188,7 +188,6 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 
 /* 2026-09-21 全局按钮层级微调：主要按钮再压暗一档，次要按钮高度降低一档 */
 
-button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 
 /* 2026-09-21 全局文字层级优化：成熟深色产品风格，仅调整文字色调/字号/字重，不改变布局与功能 */
