@@ -2,6 +2,9 @@
 // 历史数据按用户ID+线路+日期独立存储；允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
 
+const HISTORY_DAYS = 100;
+const FUTURE_DAYS = 1;
+
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
   const session = await authRequired(request, env);
@@ -17,7 +20,10 @@ export async function onRequest({ request, env }) {
     }
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
-    // 不传日期时返回该用户/线路全部历史日期，历史运单不再按31天自动清理。
+    // 历史数据保留100天；每次进入历史查询时执行一次清理。
+    await purgeExpiredHistory(env, userId, route);
+
+    // 不传日期时返回该用户/线路全部历史日期。
     if (!date) return await listAllHistory(env, userId, route);
 
     const key = scopedKey(userId, route, `history:${date}`);
@@ -143,6 +149,21 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
   }
   await redisPipeline(env, commands);
   return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: commands.length > 1 });
+}
+
+async function purgeExpiredHistory(env, userId, route) {
+  const today = businessDate();
+  const cutoff = addDays(today, -(HISTORY_DAYS - 1));
+  const futureCutoff = addDays(today, FUTURE_DAYS);
+  const keys = await scanKeys(env, scopedKey(userId, route, 'history:*'));
+  if (!keys.length) return;
+
+  const commands = [];
+  for (const key of keys) {
+    const date = normalizeDate(String(key).split(':history:').pop());
+    if (!date || date < cutoff || date > futureCutoff) commands.push(['DEL', key]);
+  }
+  if (commands.length) await redisPipeline(env, commands);
 }
 
 async function scanKeys(env, pattern) {
