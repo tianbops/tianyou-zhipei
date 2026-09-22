@@ -223,7 +223,9 @@ if(parsedOrders.length){
       const substantive=changedNames.filter(value=>normalizeForCompare(value)!==normalizeForCompare(baseName));
       if(substantive.length){
         correctionCount++;
-        correctionLines.push(`更正名称：${substantive.join('、')} → ${baseName}`);
+        // 修正详情只清理OCR残留在名称末尾的连接符，不改变原始名称及匹配数据。
+        const displayCorrectionNames=substantive.map(value=>String(value).trim().replace(/\\s*[-—–]+\\s*$/,'').trim()).filter(Boolean);
+        correctionLines.push(`更正名称：${(displayCorrectionNames.length?displayCorrectionNames:substantive).join('、')} → ${baseName}`);
       }
     }
   });
