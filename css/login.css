@@ -99,3 +99,12 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 .input-box input{box-shadow:none!important}
 .input-box input:focus{box-shadow:0 0 0 3px rgba(208,215,220,.10)!important}
 .bottom-actions button{min-height:40px}
+
+
+/* UI 2.0 · 第十二轮：修复登录页按钮外层方形焦点框 2026-09-22 */
+.login-page button:focus-visible,
+.login-page a:focus-visible,
+.login-page [role="button"]:focus-visible{
+  outline:none!important;
+  box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
+}
