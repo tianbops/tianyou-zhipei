@@ -1,5 +1,20 @@
+:root{
+  --bg:#05070A;
+  --card:#151D26;
+  --blue:#D0D7DC;
+  --text:#F2F5F7;
+  --muted:#9AA6B2;
+  --line:rgba(255,255,255,.075);
+  --error:#E74C3C;
+  --text-primary:#F2F5F7;
+  --text-body:#D5DCE2;
+  --text-secondary:#9AA6B2;
+  --text-tertiary:#75818D;
+  --one-surface-2:#1B2530;
+  --one-pressed:#AEB8C0;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#05070A;--card:#18212B;--blue:#2457A6;--text:#fff;--muted:#7F8B98;--line:rgba(255,255,255,.07);--error:#E74C3C}
+
 html,body{width:100%;min-height:100%;background:var(--bg)}
 body{color:var(--text);font-family:"Microsoft YaHei",Arial,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
@@ -14,7 +29,7 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 
 /* 2026-09-21 登录页按钮色彩统一：仅调整颜色 */
-:root{--blue:#DCE3E8}
+
 .login-btn{background:#DCE3E8!important;color:#0B1015!important}
 .login-btn:hover{filter:brightness(1.04)}
 .login-btn:active{background:#313E49!important;color:#fff!important}
@@ -51,11 +66,11 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 
 
 /* 2026-09-21 登录页按钮层级微调：主要按钮再压暗一档 */
-:root{--blue:#B8C1C8}
+
 .login-btn,.login-btn:disabled{background:#B8C1C8!important;color:#0B1015!important}
 
 /* 2026-09-21 登录页文字层级统一：仅调整文字表现，不改变布局/功能 */
-:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D}
+
 .login-container{color:var(--text-body)}
 .brand-main,.login-title{color:var(--text-primary)}
 .brand-sub,.login-subtitle,.switch-btn{color:var(--text-secondary)}
@@ -65,10 +80,7 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 
 
 /* UI 2.0 · 登录页 */
-:root{
-  --bg:#05070A;--card:#151D26;--blue:#D0D7DC;--text:#F2F5F7;--muted:#9AA6B2;
-  --line:rgba(255,255,255,.075);--one-surface-2:#1B2530;--one-pressed:#AEB8C0;
-}
+
 .login-container{max-width:430px;padding:24px 18px calc(28px + env(safe-area-inset-bottom));justify-content:center}
 .logo-area{margin-bottom:26px}.logo{width:148px;height:148px;margin-bottom:8px}.brand-sub{font-size:12px;letter-spacing:2.2px;color:#9AA6B2}
 .form-title{font-size:20px;margin-bottom:16px;color:#F2F5F7}
