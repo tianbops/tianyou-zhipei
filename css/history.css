@@ -185,10 +185,6 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
   outline:2px solid rgba(208,215,220,.48)!important;
   outline-offset:2px!important;
 }
-.history-page .history-date-item:active{
-  border-color:rgba(208,215,220,.20)!important;
-  background:#10161D!important;
-}
 
 
 /* UI 2.0 · 第十二轮：修复历史页按钮外层方形焦点框 2026-09-22 */
