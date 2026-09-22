@@ -920,3 +920,29 @@ body{color:var(--text-body)}
   .source-menu-cancel{height:40px!important;min-height:40px!important}
   .sheet-footer button{height:44px!important;min-height:44px!important}
 }
+
+
+/* 2026-09-22 产品UX：上传弹窗底部操作区仅在规划完成后出现
+   初始上传、识别/规划进行中均不显示“规划路线/取消”底部操作；
+   避免弹窗刚打开时出现与当前阶段无关的操作。 */
+.upload-sheet.waiting .sheet-footer,
+.upload-sheet.processing .sheet-footer,
+.upload-sheet.error .sheet-footer,
+.upload-sheet.cancelled .sheet-footer{
+  display:none!important;
+}
+.upload-sheet.success .sheet-footer{
+  display:flex!important;
+}
+
+/* 主操作按钮降低视觉重量：保留业务蓝，但降低明度与阴影存在感。 */
+.upload-sheet.success .btn-primary-action{
+  background:#1D477F!important;
+  box-shadow:0 4px 10px rgba(29,71,127,.14)!important;
+}
+.upload-sheet.success .btn-primary-action:hover{
+  background:#214F8D!important;
+}
+.upload-sheet.success .btn-primary-action:active{
+  background:#183B6A!important;
+}
