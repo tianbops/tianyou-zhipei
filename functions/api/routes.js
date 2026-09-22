@@ -18,7 +18,7 @@ export async function onRequest({ request, env }) {
   try {
     // GET：所有正常用户都可以读取任意路线的基准库，用于调度。
     if (request.method === 'GET') {
-      if (!route) return json({ error: 'Missing route parameter' }, 400);
+      if (!route) return json({ success: true, routes: await listRoutes(env) });
       const base = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId || session.id });
       if (!base) return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0, migrationRequired: true });
       return json({
@@ -133,4 +133,33 @@ function json(payload, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
   });
+}
+
+
+async function listRoutes(env) {
+  let cursor = '0';
+  const records = [];
+  do {
+    const response = await fetch(env.UPSTASH_REDIS_REST_URL + '/', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + env.UPSTASH_REDIS_REST_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SCAN', cursor, 'MATCH', 'route:*', 'COUNT', '200']),
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error('路线列表读取失败');
+    const data = await response.json().catch(() => ({}));
+    cursor = String(data?.result?.[0] || '0');
+    const keys = Array.isArray(data?.result?.[1]) ? data.result[1] : [];
+    for (const key of keys) {
+      if (key.includes(':base') || key.includes(':orders:') || key.includes(':learning')) continue;
+      const value = await fetch(env.UPSTASH_REDIS_REST_URL + '/get/' + encodeURIComponent(key), {
+        headers: { Authorization: 'Bearer ' + env.UPSTASH_REDIS_REST_TOKEN },
+        cache: 'no-store'
+      }).then(r => r.json()).catch(() => ({}));
+      const record = typeof value?.result === 'string' ? (() => { try { return JSON.parse(value.result); } catch { return null; } })() : value?.result;
+      if (record?.id) records.push(record);
+    }
+  } while (cursor !== '0');
+  records.sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }));
+  return records;
 }
