@@ -79,3 +79,24 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .settings-page .row-sub{font-size:11px!important}
 .settings-page .row-arrow{font-size:20px!important}
 .settings-page .logout-btn{margin-top:2px!important}
+
+
+/* UI 2.0 · 第九轮：设置页编辑操作顺序统一 2026-09-22 */
+#deliveryModal .sheet-actions,
+#usernameModal .sheet-actions,
+#passwordModal .sheet-actions{
+  flex-direction:row-reverse!important;
+}
+#deliveryModal .sheet-actions .primary-btn,
+#usernameModal .sheet-actions .primary-btn,
+#passwordModal .sheet-actions .primary-btn{
+  order:0!important;
+}
+#deliveryModal .sheet-actions .secondary-btn,
+#usernameModal .sheet-actions .secondary-btn,
+#passwordModal .sheet-actions .secondary-btn{
+  order:1!important;
+}
+#deleteAccountModal .sheet-actions{
+  flex-direction:row!important;
+}
