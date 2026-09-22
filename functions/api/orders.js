@@ -106,7 +106,18 @@ async function readOrder(request, env, session) {
   let selected = today;
   if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
   else if (!selected || !Array.isArray(selected.orders)) selected = history[history.length - 1] || null;
-  return json({ success: true, today: selected && normalizeDate(selected.date) === date ? selected : null, history });
+
+  // 首页保持原有“今日任务”结构，但当天可以存在多笔独立运单。
+  // today 仍返回当前最新一笔，新增汇总字段仅供首页显示多运单汇总，不改变既有详情接口语义。
+  const dailyRecords = history.filter(item => normalizeDate(item?.date) === date);
+  const todayWaybillCount = dailyRecords.length;
+  const summaryStores = dailyRecords.reduce((sum, item) => sum + (Number(item?.uniqueStoreCount) || Number(item?.count) || (Array.isArray(item?.orders) ? item.orders.length : 0)), 0);
+  const summaryWeight = dailyRecords.reduce((sum, item) => sum + parseWeightToTons(item?.totalWeight ?? item?.weight), 0);
+  const todaySummary = {
+    storeCount: summaryStores,
+    totalWeight: summaryWeight > 0 ? (Math.round((summaryWeight + Number.EPSILON) * 1000000) / 1000000) + 't' : ''
+  };
+  return json({ success: true, today: selected && normalizeDate(selected.date) === date ? selected : null, history, todayWaybillCount, todaySummary });
 }
 
 async function loadBaseData(env, route, userId) {
@@ -157,6 +168,7 @@ function scopedBaseKey(userId, route) { return `user:${encodeKey(userId)}:route:
 function scopedKey(userId, route, suffix) { return `user:${encodeKey(userId)}:route:${encodeKey(route)}:orders:${suffix}`; }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/,'').replace(/\.$/,'') || '0'}t`; }
 function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d+)?/); return !m || Number(m[0]) === 0; }
+function parseWeightToTons(value) { const s = String(value ?? '').trim().replace(/,/g, ''); const m = s.match(/[\\d]+(?:\\.\\d+)?/); if (!m) return 0; const n = Number(m[0]); if (!Number.isFinite(n)) return 0; if (/吨|\\bt\\b/i.test(s)) return n; if (/kg|千克|公斤/i.test(s)) return n / 1000; return n >= 1000 ? n / 1000 : n; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function normalizeRoute(value) { const s = String(value || '').trim(); const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
