@@ -91,3 +91,11 @@ button,input{font:inherit}button{-webkit-tap-highlight-color:transparent}
 .switch-btn{margin-top:16px;color:#B8C2CC!important;font-size:13px}
 .switch-btn:active{background:#202A34!important;color:#fff!important}
 .bottom-actions{gap:20px}.form-tip{font-size:11px;color:#75818D}
+
+
+/* UI 2.0 · 第六轮：登录页触控与输入反馈收口 2026-09-22 */
+.login-btn{box-shadow:none!important;font-weight:650!important}
+.login-btn:focus-visible,.switch-btn:focus-visible,.eye-btn:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:2px!important}
+.input-box input{box-shadow:none!important}
+.input-box input:focus{box-shadow:0 0 0 3px rgba(208,215,220,.10)!important}
+.bottom-actions button{min-height:40px}
