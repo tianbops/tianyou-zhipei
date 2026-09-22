@@ -1550,3 +1550,27 @@ a:focus-visible,
   outline:none!important;
   box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
 }
+
+
+/* UI 2.0 · 第十三轮：识别/提取中取消按钮彻底去除双层边框 2026-09-22 */
+.upload-sheet.processing .sheet-footer{
+  background:transparent!important;
+  border-top:0!important;
+  box-shadow:none!important;
+  padding:8px 12px calc(8px + env(safe-area-inset-bottom))!important;
+}
+.upload-sheet.processing .sheet-footer .btn-cancel,
+.upload-sheet.processing .sheet-footer .btn-cancel:focus,
+.upload-sheet.processing .sheet-footer .btn-cancel:focus-visible{
+  border:1px solid rgba(255,255,255,.075)!important;
+  border-radius:11px!important;
+  outline:none!important;
+  box-shadow:none!important;
+  background:#1B2530!important;
+}
+.upload-sheet.processing .sheet-footer .btn-cancel:active{
+  background:#313C47!important;
+  border-color:rgba(255,255,255,.10)!important;
+  box-shadow:none!important;
+  outline:none!important;
+}
