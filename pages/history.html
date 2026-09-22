@@ -105,7 +105,7 @@
     },{stores:0,weight:0});
 
     const displayWeight=Math.trunc((monthStats.weight+Number.EPSILON)*100)/100;
-    monthHead.innerHTML='<span class="history-date">'+escapeHtml(monthLabel)+'</span><span class="history-month-summary">配送合计：'+monthStats.stores+'家 · '+displayWeight.toFixed(2)+'t</span>';
+    monthHead.innerHTML='<span class="history-date">'+escapeHtml(monthLabel)+'</span><span class="history-month-summary">'+monthStats.stores+'家 · '+displayWeight.toFixed(2)+'t</span>';
     monthCard.appendChild(monthHead);
 
     const days=document.createElement('div');
@@ -125,7 +125,7 @@
         dayHead.setAttribute('aria-expanded','false');
         const day=String(entry.date).slice(8,10);
         const dayCount=dedupeDateRecords(entry.records).length;
-        dayHead.innerHTML='<span class="history-date">'+escapeHtml(monthLabel.slice(0,7)+day+'日')+'</span><span class="history-count">'+dayCount+'笔</span>';
+        dayHead.innerHTML='<span class="history-date">'+escapeHtml(monthParts[1]+'月'+day+'日')+'</span><span class="history-count">'+dayCount+'笔</span>';
         dayCard.appendChild(dayHead);
 
         const list=document.createElement('div');
