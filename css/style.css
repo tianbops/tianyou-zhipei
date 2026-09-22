@@ -1676,3 +1676,50 @@ a:focus-visible,
   outline:none!important;
   box-shadow:none!important;
 }
+
+
+/* UI 2.0 · 第十六轮：首页今日运单笔数视觉增强 2026-09-22 */
+/* 圆圈中的 1/2/3 为信息主体：提高尺寸、对比度与边缘识别度 */
+.status-dot{
+  width:24px!important;
+  height:24px!important;
+  min-width:24px!important;
+  min-height:24px!important;
+  border-radius:50%!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 24px!important;
+  box-sizing:border-box!important;
+  background:#3B82F6!important;
+  color:#FFFFFF!important;
+  font-size:12px!important;
+  line-height:24px!important;
+  font-weight:800!important;
+  font-family:Arial,"Microsoft YaHei",sans-serif!important;
+  letter-spacing:0!important;
+  text-align:center!important;
+  text-shadow:0 1px 1px rgba(0,0,0,.22)!important;
+  border:1px solid rgba(255,255,255,.22)!important;
+  box-shadow:0 0 0 3px rgba(59,130,246,.16),0 2px 8px rgba(59,130,246,.28)!important;
+}
+.status-dot.has-count{
+  background:#3B82F6!important;
+  color:#FFFFFF!important;
+}
+.status-dot:not(.has-count){
+  background:#5A6A7A!important;
+  color:#E1E7EC!important;
+  box-shadow:0 0 0 3px rgba(90,106,122,.12)!important;
+}
+@media(max-width:380px){
+  .status-dot{
+    width:23px!important;
+    height:23px!important;
+    min-width:23px!important;
+    min-height:23px!important;
+    flex-basis:23px!important;
+    font-size:12px!important;
+    line-height:23px!important;
+  }
+}
