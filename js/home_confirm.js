@@ -40,18 +40,143 @@
   let confirmAbortController=null;
   let confirmInFlight=false;
   let confirmStartedAt=0;
-  async function confirm(){const input=$('manualOrderInput');const taskId=0;const taskActive=()=>true;const button=$('primaryActionBtn');if(confirmInFlight)return;confirmInFlight=true;confirmStartedAt=Date.now();
+  async function confirm(){
+    const input=$('manualOrderInput');
+    const taskId=0;
+    const taskActive=()=>true;
+    const button=$('primaryActionBtn');
+    if(confirmInFlight)return;
+    confirmInFlight=true;
+    confirmStartedAt=Date.now();
+    let timer=null;
     window.renderUnifiedStatus?.('loading',15,'正在连接服务器确认录入…');
-    try{if(!parsedState.length){if(!String(input?.value||'').trim()){window.renderUnifiedStatus?.('error',100,'请先点击“规划”');return;}try{window.renderUnifiedStatus?.('loading',20,'正在应用修改…');await reparseEditedText();}catch(error){window.renderUnifiedStatus?.('error',100,error.message||'修改失败，请重试');return;}}const pending=parsedState.filter(item=>item?.needsReview);if(pending.length){window.renderUnifiedStatus?.('error',100,`请先确认 ${pending.length} 家疑似门店`);renderReview(pending);return;}const route=routeContext();if(!route){window.renderUnifiedStatus?.('error',100,'未指定配送线路');confirmInFlight=false;return;}if(taskId&&!taskActive()){confirmInFlight=false;return;}if(button){button.disabled=true;button.textContent='正在录入…';}const currentText=String(input?.value||'');const totalWeight=metaState.totalWeight||weightFromText(currentText);const date=metaState.date||'';confirmAbortController=new AbortController();const timer=setTimeout(()=>confirmAbortController?.abort(),20000);try{const response=await fetch('/api/confirm',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',signal:confirmAbortController.signal,body:JSON.stringify({orders:parsedState,route,date,vehicle:metaState.vehicle||'',totalWeight,rawText:currentText,source:metaState.source||'web-confirm',recognizedCount:Number(metaState.recognizedCount)||parsedState.length,rawOrderCount:Number(metaState.rawOrderCount)||0,baseDatabaseAvailable:metaState.baseDatabaseAvailable!==false})});const data=await response.json().catch(()=>({}));if(taskId&&!taskActive())return;if(!response.ok||!data.success){if(data.code==='REVIEW_REQUIRED')throw Object.assign(new Error(data.error||`确认失败（${response.status}）`),{reviewRequired:Array.isArray(data.review)?data.review:[]});throw Object.assign(new Error(data.error||`确认失败（${response.status}）`),{serverStage:data.stage||''});}
-      // 重复运单由服务器返回第一笔原批次；不再学习、不再生成新业务记录，直接复用原详情。
+    try{
+      if(!parsedState.length){
+        if(!String(input?.value||'').trim())throw Error('请先点击“规划”');
+        window.renderUnifiedStatus?.('loading',20,'正在应用修改…');
+        await reparseEditedText();
+      }
+
+      const pending=parsedState.filter(item=>item?.needsReview);
+      if(pending.length){
+        window.renderUnifiedStatus?.('error',100,`请先确认 ${pending.length} 家疑似门店`);
+        renderReview(pending);
+        return;
+      }
+
+      const route=routeContext();
+      if(!route){
+        window.renderUnifiedStatus?.('error',100,'未指定配送线路');
+        return;
+      }
+      if(taskId&&!taskActive())return;
+
+      if(button){
+        button.disabled=true;
+        button.textContent='正在录入…';
+      }
+
+      const currentText=String(input?.value||'');
+      const totalWeight=metaState.totalWeight||weightFromText(currentText);
+      const date=metaState.date||'';
+      confirmAbortController=new AbortController();
+      timer=setTimeout(()=>confirmAbortController?.abort(),20000);
+
+      const response=await fetch('/api/confirm',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        cache:'no-store',
+        signal:confirmAbortController.signal,
+        body:JSON.stringify({
+          orders:parsedState,
+          route,
+          date,
+          vehicle:metaState.vehicle||'',
+          totalWeight,
+          rawText:currentText,
+          source:metaState.source||'web-confirm',
+          recognizedCount:Number(metaState.recognizedCount)||parsedState.length,
+          rawOrderCount:Number(metaState.rawOrderCount)||0,
+          baseDatabaseAvailable:metaState.baseDatabaseAvailable!==false
+        })
+      });
+
+      const data=await response.json().catch(()=>({}));
+      if(taskId&&!taskActive())return;
+
+      if(!response.ok||!data.success){
+        if(data.code==='REVIEW_REQUIRED'){
+          const error=Object.assign(new Error(data.error||`确认失败（${response.status}）`),{
+            reviewRequired:Array.isArray(data.review)?data.review:[]
+          });
+          throw error;
+        }
+        throw Object.assign(new Error(data.error||`确认失败（${response.status}）`),{
+          serverStage:data.stage||''
+        });
+      }
+
       const isDuplicate=data.duplicate===true;
-      // 学习库属于辅助能力，不得阻断确认录入后的页面跳转。
       if(!isDuplicate){
         saveConfirmedLearning().catch(error=>console.warn('门店学习库更新失败，不影响确认录入',error));
       }
+
       const savedDate=data.data?.date||date;
       const savedBatch=data.data?.orderBatchId||'';
-      if(isDuplicate&&!savedBatch)throw Error('重复运单缺少原批次信息，请重试');try{const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};const userId=String(user.id||user.username||user.account||'').trim();sessionStorage.setItem('zsp_order_handoff_v1',JSON.stringify({userId,route,date:savedDate,orderBatchId:savedBatch,order:data.data,createdAt:Date.now()}))}catch(_){}window.renderUnifiedStatus?.('loading',100,'录入成功，正在打开当日数据…');document.body.classList.add('navigating-to-order');const handoffTitle=document.querySelector('.upload-sheet .sheet-title');if(handoffTitle)handoffTitle.textContent='正在打开当日数据…';const params=new URLSearchParams({route});if(savedDate)params.set('date',savedDate);if(savedBatch)params.set('orderBatchId',savedBatch);const targetUrl=`pages/order_detail.html?${params.toString()}`;window.location.assign(targetUrl); }catch(error){if(taskId&&!taskActive())return;if(error?.name==='AbortError'){if(taskActive())window.renderUnifiedStatus?.('error',100,'服务器确认录入超时，请检查网络后重试');}else if(taskActive()){const detail=error?.serverStage?('录入失败：'+(error.message||'服务器错误')+'（'+error.serverStage+'）'):(error.message||'录入失败，请重试');window.renderUnifiedStatus?.('error',100,detail);window.homeToast?.(detail,'error');}if(Array.isArray(error?.reviewRequired)&&error.reviewRequired.length&&taskActive())renderReview(error.reviewRequired);}finally{clearTimeout(timer);confirmAbortController=null;confirmInFlight=false;confirmStartedAt=0;if(taskActive()&&button){button.disabled=false;button.textContent='确认录入';button.classList.add('ready');}}}
+      if(isDuplicate&&!savedBatch)throw Error('重复运单缺少原批次信息，请重试');
+
+      try{
+        const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};
+        const userId=String(user.id||user.username||user.account||'').trim();
+        sessionStorage.setItem('zsp_order_handoff_v1',JSON.stringify({
+          userId,
+          route,
+          date:savedDate,
+          orderBatchId:savedBatch,
+          order:data.data,
+          createdAt:Date.now()
+        }));
+      }catch(_){}
+
+      window.renderUnifiedStatus?.('loading',100,'录入成功，正在打开当日数据…');
+      document.body.classList.add('navigating-to-order');
+
+      const handoffTitle=document.querySelector('.upload-sheet .sheet-title');
+      if(handoffTitle)handoffTitle.textContent='正在打开当日数据…';
+
+      const params=new URLSearchParams({route});
+      if(savedDate)params.set('date',savedDate);
+      if(savedBatch)params.set('orderBatchId',savedBatch);
+
+      const targetUrl=`pages/order_detail.html?${params.toString()}`;
+      window.location.assign(targetUrl);
+    }catch(error){
+      if(taskId&&!taskActive())return;
+      if(error?.name==='AbortError'){
+        if(taskActive())window.renderUnifiedStatus?.('error',100,'服务器确认录入超时，请检查网络后重试');
+      }else if(taskActive()){
+        const detail=error?.serverStage
+          ?('录入失败：'+(error.message||'服务器错误')+'（'+error.serverStage+'）')
+          :(error.message||'录入失败，请重试');
+        window.renderUnifiedStatus?.('error',100,detail);
+        window.homeToast?.(detail,'error');
+      }
+      if(Array.isArray(error?.reviewRequired)&&error.reviewRequired.length&&taskActive()){
+        renderReview(error.reviewRequired);
+      }
+    }finally{
+      if(timer)clearTimeout(timer);
+      confirmAbortController=null;
+      confirmInFlight=false;
+      confirmStartedAt=0;
+      if(taskActive()&&button){
+        button.disabled=false;
+        button.textContent='确认录入';
+        button.classList.add('ready');
+      }
+    }
+  }
   window.cancelConfirm=()=>{if(confirmAbortController){try{confirmAbortController.abort();}catch(_){}}confirmInFlight=false;};
   window.submitManualOrder=confirm;
   window.renderReviewStores=renderReview;
