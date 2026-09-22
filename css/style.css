@@ -1086,3 +1086,52 @@ body{color:var(--text-body)}
   font-size:17px;
   line-height:42px;
 }
+
+
+/* UI 2.0 · Uber-inspired mobile design system · 2026-09-22
+   仅调整视觉与交互反馈，不改变业务、API、数据结构或运行方式。 */
+:root{
+  --one-bg:#05070A;--one-surface:#151D26;--one-surface-2:#1B2530;--one-surface-3:#202A34;
+  --one-text:#F2F5F7;--one-body:#D5DCE2;--one-secondary:#9AA6B2;--one-tertiary:#75818D;
+  --one-line:rgba(255,255,255,.075);--one-primary:#D0D7DC;--one-primary-text:#0B1015;
+  --one-pressed:#AEB8C0;--one-danger:#FF6B5E;--one-danger-soft:rgba(255,107,94,.10);
+  --one-radius:14px;--one-radius-lg:18px;--one-touch:46px;
+}
+html{background:var(--one-bg);color-scheme:dark}
+body{background:var(--one-bg);color:var(--one-body);font-family:"Microsoft YaHei",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+button,input,textarea{font-family:inherit}
+button{min-height:44px}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid rgba(208,215,220,.62);outline-offset:2px}
+.app-container,.page-container{max-width:430px;padding-left:16px;padding-right:16px}
+.top-bar{height:56px}
+.brand-name{font-size:19px;letter-spacing:.4px}.brand-sub{font-size:10px;letter-spacing:1.6px;color:var(--one-secondary)}
+.menu-btn{width:42px;height:42px;border-radius:13px;background:var(--one-surface-2);border:1px solid var(--one-line);color:var(--one-text);box-shadow:none}
+.menu-btn:hover{background:var(--one-surface-3)}.menu-btn:active{background:var(--one-pressed);color:var(--one-primary-text);transform:scale(.97)}
+.task-card{margin-top:28px;background:var(--one-surface);border:1px solid var(--one-line);border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.task-title{font-size:18px}.task-name{gap:10px}.status-dot{width:20px;height:20px;box-shadow:none;background:#6E7A84!important;color:#0B1015;display:inline-flex;align-items:center;justify-content:center;font-size:10px;line-height:1;font-weight:700}
+.task-main{margin-top:18px}.task-info{font-size:14px;line-height:30px;color:var(--one-secondary)}.task-info strong{font-size:16px;color:var(--one-text);font-weight:600}
+.delivery-man{width:92px;height:76px}
+.function-list{margin-top:18px}.function-btn{height:58px;min-height:58px;margin-bottom:10px;border-radius:14px;background:var(--one-surface);border:1px solid var(--one-line);font-size:15px;font-weight:600;color:var(--one-text);justify-content:flex-start;padding:0 17px;box-shadow:none}
+.function-btn:hover{background:var(--one-surface-2);border-color:rgba(255,255,255,.10)}.function-btn:active{background:var(--one-pressed);color:var(--one-primary-text);transform:scale(.99)}
+.function-icon{width:24px;height:24px;flex-basis:24px;color:var(--one-body)}.function-icon svg{width:22px;height:22px}
+.home-menu{right:16px;top:68px;width:196px;background:var(--one-surface);border:1px solid var(--one-line);border-radius:16px;box-shadow:0 18px 44px rgba(0,0,0,.48)}
+.current-line{height:52px;font-size:14px;color:var(--one-text);background:var(--one-surface-2)}
+.home-menu-item{height:48px;padding:0 16px;font-size:14px;color:var(--one-body)}.home-menu-item:active{background:var(--one-surface-3)}.logout-item{color:var(--one-danger)!important}
+.card{background:var(--one-surface);border:1px solid var(--one-line);border-radius:16px;box-shadow:none;padding:16px}
+.back-btn{width:42px;height:42px;flex-basis:42px;border-radius:13px;background:var(--one-surface-2);border:1px solid var(--one-line)}
+.back-btn:hover{background:var(--one-surface-3)}.back-btn:active{background:var(--one-pressed);color:var(--one-primary-text);transform:scale(.97)}
+.parse-status{background:#0E141B;border:1px solid var(--one-line);border-radius:13px}
+.sheet-footer{gap:8px}.sheet-footer button{height:46px;min-height:46px;border-radius:12px;font-size:14px;font-weight:600}
+.btn-primary-action{background:var(--one-primary)!important;color:var(--one-primary-text)!important;flex:3}
+.btn-primary-action:active{background:var(--one-pressed)!important;color:var(--one-primary-text)!important}
+.btn-cancel{background:var(--one-surface-3)!important;color:var(--one-body)!important;flex:1}
+.btn-cancel:active{background:#313C47!important;color:#fff!important}
+.source-option{min-height:68px;border-radius:13px;background:rgba(255,255,255,.035);border:1px solid var(--one-line)}
+.source-option:active{background:var(--one-surface-3);transform:scale(.985)}
+.source-menu-cancel{height:42px;min-height:42px;border-radius:12px;background:transparent;color:var(--one-secondary)}
+.upload-sheet{border-radius:22px;background:rgba(21,29,38,.98);border-color:var(--one-line)}
+.detail-toggle,.review-summary{border-radius:12px!important;background:var(--one-surface-2)!important;border-color:var(--one-line)!important}
+#manualOrderInput{background:#0D1319;border-color:var(--one-line);border-radius:12px}
+#manualOrderInput:focus{border-color:rgba(208,215,220,.46)!important;box-shadow:0 0 0 3px rgba(208,215,220,.10)!important}
+.toast{background:var(--one-surface);border:1px solid var(--one-line);box-shadow:0 14px 36px rgba(0,0,0,.45)}
+@media(max-width:380px){.app-container,.page-container{padding-left:14px;padding-right:14px}.task-card{padding:16px}.function-btn{height:56px;min-height:56px}}
