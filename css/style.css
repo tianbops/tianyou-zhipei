@@ -117,7 +117,7 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .upload-sheet.error .btn-primary-action{display:block!important;visibility:visible!important;opacity:1!important}
 
 /* 修正详情：与规划详情统一为隐藏入口；弹窗文字左右对齐；隐藏右上角叉 */
-.review-summary{display:flex;align-items:center;justify-content:flex-start;gap:6px;width:100%;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;line-height:20px}.review-summary #reviewCount{margin-left:0;color:#fff;font-size:13px}.review-summary span:last-child{margin-left:0;font-size:18px;color:#7F8B98;line-height:1}.correction-header{justify-content:flex-start}.correction-item{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:8px;align-items:center;text-align:left}.correction-left{min-width:0;text-align:left;overflow-wrap:anywhere}.correction-arrow{text-align:center;color:#7F8B98}.correction-right{min-width:0;text-align:right;overflow-wrap:anywhere}
+.review-summary{display:flex;align-items:center;justify-content:flex-start;gap:6px;width:100%;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;line-height:20px}.review-summary #reviewCount{margin-left:0;color:#fff;font-size:13px}.review-summary span:last-child{margin-left:0;font-size:18px;color:#7F8B98;line-height:1}.correction-item{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:8px;align-items:center;text-align:left}.correction-left{min-width:0;text-align:left;overflow-wrap:anywhere}.correction-arrow{text-align:center;color:#7F8B98}.correction-right{min-width:0;text-align:right;overflow-wrap:anywhere}
 
 /* 2026-09-21 详情统一：规划详情/修正详情字号、箭头与隐藏方式一致 */
 .detail-toggle,.review-summary{display:flex;align-items:center;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;font-weight:500;line-height:20px;cursor:pointer}
@@ -131,8 +131,8 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .review-summary{display:flex;align-items:center;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;font-weight:500;line-height:20px;cursor:pointer}
 .review-summary span:last-child{margin-left:6px;font-size:18px;color:#7F8B98;line-height:1}
 .detail-toggle{cursor:pointer}
-.correction-modal{cursor:pointer}
-.correction-panel{cursor:default}
+
+
 
 
 /* 2026-09-21 上传运单弹窗统一居中 */
@@ -151,14 +151,10 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 .upload-sheet .review-name{font-size:14px}
 .upload-sheet .review-select{font-size:14px}
 .upload-sheet .review-apply{font-size:14px}
-.upload-sheet .quick-actions button{font-size:14px}
 .upload-sheet .detail-toggle{font-size:15px}
 .upload-sheet #manualOrderInput{font-size:15px}
 .upload-sheet .review-summary{font-size:15px}
 .upload-sheet .sheet-footer button{font-size:16px}
-.correction-modal .correction-title{font-size:18px}
-.correction-modal .correction-item{font-size:14px}
-.correction-modal .correction-left,.correction-modal .correction-right{font-size:14px}
 
 
 /* 2026-09-21 上传弹窗细节入口：文字居中并取消箭头；识别中取消按钮居中 */
@@ -206,10 +202,8 @@ body{color:var(--text-body)}
 .status-row #statusText{color:var(--text-secondary)}
 .status-detail,.review-name{color:var(--text-secondary)}
 .review-hint{color:#C9A45A}
-.quick-actions button,.source-menu-cancel{color:var(--text-secondary)}
 .source-option{color:var(--text-body)}
 .detail-toggle,.review-summary{color:var(--text-secondary)}
-.correction-title{color:var(--text-primary)}
 .correction-item,.correction-left,.correction-right{color:var(--text-body)}
 .toast{color:var(--text-primary)}
 /* 主/次/辅助字号层级：保持原有盒子尺寸与位置 */
@@ -220,7 +214,6 @@ body{color:var(--text-body)}
 .home-menu-item{font-size:15px;font-weight:500}
 .status-row #statusText{font-size:14px}
 .detail-toggle,.review-summary{font-size:14px;font-weight:500}
-.quick-actions button,.source-menu-cancel{font-size:13px}
 
 
 /* 2026-09-22 产品UX：读取中取消按钮与状态框同宽，恢复正常按钮高度 */
@@ -1773,8 +1766,6 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 .detail-entry-row .detail-toggle,.detail-entry-row .review-summary{align-items:center!important;justify-content:center!important;text-align:center!important}
 .sheet-footer{align-items:center!important}
 .sheet-footer button{justify-content:center!important;text-align:center!important}
-.correction-header{align-items:center!important}
-.correction-close{display:flex!important;align-items:center!important;justify-content:center!important}
 .home-menu-item{align-items:center!important}
 .toast{line-height:20px!important}
 @media(max-width:380px){.upload-sheet.processing .parse-status{min-height:42px!important;max-height:42px!important;height:42px!important}}
