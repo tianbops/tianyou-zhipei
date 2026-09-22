@@ -22,7 +22,7 @@
     const list=document.createElement('div');list.className='review-list';
     reviewState.forEach((item,index)=>{
       const row=document.createElement('div');row.className='review-item';
-      const label=document.createElement('div');label.className='review-name';label.textContent=`${item.code||`R${String(index+1).padStart(2,'0')}`} · ${String(item.name||'').trim()}`;
+      const label=document.createElement('button');label.type='button';label.className='review-name review-name-button';label.textContent=`${item.code||`R${String(index+1).padStart(2,'0')}`} · ${String(item.name||'').trim()}`;
       const select=document.createElement('select');select.className='review-select';
       const candidates=candidateList(item);
       select.innerHTML='<option value="">选择处理方式</option>'+candidates.map((candidate,i)=>`<option value="candidate:${i}">采用候选：${candidate.name}</option>`).join('')+'<option value="new">作为新增门店</option>';
@@ -33,6 +33,7 @@
         item._selectedCandidate=selected?.name||'';
         item._selectedCandidateCode=selected?.code||'';
       });
+      label.addEventListener('click',()=>{select.focus();select.click?.();});
       row.append(label,select);list.appendChild(row);
     });
     box.appendChild(list);
