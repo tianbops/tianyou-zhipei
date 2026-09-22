@@ -11,7 +11,9 @@ export async function onRequest({ request, env }) {
 
   const route = normalizeRoute(session.route);
   const userId = normalizeUserId(session.id);
+  let stage = 'start';
   try {
+    stage = 'request-body';
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
 
@@ -25,6 +27,7 @@ export async function onRequest({ request, env }) {
 
     const date = normalizeDate(body.date) || businessDate();
     const noBase = body.baseDatabaseAvailable === false;
+    stage = noBase ? 'prepare-without-base' : 'load-base';
     const base = noBase ? [] : await loadBase(env, route, userId);
     const inputCount = body.orders.length;
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
@@ -55,17 +58,21 @@ export async function onRequest({ request, env }) {
       updatedAt: now
     };
 
+    stage = 'build-order-data';
     const todayKey = scopedKey(userId, route, `today:${date}`);
     const lockKey = scopedKey(userId, route, `lock:${date}`);
     const token = createLockToken();
-    if (!(await acquireLock(env, lockKey, token, 15))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试' }, 409);
+    stage = 'acquire-lock';
+    if (!(await acquireLock(env, lockKey, token, 15))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试', stage }, 409);
     try {
       // 重复运单必须在日期锁内判断，避免两个相同确认请求并发穿透。
       // 命中后直接复用第一笔已有批次，不覆盖今日数据、不新增历史记录。
+      stage = 'duplicate-check';
       const duplicate = await findDuplicateOrder(env, userId, route, date, todayData);
       if (duplicate) {
         // 即使今日数据已经存在，也要确保历史索引存在。
         // 这样可修复“今日数据已写入、历史写入中断”后的重试，不会因为重复判断而永久跳过历史记录。
+        stage = 'duplicate-history';
         await saveHistory(env, userId, route, date, duplicate);
         await redisSet(env, scopedKey(userId, route, 'latest'), {
           date,
@@ -75,15 +82,19 @@ export async function onRequest({ request, env }) {
         return json({ success: true, duplicate: true, data: duplicate });
       }
 
+      stage = 'write-today';
       await redisSet(env, todayKey, todayData);
+      stage = 'verify-today';
       const saved = await readAfterWrite(env, todayKey, orderBatchId, orders.length);
       if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
 
       // 历史记录是确认入库的核心结果，必须先于非核心的学习库更新。
+      stage = 'write-history';
       await saveHistory(env, userId, route, date, saved);
 
       // 门店学习由前端 /api/store-learning 独立执行，不能阻断核心入库链路。
       // confirm 只负责：今日数据 → 历史记录 → latest → 返回成功。
+      stage = 'write-latest';
       await redisSet(env, scopedKey(userId, route, 'latest'), { date, orderBatchId, updatedAt: saved.updatedAt })
         .catch(error => console.warn('latest 索引更新失败，不影响订单确认成功', error));
       return json({ success: true, data: saved });
@@ -92,8 +103,8 @@ export async function onRequest({ request, env }) {
       releaseLock(env, lockKey, token).catch(() => {});
     }
   } catch (error) {
-    console.error('confirm api error', error);
-    return json({ success: false, error: error?.message || '确认入库失败' }, 503);
+    console.error('confirm api error', { stage, error });
+    return json({ success: false, error: error?.message || '确认入库失败', stage }, 503);
   }
 }
 
