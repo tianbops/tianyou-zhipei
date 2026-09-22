@@ -1042,3 +1042,21 @@ body{color:var(--text-body)}
   .upload-sheet.detail-view-open .order-info-row strong{font-size:13px!important}
   .upload-sheet.detail-view-open .correction-stat,.upload-sheet.detail-view-open .correction-stat span{font-size:12px!important}
 }
+
+/* 2026-09-22 产品UX：详情页顶部标题按外层边框几何中心居中
+   规划详情 / 修正详情均以标题栏完整边框宽度为基准，不受右侧关闭按钮影响。 */
+.upload-sheet.detail-view-open .upload-detail-header{
+  position:relative!important;
+  justify-content:center!important;
+  padding:0!important;
+}
+.upload-sheet.detail-view-open .upload-detail-title{
+  position:absolute!important;
+  left:50%!important;
+  top:50%!important;
+  transform:translate(-50%,-50%)!important;
+  width:calc(100% - 96px)!important;
+  max-width:calc(100% - 96px)!important;
+  margin:0!important;
+  text-align:center!important;
+}
