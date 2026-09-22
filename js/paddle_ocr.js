@@ -222,8 +222,7 @@
   }
 
   async function process(file, options = {}) {
-    // 不再用全局 busy 拦截新任务。取消旧任务后，用户可能立即选择第二张运单；
-    // 新任务必须能够接管，旧任务则由 operationId / taskId 双重校验自动失效。
+    // 每个任务都有独立的操作代号。旧任务取消后即使迟到返回，也只能被丢弃。
     busy = true;
     cancelRequested = false;
     const currentOperation = ++operationId;
@@ -403,7 +402,8 @@
 
   window.openFileManager = async function() {
     window.closeUploadSource?.();
-    if (busy) return;
+    // busy 仅代表旧任务仍在收尾，不再阻止用户重新选择文件。
+    // 真正的任务隔离由 taskId / operationId 负责。
     try {
       if (typeof window.showOpenFilePicker === 'function') {
         const handles = await window.showOpenFilePicker({
