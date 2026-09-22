@@ -64,7 +64,7 @@ export async function onRequest({ request, env }) {
     const lockKey = scopedKey(userId, route, `lock:${date}`);
     const token = createLockToken();
     stage = 'acquire-lock';
-    if (!(await acquireLock(env, lockKey, token, 60))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试', stage }, 409);
+    if (!(await acquireLock(env, lockKey, token, 20))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试', stage }, 409);
     try {
       // 重复运单必须在日期锁内判断，避免两个相同确认请求并发穿透。
       // 命中后直接复用第一笔已有批次，不覆盖今日数据、不新增历史记录。
