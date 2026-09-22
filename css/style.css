@@ -1,5 +1,42 @@
+:root{
+  --bg:#05070A;
+  --card:#18212B;
+  --card-strong:#1C2530;
+  --blue:#B8C1C8;
+  --text:#fff;
+  --muted:#7F8B98;
+  --line:rgba(255,255,255,.07);
+  --primary-action:#B8C1C8;
+  --primary-action-text:#0B1015;
+  --control-dark:#202A34;
+  --control-hover:#28343F;
+  --control-pressed:#313E49;
+  --focus-neutral:rgba(220,227,232,.18);
+  --text-primary:#F2F5F7;
+  --text-body:#D5DCE2;
+  --text-secondary:#9AA6B2;
+  --text-tertiary:#75818D;
+  --text-accent:#C8D0D6;
+  --one-bg:#05070A;
+  --one-surface:#151D26;
+  --one-surface-2:#1B2530;
+  --one-surface-3:#202A34;
+  --one-text:#F2F5F7;
+  --one-body:#D5DCE2;
+  --one-secondary:#9AA6B2;
+  --one-tertiary:#75818D;
+  --one-line:rgba(255,255,255,.075);
+  --one-primary:#D0D7DC;
+  --one-primary-text:#0B1015;
+  --one-pressed:#AEB8C0;
+  --one-danger:#FF6B5E;
+  --one-danger-soft:rgba(255,107,94,.10);
+  --one-radius:14px;
+  --one-radius-lg:18px;
+  --one-touch:46px;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#05070A;--card:#18212B;--card-strong:#1C2530;--blue:#2457A6;--text:#fff;--muted:#7F8B98;--line:rgba(255,255,255,.07)}
+
 html,body{width:100%;min-height:100%;background:var(--bg)}
 body{color:var(--text);font-family:"Microsoft YaHei",Arial,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparent}
@@ -138,7 +175,7 @@ button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparen
 
 
 /* 2026-09-21 全局按钮色彩统一：弱化/取消业务蓝，仅调整颜色，不改变布局与尺寸 */
-:root{--blue:#C8D0D6;--primary-action:#C8D0D6;--primary-action-text:#0B1015;--control-dark:#202A34;--control-hover:#28343F;--control-pressed:#313E49;--focus-neutral:rgba(220,227,232,.18)}
+
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control-dark)!important;color:#E3E8ED!important}
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
@@ -154,12 +191,12 @@ input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-c
 
 
 /* 2026-09-21 全局按钮层级微调：主要按钮再压暗一档，次要按钮高度降低一档 */
-:root{--blue:#B8C1C8;--primary-action:#B8C1C8;--primary-action-text:#0B1015}
+
 button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 
 /* 2026-09-21 全局文字层级优化：成熟深色产品风格，仅调整文字色调/字号/字重，不改变布局与功能 */
-:root{--text-primary:#F2F5F7;--text-body:#D5DCE2;--text-secondary:#9AA6B2;--text-tertiary:#75818D;--text-accent:#C8D0D6}
+
 body{color:var(--text-body)}
 .brand-name,.task-title,.card-title,.current-line{color:var(--text-primary)}
 .brand-sub{color:var(--text-tertiary)}
@@ -1090,13 +1127,7 @@ body{color:var(--text-body)}
 
 /* UI 2.0 · Uber-inspired mobile design system · 2026-09-22
    仅调整视觉与交互反馈，不改变业务、API、数据结构或运行方式。 */
-:root{
-  --one-bg:#05070A;--one-surface:#151D26;--one-surface-2:#1B2530;--one-surface-3:#202A34;
-  --one-text:#F2F5F7;--one-body:#D5DCE2;--one-secondary:#9AA6B2;--one-tertiary:#75818D;
-  --one-line:rgba(255,255,255,.075);--one-primary:#D0D7DC;--one-primary-text:#0B1015;
-  --one-pressed:#AEB8C0;--one-danger:#FF6B5E;--one-danger-soft:rgba(255,107,94,.10);
-  --one-radius:14px;--one-radius-lg:18px;--one-touch:46px;
-}
+
 html{background:var(--one-bg);color-scheme:dark}
 body{background:var(--one-bg);color:var(--one-body);font-family:"Microsoft YaHei",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 button,input,textarea{font-family:inherit}
@@ -1140,12 +1171,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 /* UI 2.0 · 第二轮移动端精修
    目标：更接近 Uber 式“内容优先、少装饰、强层级、统一触控反馈”。
    仅覆盖 UI，不改变业务逻辑。 */
-:root{
-  --one-bg:#05070A;--one-surface:#151D26;--one-surface-2:#1B2530;--one-surface-3:#202A34;
-  --one-text:#F2F5F7;--one-body:#D5DCE2;--one-secondary:#9AA6B2;--one-tertiary:#75818D;
-  --one-line:rgba(255,255,255,.075);--one-primary:#D0D7DC;--one-primary-text:#0B1015;
-  --one-pressed:#AEB8C0;--one-danger:#FF6B5E;
-}
+
 *{-webkit-tap-highlight-color:transparent}
 button,a,[role="button"]{touch-action:manipulation;-webkit-user-select:none;user-select:none}
 button{transition:background-color .12s ease,color .12s ease,border-color .12s ease,transform .08s ease}
