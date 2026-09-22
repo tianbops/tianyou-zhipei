@@ -2,7 +2,7 @@
 // OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前用户线路基准库匹配。
 // 基准库按线路独立；学习库进一步按用户ID+线路隔离，避免不同账号互相学习。
 import { authRequired } from './_auth.js';
-import { loadRouteBase, routeLearningKey, canUseRoute, redisGet as coreRedisGet } from './_data.js';
+import { loadRouteBase, routeLearningKey, legacyUserLearningKey, canUseRoute, redisGet as coreRedisGet } from './_data.js';
 
 const baseMatchIndexCache = new Map();
 const BASE_INDEX_CACHE_MAX = 16;
@@ -25,7 +25,7 @@ export async function onRequest({ request, env }) {
     if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该路线' }, 403);
     const [baseRecord, learning] = await Promise.all([
       getBaseStores(env, route, deadline, userId),
-      getLearning(env, route, deadline)
+      getLearning(env, route, userId, deadline)
     ]);
     const dataReadyAt = Date.now();
     const base = getCachedBaseMatchIndex(route, baseRecord.dataVersion, baseRecord.stores);
@@ -234,8 +234,9 @@ function getCachedBaseMatchIndex(route, dataVersion, stores) {
   return index;
 }
 
-async function getLearning(env, route, deadline) {
-  const data = await coreRedisGet(env, routeLearningKey(route));
+async function getLearning(env, route, userId, deadline) {
+  let data = await coreRedisGet(env, routeLearningKey(route));
+  if (!data || typeof data !== 'object') data = await coreRedisGet(env, legacyUserLearningKey(userId, route));
   if (!data || typeof data !== 'object') return { version: 1, route: normalizeRoute(route), aliases: {} };
   return { ...data, version: 1, route: normalizeRoute(route), aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
