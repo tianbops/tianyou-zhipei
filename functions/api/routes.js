@@ -101,7 +101,11 @@ export async function onRequest({ request, env }) {
     return json({ error: 'Method not allowed' }, 405);
   } catch (error) {
     console.error('routes api error', error);
-    return json({ error: '线路基准数据库服务异常' }, 503);
+    return json({
+      success: false,
+      error: error?.message || '线路基准数据库服务异常',
+      code: 'ROUTES_API_ERROR'
+    }, 503);
   }
 }
 
