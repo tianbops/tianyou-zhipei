@@ -17,7 +17,7 @@ export async function onRequest({ request, env }) {
     const route = normalizeRoute(body.route || session.boundRouteId);
     const userId = normalizeUserId(session.id);
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
-    if (!canManageRoute(session.user || session, route)) return json({ success: false, error: '只有绑定该路线的用户可以维护门店学习数据' }, 403);
+    if (!canManageRoute(session.user || session, route)) return json({ success: false, error: '只有绑定该线路的用户可以维护门店学习数据' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '学习数据库不可用' }, 500);
 
     const input = Array.isArray(body.items) ? body.items : [body];
