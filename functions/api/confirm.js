@@ -390,7 +390,6 @@ async function getLearning(env, keyName) {
 }
 
 function scopedBaseKey(userId, route) { return routeBaseKey(route); }
-function routeOrderKey(route, suffix) { return routeOrderKey(route, suffix); }
 function scopedLearningKey(userId, route, suffix = '') { return `${routeLearningKey(route)}${suffix ? `:${suffix}` : ''}`; }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
