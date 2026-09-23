@@ -132,8 +132,8 @@ window.Auth = {
     return this.authPromise;
   },
 
-  getCurrentRoute() { return this.serverUser?.route || ''; },
-  getBoundRoute() { return this.serverUser?.boundRouteId || this.serverUser?.route || ''; },
+  getCurrentRoute() { return this.getDispatchRoute(); },
+  getBoundRoute() { return this.serverUser?.boundRouteId || ''; },
   getDispatchRoute() {
     const selected = String(sessionStorage.getItem('zhipei_dispatch_route_v1') || '').trim();
     return selected || this.getBoundRoute();
