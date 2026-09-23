@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, loadRouteBase, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, loadRouteBase, normalizeRoute, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 
@@ -348,21 +348,6 @@ function key(value) { return String(value || '').trim().replace(/[\s\u3000（）
 function cleanCode(value) { const text = String(value || '').trim(), match = text.match(/\d+/); return match ? String(Number(match[0])).padStart(2, '0') : text; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
-function normalizeRoute(value) { const s = String(value || '').trim(), m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
-function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
-function normalizeVehicle(value) { return String(value || '').trim().replace(/\\s+/g, '').toUpperCase(); }
-function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0'}t`; }
-function resolveTotalWeight(value, rawText) { const direct = normalizeWeight(value); if (direct) return direct; const source = String(rawText || '').replace(/\s+/g, ' '); const match = source.match(/(?:总\s*重\s*量|总重|重量)\s*[:：]?\s*([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/([\d]+(?:\.\d+)?)\s*(kg|千克|公斤|吨|t)\b/i); return match ? normalizeWeight(`${match[1]}${match[2] || ''}`) : ''; }
-function businessOrderSignature(record) {
-  if (!record || !Array.isArray(record.orders) || !record.orders.length) return '';
-  const route = normalizeRoute(record.route);
-  const date = normalizeDate(record.date);
-  const vehicle = normalizeVehicle(record.vehicle);
-  const weight = normalizeWeight(record.totalWeight ?? record.weight);
-  const stores = record.orders.map(item => key(item?.name)).filter(Boolean).sort();
-  if (!route || !date || !vehicle || !weight || !stores.length) return '';
-  return JSON.stringify({ route, date, vehicle, weight, stores });
-}
 function historySignature(record) {
   const business = businessOrderSignature(record);
   if (business) return business;
