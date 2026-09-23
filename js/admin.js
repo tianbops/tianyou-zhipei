@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   $('#refreshUsers').onclick=loadUsers;
   $('#refreshRoutes').onclick=loadRoutes;
   $('#refreshLogs').onclick=loadLogs;
+  $('#resetDataBtn').onclick=resetData;
   $('#saveRoute').onclick=saveRoute;
   $('#backBtn').onclick=()=>history.back();
   await boot();
@@ -59,7 +60,34 @@ async function saveRoute(){
 async function resetPassword(id){const password=prompt('输入新的6-72位密码');if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
 async function setRole(id,role){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,role}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
-function switchTab(tab){document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));$('#usersTab').classList.toggle('hidden',tab!=='users');$('#routesTab').classList.toggle('hidden',tab!=='routes');$('#logsTab').classList.toggle('hidden',tab!=='logs')}
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
+  $('#usersTab').classList.toggle('hidden',tab!=='users');
+  $('#routesTab').classList.toggle('hidden',tab!=='routes');
+  $('#logsTab').classList.toggle('hidden',tab!=='logs');
+  $('#resetTab').classList.toggle('hidden',tab!=='reset');
+}
+async function resetData(){
+  const key=$('#resetKey').value;
+  const confirmation=$('#resetConfirmation').value.trim();
+  if(!key){notice('请输入数据重置密钥',true);return}
+  if(confirmation!=='确认清空智配One数据'){notice('确认文字不正确',true);return}
+  if(!confirm('最后确认：这将删除全部智配One业务数据，包括当前管理员账号。确定继续？')) return;
+  const btn=$('#resetDataBtn');
+  btn.disabled=true;
+  btn.textContent='正在清空…';
+  $('#resetResult').classList.add('hidden');
+  try{
+    const r=await api('/api/admin/data-reset',{method:'POST',headers:{'X-Data-Reset-Key':key},body:{confirmation}});
+    if(!r.success) throw new Error(r.error||'数据重置失败');
+    $('#resetResult').textContent=`已清空：扫描 ${r.scanned||0} 个键，删除 ${r.deleted||0} 个键。请重新注册管理员并建立路线数据。`;
+    $('#resetResult').classList.remove('hidden');
+    notice('数据重置完成。当前管理员账号已删除，请重新注册。');
+    $('#resetKey').value='';
+    $('#resetConfirmation').value='';
+  }catch(e){notice(e.message||'数据重置失败',true)}
+  finally{btn.disabled=false;btn.textContent='清空全部智配One业务数据'}
+}
 function findUser(id){return users.find(u=>u.id===id)}
 async function api(url,opt={}){const o={method:opt.method||'GET',headers:{'Content-Type':'application/json'}};if(opt.body)o.body=JSON.stringify(opt.body);const res=await fetch(url,o);const raw=await res.text();let data=null;try{data=raw?JSON.parse(raw):null}catch{}if(!res.ok){if(data&&data.error)throw new Error(`${url} HTTP ${res.status}：${data.error}`);throw new Error(`${url} HTTP ${res.status}：${raw.slice(0,160)||'服务器无响应内容'}`)}if(!data)throw new Error(`${url}：服务器返回非JSON响应`);return data}
 function notice(msg,error=false){const n=$('#notice');n.textContent=msg;n.classList.remove('hidden');n.style.borderLeft=error?'3px solid var(--danger)':'3px solid var(--blue)'}
