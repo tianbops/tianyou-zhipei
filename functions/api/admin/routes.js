@@ -53,7 +53,12 @@ export async function onRequest({ request, env }) {
     }
 
     // 清理本次解绑的旧用户绑定字段。
-    const oldIds = Array.isArray(current?.boundUserIds) ? current.boundUserIds : [];
+    // 同时读取角色字段，兼容早期路线记录中 boundUserIds 缺失/过期的情况。
+    const oldIds = [...new Set([
+      ...(Array.isArray(current?.boundUserIds) ? current.boundUserIds : []),
+      String(current?.driverUserId || ''),
+      String(current?.deliveryUserId || '')
+    ].filter(Boolean))];
     await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId });
 
     for (const oldId of oldIds) {
