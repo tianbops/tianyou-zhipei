@@ -16,7 +16,7 @@ export async function onRequest({ request, env }) {
     if (request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const route = normalizeRoute(body.route);
-      if (!route || !/^\\d+号线$/.test(route)) return json({ success: false, error: '请输入有效线路，例如 17号线' }, 400);
+      if (!route || !/^\d+号线$/.test(route)) return json({ success: false, error: '请输入有效线路，例如 17号线' }, 400);
       const now = new Date().toISOString();
       const record = {
         schemaVersion: 1,
