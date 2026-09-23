@@ -64,7 +64,7 @@ async function deleteUser(env, admin, userId) {
     return json({ success: false, error: '不能直接删除系统管理员账号，请先取消管理员身份' }, 400);
   }
 
-  const boundRoute = String(user.boundRouteId || user.route || '').trim();
+  const boundRoute = String(user.boundRouteId || '').trim();
   if (boundRoute) return json({ success: false, error: '该用户已绑定路线，请先解除路线绑定' }, 409);
 
   const userKey = `user:${encodeKey(userId)}`;
