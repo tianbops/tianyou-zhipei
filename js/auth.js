@@ -32,6 +32,7 @@ window.Auth = {
       throw error;
     }
     this.serverUser = data.user || null;
+    this.clearDispatchRoute();
     return this.serverUser;
   },
 
@@ -61,6 +62,7 @@ window.Auth = {
       throw error;
     }
     this.serverUser = data.user || null;
+    this.clearDispatchRoute();
     return this.serverUser;
   },
 
@@ -148,6 +150,7 @@ window.Auth = {
   getRoute() { return this.getDispatchRoute(); },
 
   async logout() {
+    this.clearDispatchRoute();
     this.serverUser = null;
     this.authPromise = null;
     await fetch('/api/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
