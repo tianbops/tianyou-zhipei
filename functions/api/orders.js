@@ -1,7 +1,7 @@
 // Zhipei One - 用户独立订单 API
 // 订单按线路+日期统一存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 8000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -76,7 +76,16 @@ async function saveOrder(request, env, session) {
     const historyKey = routeOrderKey(route, `history:${date}`);
     let updatedHistory = null;
     if (isVehicleOnlyUpdate) {
-      const historyData = await redisGet(env, historyKey);
+      let historyData = await redisGet(env, historyKey);
+      if (!Array.isArray(historyData) && isBoundRoute(session, route)) {
+        const users = await listUsersByRoute(env, route);
+        const legacyLists = await Promise.all(users.map(async user => {
+          const legacy = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
+          return Array.isArray(legacy) ? legacy : [];
+        }));
+        const merged = legacyLists.flat();
+        historyData = merged.length ? merged : null;
+      }
       if (Array.isArray(historyData)) {
         updatedHistory = historyData.map(item =>
           item?.orderBatchId === orderBatchId
