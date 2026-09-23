@@ -1,6 +1,7 @@
 // 天友智配One - 更改登录账号
 // 更改账号必须验证当前密码，并原子占用新账号名。
 import { authRequired, createSession, sessionCookie } from './_auth.js';
+import { publicUser, normalizeRoute, redisCommand } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -58,9 +59,6 @@ export async function onRequest({ request, env }) {
   }
 }
 
-function publicUser(user) {
-  return { id: String(user.id), username: String(user.username), name: String(user.name || user.username), route: normalizeRoute(user.route), vehicle: String(user.vehicle || '') };
-}
 function normalizeUsername(value) { return String(value || '').trim().toLowerCase(); }
 function normalizeRoute(value) { const s = String(value || '').trim(); const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
 function parseRecord(value) { if (!value) return null; if (typeof value !== 'string') return value; try { const first = JSON.parse(value); return typeof first === 'string' ? JSON.parse(first) : first; } catch { return null; } }
