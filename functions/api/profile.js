@@ -29,8 +29,8 @@ export async function onRequest({ request, env }) {
       phone,
       vehicle,
       // 任何情况下都以服务器当前绑定关系为准。
-      boundRouteId: String(user.boundRouteId || user.route || '').trim(),
-      route: String(user.boundRouteId || user.route || '').trim(),
+      boundRouteId: String(user.boundRouteId || '').trim(),
+      route: String(user.boundRouteId || '').trim(),
       updatedAt: new Date().toISOString(),
       sessionVersion: Number(user.sessionVersion || 1) + 1
     };
