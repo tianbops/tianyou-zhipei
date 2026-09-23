@@ -1,12 +1,14 @@
 const { request } = require('../../utils/api');
 const app = getApp();
 Page({
-  data: { user: {}, stores: [] },
+  data: { user: {}, dispatchRoute: '', stores: [] },
   onShow() { this.load(); },
   async load() {
-    const user = app.globalData.user || wx.getStorageSync('zhipei_user') || {}; this.setData({ user });
+    const user = app.globalData.user || wx.getStorageSync('zhipei_user') || {};
+    const route = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || user.boundRouteId || user.route || '').trim();
+    this.setData({ user, dispatchRoute: route });
     try {
-      const data = await request('/api/orders');
+      const data = await request(route ? `/api/orders?route=${encodeURIComponent(route)}` : '/api/orders');
       const order = data?.today || data?.order || data || {};
       const stores = Array.isArray(order.orders) ? order.orders : (Array.isArray(order.stores) ? order.stores : []);
       this.setData({ stores });
