@@ -48,13 +48,24 @@ async function createRequest(env, user, request) {
   if (!canUseRoute(user, route)) return json({ success: false, error: '当前账号不可使用该线路' }, 403);
 
   const boundRoute = normalizeRoute(user.boundRouteId);
-  if (boundRoute) return json({ success: false, error: '当前账号已绑定线路，请先解除绑定后再申请' }, 409);
+  if (boundRoute === route) return json({ success: false, error: '当前账号已在该线路，无需重复申请' }, 409);
 
   const existing = await findPendingForUser(env, user.id);
   if (existing) return json({ success: false, error: '已有待审核线路申请，请等待管理员处理' }, 409);
 
   const routeRecord = await getRoute(env, route);
   if (!routeRecord || routeRecord.status === 'disabled') return json({ success: false, error: '该线路不存在或已停用' }, 404);
+
+  const targetDriver = String(routeRecord.driverUserId || '');
+  const targetDelivery = String(routeRecord.deliveryUserId || '');
+  const targetCount = [targetDriver, targetDelivery].filter(Boolean).length;
+  const targetSlotUserId = duty === 'driver' ? targetDriver : targetDelivery;
+  if (targetSlotUserId && targetSlotUserId !== user.id) {
+    return json({ success: false, error: '该线路对应岗位已有人员，不能进入' }, 409);
+  }
+  if (targetCount >= 2) {
+    return json({ success: false, error: '该线路人员已满，无法进入' }, 409);
+  }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
