@@ -24,6 +24,11 @@ async function saveOrder(request, env, session) {
   const body = await request.json().catch(() => ({}));
   const route = normalizeRoute(body.route || session.route), userId = normalizeUserId(session.id);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
+  // /api/orders POST 仅保留“订单详情页更换车辆”这一增量写操作。
+  // 正式运单录入必须经过 /api/confirm，避免出现“今日订单已写入、历史记录未生成”的半确认状态。
+  const source = String(body.source || '').trim();
+  if (source !== 'order-detail') return json({ error: '订单录入请使用确认接口' }, 409);
+  if (!String(body.orderBatchId || '').trim()) return json({ error: '缺少原订单批次，不能修改车辆' }, 400);
   if (!Array.isArray(body.orders) || !body.orders.length) return json({ error: '缺少订单数据' }, 400);
   const date = normalizeDate(body.date) || businessDate();
   const key = scopedKey(userId, route, `today:${date}`), latestKey = scopedKey(userId, route, 'latest');
@@ -34,11 +39,12 @@ async function saveOrder(request, env, session) {
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
     // 订单详情页的“更换车辆”只是修改当日车辆，不应重新按当前基准库计算订单。
     // 历史/今日订单必须继续使用原批次已经确认的门店顺序与匹配结果。
-    const isVehicleOnlyUpdate = String(body.source || '') === 'order-detail'
+    const isVehicleOnlyUpdate = source === 'order-detail'
       && existing?.orderBatchId
       && orderBatchId === existing.orderBatchId
       && Array.isArray(existing.orders)
       && existing.orders.length > 0;
+    if (!isVehicleOnlyUpdate) return json({ error: '原订单不存在或批次已变化，不能修改车辆' }, 409);
 
     let orders;
     let rawOrderCount;
@@ -65,7 +71,7 @@ async function saveOrder(request, env, session) {
       newStoreCount: orders.filter(x => x.isNew).length,
       duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
       recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount, rawOrderCount,
-      source: String(body.source || 'web'), updatedAt: new Date().toISOString()
+      source, updatedAt: new Date().toISOString()
     };
     const historyKey = scopedKey(userId, route, `history:${date}`);
     let updatedHistory = null;
