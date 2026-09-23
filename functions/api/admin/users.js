@@ -65,7 +65,7 @@ async function deleteUser(env, admin, userId) {
   }
 
   const boundRoute = String(user.boundRouteId || '').trim();
-  if (boundRoute) return json({ success: false, error: '该用户已绑定路线，请先解除路线绑定' }, 409);
+  if (boundRoute) return json({ success: false, error: '该用户已绑定线路，请先解除线路绑定' }, 409);
 
   const userKey = `user:${encodeKey(userId)}`;
   const usernameKey = `user:username:${encodeURIComponent(String(user.username || '').trim().toLowerCase())}`;
