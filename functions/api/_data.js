@@ -130,9 +130,10 @@ export async function loadRouteBase(env, route, options = {}) {
         return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
       }
 
-      const record = await getRoute(env, normalized);
-      const candidates = Array.isArray(record?.boundUserIds) ? record.boundUserIds.filter(Boolean) : [];
-      for (const userId of candidates) {
+      const boundUsers = await listUsersByRoute(env, normalized);
+      for (const user of boundUsers) {
+        const userId = String(user?.id || '').trim();
+        if (!userId) continue;
         const legacy = await redisGet(env, legacyUserBaseKey(userId, normalized));
         if (!legacy || !Array.isArray(legacy.stores) || !legacy.stores.length) continue;
         const migrated = {
