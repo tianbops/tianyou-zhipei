@@ -137,7 +137,7 @@ export async function onRequest({ request, env }) {
 }
 
 async function loadBase(env, route, userId) {
-  const raw = await loadRouteBase(env, route, { allowLegacyUserId: userId });
+  const raw = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId === route ? userId : undefined });
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${route}路线基准数据库`);
   return stores.map((store, index) => ({
