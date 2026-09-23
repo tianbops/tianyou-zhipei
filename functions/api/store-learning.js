@@ -104,8 +104,13 @@ async function getBaseStores(env, route, userId) {
 
 async function getLearning(env, key, userId, route, boundRouteId) {
   let data = await redisGet(env, key);
-  if ((!data || typeof data !== 'object') && normalizeRoute(boundRouteId) === normalizeRoute(route)) data = await redisGet(env, legacyUserLearningKey(userId, route));
+  let fromLegacy = false;
+  if ((!data || typeof data !== 'object') && normalizeRoute(boundRouteId) === normalizeRoute(route)) {
+    data = await redisGet(env, legacyUserLearningKey(userId, route));
+    fromLegacy = Boolean(data && typeof data === 'object');
+  }
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
+  if (fromLegacy) await redisSet(env, key, { ...data, version: 4, route, migratedFromUserId: userId, migratedAt: new Date().toISOString() });
   return { ...data, version: 4, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
