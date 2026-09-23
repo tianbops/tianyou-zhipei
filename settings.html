@@ -33,6 +33,18 @@
   </div>
 </section>
 
+
+<section class="group" id="routeBindingGroup">
+  <div class="group-title">线路管理</div>
+  <div class="settings-card">
+    <button class="setting-row" type="button" onclick="openRouteBinding()">
+      <span class="row-icon"><span class="z-icon" aria-hidden="true">↔</span></span>
+      <span class="row-main"><span class="row-title">线路绑定</span><span class="row-sub" id="routeBindingSummary">可申请绑定线路</span></span>
+      <span class="row-arrow" aria-hidden="true">›</span>
+    </button>
+  </div>
+</section>
+
 <section class="group" id="adminSetupGroup" style="display:none">
   <div class="group-title">系统初始化</div>
   <div class="settings-card">
@@ -75,6 +87,9 @@
 </main>
 
 <div class="modal" id="adminSetupModal" onclick="backdropClose(event,'adminSetupModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="adminSetupTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="adminSetupTitle">初始化系统管理员</div><button class="close-btn" type="button" onclick="closeModal('adminSetupModal')" aria-label="关闭">×</button></div><div class="sheet-note">仅将当前登录账号提升为系统管理员。初始化密钥仅用于本次验证，不会保存到浏览器。</div><div class="field"><label class="field-label" for="adminSetupKey">管理员初始化密钥</label><div class="input-wrap"><input id="adminSetupKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="请输入初始化密钥"><button class="eye" type="button" onclick="togglePassword('adminSetupKey',this)" aria-label="显示或隐藏密钥">◉</button></div></div><div id="adminSetupMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('adminSetupModal')">取消</button><button class="primary-btn" id="adminSetupButton" type="button" onclick="bootstrapAdmin()">初始化</button></div></section></div>
+
+
+<div class="modal" id="routeBindingModal" onclick="backdropClose(event,'routeBindingModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="routeBindingTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="routeBindingTitle">线路绑定</div><button class="close-btn" type="button" onclick="closeModal('routeBindingModal')" aria-label="关闭">×</button></div><div class="sheet-note" id="routeBindingNote">未绑定用户可以申请已有线路；管理员通过后才会正式绑定。</div><div class="field" id="bindingRouteField"><label class="field-label" for="bindingRoute">申请线路</label><div class="input-wrap"><select id="bindingRoute"></select></div></div><div class="field" id="bindingDutyField"><label class="field-label" for="bindingDuty">申请身份</label><div class="input-wrap"><select id="bindingDuty"><option value="driver">驾驶员</option><option value="delivery">配送员</option></select></div></div><div id="routeBindingMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('routeBindingModal')">取消</button><button class="primary-btn" id="routeBindingButton" type="button" onclick="submitRouteBinding()">提交申请</button></div></section></div>
 
 <div class="modal" id="deliveryModal" onclick="backdropClose(event,'deliveryModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="deliveryTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="deliveryTitle">配送资料</div><button class="close-btn" type="button" onclick="closeModal('deliveryModal')" aria-label="关闭">×</button></div><div class="field"><label class="field-label" for="route">配送线路</label><div class="input-wrap"><input id="route" type="text" inputmode="numeric" placeholder="例如 17号线" autocomplete="off"></div></div><div class="field"><label class="field-label" for="vehicle">默认车辆</label><div class="input-wrap"><input id="vehicle" type="text" placeholder="例如 渝DK7692" autocomplete="off" maxlength="30"></div></div><div id="profileMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('deliveryModal')">取消</button><button class="primary-btn" id="saveButton" type="button" onclick="saveProfile()">保存</button></div></section></div>
 
@@ -129,6 +144,43 @@ async function bootstrapAdmin(){
     setTimeout(()=>{Auth.logout();location.replace('index.html?adminInitialized=1')},800);
   }catch(error){showMessage('adminSetupMessage',error.message||'初始化失败，请检查密钥后重试');}
   finally{button.disabled=false;button.textContent='初始化'}
+}
+
+async function openRouteBinding(){
+  hideMessage('routeBindingMessage');
+  try{
+    const status=await fetch('/api/route-binding',{cache:'no-store',credentials:'same-origin'}).then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'线路绑定状态读取失败');return d});
+    const summary=$('routeBindingSummary');
+    if(status.boundRoute){
+      summary.textContent='已绑定 '+status.boundRoute+' · 可自主解除';
+      $('bindingRouteField').style.display='none'; $('bindingDutyField').style.display='none';
+      $('routeBindingNote').textContent='当前已绑定 '+status.boundRoute+'。解除绑定无需管理员审核，解除后可重新申请其他线路。';
+      $('routeBindingButton').textContent='解除当前绑定'; $('routeBindingButton').onclick=unbindRoute;
+    }else if(status.pending){
+      summary.textContent='申请审核中 · '+status.pending.route;
+      $('bindingRouteField').style.display='none'; $('bindingDutyField').style.display='none';
+      $('routeBindingNote').textContent='已提交 '+status.pending.route+'（'+(status.pending.duty==='driver'?'驾驶员':'配送员')+'）申请，请等待管理员审核。';
+      $('routeBindingButton').textContent='关闭'; $('routeBindingButton').onclick=()=>closeModal('routeBindingModal');
+    }else{
+      summary.textContent='可申请绑定线路'; $('bindingRouteField').style.display=''; $('bindingDutyField').style.display='';
+      $('routeBindingNote').textContent='未绑定用户可以申请已有线路；管理员通过后才会正式绑定。';
+      const r=await fetch('/api/routes',{cache:'no-store',credentials:'same-origin'}); const data=await r.json().catch(()=>({})); if(!r.ok||!data.success)throw new Error(data.error||'线路列表读取失败');
+      const active=(data.routes||[]).filter(x=>x.status!=='disabled'); $('bindingRoute').innerHTML=active.map(x=>'<option value="'+escAttr(x.id)+'">'+esc(x.name||x.id)+'</option>').join('');
+      $('routeBindingButton').textContent='提交申请'; $('routeBindingButton').onclick=submitRouteBinding;
+      if(!active.length){$('routeBindingMessage').textContent='当前暂无可申请线路';}
+    }
+    openModal('routeBindingModal');
+  }catch(e){showMessage('routeBindingMessage',e.message||'线路绑定服务异常');openModal('routeBindingModal')}
+}
+async function submitRouteBinding(){
+  const route=$('bindingRoute').value; const duty=$('bindingDuty').value; const button=$('routeBindingButton'); hideMessage('routeBindingMessage');
+  if(!route)return showMessage('routeBindingMessage','请选择线路'); button.disabled=true; button.textContent='提交中…';
+  try{const r=await fetch('/api/route-binding',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({route,duty})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'申请提交失败');showMessage('routeBindingMessage','申请已提交，请等待管理员审核','success');$('routeBindingSummary').textContent='申请审核中 · '+d.request.route;setTimeout(()=>openRouteBinding(),600)}catch(e){showMessage('routeBindingMessage',e.message||'申请提交失败')}finally{button.disabled=false;button.textContent='提交申请'}
+}
+async function unbindRoute(){
+  if(!confirm('确定解除当前线路绑定吗？解除无需管理员审核，之后可以重新申请其他线路。'))return;
+  const button=$('routeBindingButton');button.disabled=true;button.textContent='解除中…';
+  try{const r=await fetch('/api/route-binding',{method:'DELETE',credentials:'same-origin',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'解除绑定失败');showMessage('routeBindingMessage','线路已解除，可重新申请','success');setTimeout(()=>openRouteBinding(),600)}catch(e){showMessage('routeBindingMessage',e.message||'解除绑定失败')}finally{button.disabled=false;button.textContent='解除当前绑定'}
 }
 async function saveProfile(){const route=$('route').value.trim();const vehicle=$('vehicle').value.trim();const name=String(currentUser?.name||'').trim();const button=$('saveButton');hideMessage('profileMessage');if(!name)return showMessage('profileMessage','账户资料读取失败，请刷新后重试');if(!Auth.isValidRouteCode(route))return showMessage('profileMessage','请输入有效线路，例如 17号线');button.disabled=true;button.textContent='保存中…';try{const user=await Auth.updateProfile({name,route,vehicle});updateHero(user);showMessage('profileMessage','配送资料已保存','success');setTimeout(()=>{closeModal('deliveryModal');location.replace('home.html')},500)}catch(error){showMessage('profileMessage',error.message||'保存失败，请稍后重试')}finally{button.disabled=false;button.textContent='保存'}}
 async function changeUsername(){const newUsername=$('newUsername').value.trim();const password=$('accountPassword').value;const button=$('accountButton');hideMessage('accountMessage');if(!/^[a-zA-Z0-9_]{3,32}$/.test(newUsername))return showMessage('accountMessage','新账号需为3-32位字母、数字或下划线');if(!password)return showMessage('accountMessage','请输入当前密码');if(newUsername.toLowerCase()===$('currentUsername').value.toLowerCase())return showMessage('accountMessage','新账号不能与当前账号相同');button.disabled=true;button.textContent='更改中…';try{const response=await fetch('/api/change-username',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({newUsername,password})});const data=await response.json().catch(()=>({}));if(response.status===401){location.href='index.html';return}if(!response.ok||!data.success)throw new Error(data.error||'账号更改失败，请稍后重试');updateHero(data.user);$('newUsername').value='';$('accountPassword').value='';showMessage('accountMessage','账号更改成功','success');setTimeout(()=>closeModal('usernameModal'),700)}catch(error){showMessage('accountMessage',error.message||'账号更改失败，请稍后重试')}finally{button.disabled=false;button.textContent='确认更改'}}
