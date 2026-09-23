@@ -21,7 +21,7 @@
 
     <nav class="tabs" aria-label="管理模块">
       <button class="tab active" data-tab="users">用户管理</button>
-      <button class="tab" data-tab="routes">路线绑定</button>
+      <button class="tab" data-tab="routes">线路管理</button>
       <button class="tab" data-tab="requests">绑定申请</button>
       <button class="tab" data-tab="logs">管理日志</button>
       <button class="tab" data-tab="reset">数据重置</button>
@@ -33,7 +33,11 @@
     </section>
 
     <section id="routesTab" class="panel hidden">
-      <div class="panel-head"><div><h2>路线绑定</h2><span>一条路线最多驾驶员 + 配送员</span></div><button id="refreshRoutes" class="primary">刷新</button></div>
+      <div class="panel-head"><div><h2>线路管理</h2><span>创建线路、绑定驾驶员与配送员</span></div><button id="refreshRoutes" class="primary">刷新</button></div>
+      <div class="route-create">
+        <label>新建线路<input id="newRouteInput" placeholder="例如 17号线" inputmode="numeric" autocomplete="off"></label>
+        <button id="createRoute" class="primary" type="button">创建线路</button>
+      </div>
       <div class="route-form">
         <label>路线<input id="routeInput" placeholder="例如 17号线"></label>
         <label>驾驶员<select id="driverSelect"></select></label>
