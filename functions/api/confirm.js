@@ -295,7 +295,7 @@ async function findDuplicateOrder(env, userId, route, date, candidate, boundRout
         const legacy = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
         return Array.isArray(legacy) ? legacy : [];
       }));
-      history = legacyLists.flat();
+      history = dedupeLegacyHistory(legacyLists.flat());
     }
   }
   if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) return today;
@@ -459,5 +459,42 @@ async function redisPipelineGet(env, keys) {
 async function redisGet(env, keyName) { const response = await redisFetch(env, `/get/${encodeURIComponent(keyName)}`); if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
 async function redisSet(env, keyName, value) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }); if (!response.ok) throw new Error(`Redis保存失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
 async function saveIdempotency(env, keyName, orderBatchId) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(JSON.stringify({ orderBatchId }))}/EX/86400`, { method: 'POST' }); if (!response.ok) throw new Error(`幂等索引保存失败（HTTP ${response.status}）`); }
-async function findHistoryBatch(env, userId, route, date, orderBatchId, boundRouteId) { const historyKey = routeOrderKey(route, `history:${date}`); let history = await redisGet(env, historyKey); if ((!Array.isArray(history) || !history.length) && normalizeRoute(boundRouteId) === normalizeRoute(route)) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`)); if (!Array.isArray(history)) return null; return history.find(item => String(item?.orderBatchId || '') === String(orderBatchId)) || null; }
+async function findHistoryBatch(env, userId, route, date, orderBatchId, boundRouteId) {
+  const historyKey = routeOrderKey(route, `history:${date}`);
+  let history = await redisGet(env, historyKey);
+  if ((!Array.isArray(history) || !history.length) && normalizeRoute(boundRouteId) === normalizeRoute(route)) {
+    const users = await listUsersByRoute(env, route);
+    const legacyLists = await Promise.all(users.map(async user => {
+      const legacy = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
+      return Array.isArray(legacy) ? legacy : [];
+    }));
+    history = dedupeLegacyHistory(legacyLists.flat());
+  }
+  if (!Array.isArray(history)) return null;
+  return history.find(item => String(item?.orderBatchId || '') === String(orderBatchId)) || null;
+}
+
+function dedupeLegacyHistory(input) {
+  const byBatch = new Map();
+  const fallback = new Map();
+  for (const item of Array.isArray(input) ? input : []) {
+    if (!item || typeof item !== 'object') continue;
+    const batchId = String(item.orderBatchId || '').trim();
+    if (batchId) {
+      const old = byBatch.get(batchId);
+      if (!old || compareUpdatedAt(item, old) > 0) byBatch.set(batchId, item);
+      continue;
+    }
+    const signature = historySignature(item);
+    if (!signature) continue;
+    const old = fallback.get(signature);
+    if (!old || compareUpdatedAt(item, old) > 0) fallback.set(signature, item);
+  }
+  return [...byBatch.values(), ...fallback.values()].sort((a, b) => compareUpdatedAt(b, a));
+}
+
+function compareUpdatedAt(a, b) {
+  return (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0)
+    - (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0);
+}
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
