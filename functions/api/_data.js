@@ -231,8 +231,14 @@ export async function scanUsers(env) {
     const keys = Array.isArray(result?.[1]) ? result[1] : [];
     for (const key of keys) {
       if (key.includes(':route:') || key.includes(':username:')) continue;
-      const value = await redisGet(env, key);
-      if (value && typeof value === 'object' && value.id && value.username) users.push(value);
+      // SCAN 可能返回历史遗留/非字符串类型的 user:* 键；单个坏键不应阻断整个管理后台。
+      // 只有能够读取并符合用户记录结构的值才进入用户列表。
+      try {
+        const value = await redisGet(env, key);
+        if (value && typeof value === 'object' && value.id && value.username) users.push(value);
+      } catch (error) {
+        console.warn('skip unreadable user key', key, error?.message || error);
+      }
     }
   } while (cursor !== '0');
   return users;
