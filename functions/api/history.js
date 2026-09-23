@@ -290,6 +290,16 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
     ]);
     const deleteToday = Boolean(today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId);
     const clearLatest = Boolean(latest && targetBatchId && String(latest?.orderBatchId || '').trim() === targetBatchId && normalizeDate(latest?.date) === date);
+
+    // 同一天允许存在多笔独立运单。删除“当前今日批次”时，如果还有其他批次，
+    // 必须把最新剩余批次提升为今日订单，不能因为删除最新一笔而让首页暂时显示“今日无单”。
+    const promotedToday = deleteToday && remaining.length
+      ? remaining[0]
+      : null;
+    const promotedLatest = clearLatest && promotedToday
+      ? { date, orderBatchId: String(promotedToday.orderBatchId || '').trim(), updatedAt: promotedToday.updatedAt || new Date().toISOString() }
+      : null;
+
     await atomicDeleteHistory(env, {
       historyKey: key,
       expectedHistory: current,
@@ -297,18 +307,29 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
       todayKey,
       deleteToday,
       expectedToday: today,
+      replacementToday: promotedToday,
       latestKey,
       clearLatest,
-      expectedLatest: latest
+      expectedLatest: latest,
+      replacementLatest: promotedLatest
     });
-    return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: deleteToday, latestCleared: clearLatest });
+    return json({
+      success: true,
+      deleted,
+      date,
+      orderBatchId: batchId,
+      removedSameData: 0,
+      todayDeleted: deleteToday,
+      latestCleared: clearLatest,
+      todayPromoted: Boolean(promotedToday)
+    });
   } finally {
     await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
   }
 }
 
 
-async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining, todayKey, deleteToday, expectedToday, latestKey, clearLatest, expectedLatest }) {
+async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining, todayKey, deleteToday, expectedToday, replacementToday, latestKey, clearLatest, expectedLatest, replacementLatest }) {
   const script = `
 local currentHistory = redis.call('GET', KEYS[1])
 if currentHistory ~= ARGV[1] then return 'CONFLICT' end
@@ -322,10 +343,18 @@ if ARGV[5] == '1' then
 end
 redis.call('SET', KEYS[1], ARGV[2])
 if ARGV[3] == '1' then
-  redis.call('DEL', KEYS[2])
+  if ARGV[7] == '1' then
+    redis.call('SET', KEYS[2], ARGV[8])
+  else
+    redis.call('DEL', KEYS[2])
+  end
 end
 if ARGV[5] == '1' then
-  redis.call('DEL', KEYS[3])
+  if ARGV[9] == '1' then
+    redis.call('SET', KEYS[3], ARGV[10])
+  else
+    redis.call('DEL', KEYS[3])
+  end
 end
 return 'OK'
 `;
@@ -333,6 +362,8 @@ return 'OK'
   const remainingJson = JSON.stringify(remaining);
   const expectedTodayJson = expectedToday === null || expectedToday === undefined ? '' : JSON.stringify(expectedToday);
   const expectedLatestJson = expectedLatest === null || expectedLatest === undefined ? '' : JSON.stringify(expectedLatest);
+  const replacementTodayJson = replacementToday ? JSON.stringify(replacementToday) : '';
+  const replacementLatestJson = replacementLatest ? JSON.stringify(replacementLatest) : '';
   const result = await redisCommand(env, [
     'EVAL',
     script,
@@ -345,7 +376,11 @@ return 'OK'
     deleteToday ? '1' : '0',
     expectedTodayJson,
     clearLatest ? '1' : '0',
-    expectedLatestJson
+    expectedLatestJson,
+    replacementToday ? '1' : '0',
+    replacementTodayJson,
+    replacementLatest ? '1' : '0',
+    replacementLatestJson
   ]);
   if (result === 'CONFLICT' || result === 'CONFLICT_TODAY' || result === 'CONFLICT_LATEST') {
     throw new Error('历史记录刚刚发生变化，请刷新后重试');
