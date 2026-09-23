@@ -29,7 +29,7 @@ async function saveOrder(request, env, session) {
   const lockKey = scopedKey(userId, route, `lock:${date}`), lockToken = createLockToken();
   if (!(await acquireLock(env, lockKey, lockToken, 15))) return json({ error: '当前用户正在保存订单，请稍后再试' }, 409);
   try {
-    const existing = await redisGet(env, key) || await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+    const existing = await redisGet(env, key) || (isBoundRoute(session, route) ? await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`)) : null);
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
     // 订单详情页的“更换车辆”只是修改当日车辆，不应重新按当前基准库计算订单。
     // 历史/今日订单必须继续使用原批次已经确认的门店顺序与匹配结果。
@@ -105,8 +105,10 @@ async function readOrder(request, env, session) {
   const date = requestedDate || businessDate();
   let today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
   let historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
-  if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
-  if (!historyData) historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+  if (isBoundRoute(session, route)) {
+    if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+    if (!historyData) historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+  }
   const history = Array.isArray(historyData) ? historyData : [];
   let selected = today;
   if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
@@ -167,6 +169,7 @@ function normalizeOrder(item, index, batchId, date, route) {
 
 function extractBusinessCode(value) { const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])((?:JM\d{4,6}|Q\d{3,5}|A\d{4,6}))(?:[^A-Z0-9]|$)/); return match ? match[1] : ''; }
 function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[【】\[\]]/g, '').toLowerCase().replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/谊品鲜/g, '谊品生鲜'); }
+function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId || session?.route) === normalizeRoute(route); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function scopedBaseKey(userId, route) { return routeBaseKey(route); }
