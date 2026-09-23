@@ -1,7 +1,7 @@
 // Zhipei One - 路线历史查询 API
 // 今日订单/历史记录按线路+日期统一存储；userId 保留在记录内用于审计与兼容。允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
-import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand, listUsersByRoute } from './_data.js';
+import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand, redisGet, redisSet, listUsersByRoute } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
@@ -449,6 +449,12 @@ function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.c
 function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId) === normalizeRoute(route); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
+
+async function redisPipeline(env, commands) {
+  if (!Array.isArray(commands) || !commands.length) return [];
+  const result = await redisCommand(env, ['PIPELINE', ...commands.flat()]);
+  return Array.isArray(result) ? result : [];
+}
 
 async function redisPipelineGet(env, keys) {
   return redisPipeline(env, keys.map(key => ['GET', key])).then(results => results.map(item => {
