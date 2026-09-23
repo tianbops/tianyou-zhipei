@@ -36,7 +36,7 @@ async function createRoute(){
   try{const r=await api('/api/admin/routes',{method:'POST',body:{route}});if(!r.success)throw new Error(r.error||'线路创建失败');input.value='';notice('线路 '+r.route.name+' 已创建');await loadRoutes();fillSelects()}catch(e){notice(e.message||'线路创建失败',true)}finally{button.disabled=false;button.textContent='创建线路'}
 }
 async function loadRoutes(){
-  try{const r=await api('/api/routes'); if(!r.success) throw new Error(r.error||'路线读取失败'); routes=r.routes||[]; renderRoutes()}catch(e){notice(e.message,true)}
+  try{const r=await api('/api/routes'); if(!r.success) throw new Error(r.error||'线路读取失败'); routes=r.routes||[]; renderRoutes()}catch(e){notice(e.message,true)}
 }
 async function loadRequests(){
   const endpoint='/api/admin/route-requests';
@@ -86,7 +86,7 @@ function fillSelects(){
 async function saveRoute(){
   const route=$('#routeInput').value.trim(),driverUserId=$('#driverSelect').value,deliveryUserId=$('#deliverySelect').value;
   if(!route){notice('请选择线路');return}
-  try{const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});if(!r.success)throw new Error(r.error||'路线绑定失败');notice('路线绑定已保存');await Promise.all([loadUsers(),loadRoutes()])}catch(e){notice(e.message,true)}
+  try{const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});if(!r.success)throw new Error(r.error||'线路绑定失败');notice('线路绑定已保存');await Promise.all([loadUsers(),loadRoutes()])}catch(e){notice(e.message,true)}
 }
 async function resetPassword(id){const password=prompt('输入新的6-72位密码');if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
@@ -95,12 +95,12 @@ async function deleteUser(id){
   const user=users.find(x=>x.id===id);
   if(!user)return;
   if(user.role==='system_admin'){notice('不能删除系统管理员账号',true);return}
-  if(user.boundRouteId){notice('该用户已绑定路线，请先解除绑定',true);return}
+  if(user.boundRouteId){notice('该用户已绑定线路，请先解除绑定',true);return}
   if(!confirm('确定删除账号“'+user.username+'”吗？删除后账号及登录索引将永久移除。'))return;
   try{
     const r=await api('/api/admin/users',{method:'DELETE',body:{userId:id}});
     if(!r.success)throw new Error(r.error||'账号删除失败');
-    notice('重复账号已删除');
+    notice('账号已删除');
     await loadUsers();
   }catch(e){notice(e.message||'账号删除失败',true)}
 }
