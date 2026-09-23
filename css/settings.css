@@ -148,3 +148,17 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 #routeBindingModal select:focus{border-color:rgba(208,215,220,.48);box-shadow:0 0 0 3px rgba(208,215,220,.10)}
 #routeBindingModal .sheet-actions{flex-wrap:wrap}
 #routeBindingModal #unbindRouteButton{flex:0 0 100%;height:42px;margin-top:1px;color:#FF8278;background:transparent!important;border-color:rgba(255,107,94,.22)}
+
+/* UI 2.2 · 线路绑定身份选择统一 2026-09-24 */
+#routeBindingModal .duty-picker{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#routeBindingModal .duty-option{min-width:0;height:66px;padding:9px 10px;display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#0D1319;color:#D5DCE2;text-align:left;cursor:pointer;transition:border-color .16s,background .16s,transform .12s}
+#routeBindingModal .duty-option:active{transform:scale(.985)}
+#routeBindingModal .duty-option .duty-mark{width:32px;height:32px;flex:0 0 32px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#151D26;color:#8995A1;font-size:13px;font-weight:700}
+#routeBindingModal .duty-option .duty-text{min-width:0;display:flex;flex-direction:column;gap:2px}
+#routeBindingModal .duty-option strong{font-size:13px;font-weight:600;color:#C8D0D7}
+#routeBindingModal .duty-option small{font-size:10px;color:#687583;white-space:nowrap}
+#routeBindingModal .duty-option.active{border-color:rgba(208,215,220,.48);background:#18212B;box-shadow:0 0 0 2px rgba(208,215,220,.08)}
+#routeBindingModal .duty-option.active .duty-mark{background:#D0D7DC;color:#0B1015}
+#routeBindingModal .duty-option.active strong{color:#F2F5F7}
+#routeBindingModal .duty-option:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(208,215,220,.48)}
+#routeBindingModal #bindingRouteField{margin-bottom:14px}
