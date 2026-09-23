@@ -189,6 +189,24 @@ async function readOrder(request, env, session) {
     }
   }
   const history = Array.isArray(historyData) ? historyData : [];
+
+  // 历史数据恢复后，旧数据可能已经存在 history:${date}，但线路级 today:${date}
+  // 尚未重新建立。首页和“当日运单”都必须以当日线路级数据为入口，因此这里
+  // 将同一业务日的最新历史记录提升回 today key，完成一次性数据自愈。
+  if (!today && history.length) {
+    const sameDay = history
+      .filter(item => normalizeDate(item?.date) === date && Array.isArray(item?.orders) && item.orders.length)
+      .sort((a, b) => (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0) - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0));
+    if (sameDay[0]) {
+      today = sameDay[0];
+      try {
+        await redisSet(env, routeOrderKey(route, 'today:' + date), today);
+      } catch (error) {
+        console.warn('当日订单从历史恢复到today失败，继续返回恢复数据', route, date, error?.message || error);
+      }
+    }
+  }
+
   // 线路级 today 读取失败但旧用户订单迁移成功时，仍允许正常返回；
   // 只有所有可用数据源都无法读取时才由外层统一报告 503。
   let selected = today;
