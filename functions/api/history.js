@@ -45,17 +45,31 @@ export async function onRequest({ request, env }) {
 
 async function readHistoryOrRecover(env, userId, route, date, key, session) {
   let result = await redisGet(env, key);
-  if ((!Array.isArray(result) || !result.length) && isBoundRoute(session, route)) result = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+  let fromLegacy = false;
+  if ((!Array.isArray(result) || !result.length) && isBoundRoute(session, route)) {
+    result = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+    fromLegacy = Array.isArray(result) && result.length > 0;
+  }
   let records = Array.isArray(result) ? result : [];
-  if (records.length) return records;
+  if (records.length) {
+    // 旧用户级历史首次被绑定用户访问时，提升为路线级数据；旧键保留作只读恢复备份。
+    if (fromLegacy) await redisSet(env, key, records);
+    return records;
+  }
 
   // 兼容旧版本半成功数据：历史没有记录，但同日期 today 数据仍存在。
   const todayKey = scopedKey(userId, route, `today:${date}`);
-  const today = await redisGet(env, todayKey) || (isBoundRoute(session, route) ? await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`)) : null);
+  let today = await redisGet(env, todayKey);
+  let todayFromLegacy = false;
+  if (!today && isBoundRoute(session, route)) {
+    today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+    todayFromLegacy = Boolean(today);
+  }
   if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
     const recovered = recoverFromToday(today, userId, route, date);
     if (historySignature(recovered)) {
       await redisSet(env, key, [recovered]);
+      if (todayFromLegacy) await redisSet(env, todayKey, today);
       return [recovered];
     }
   }
@@ -142,7 +156,11 @@ async function listAllHistory(env, userId, route, session) {
 
 async function deleteHistoryRecord(env, userId, route, date, batchId) {
   const key = scopedKey(userId, route, `history:${date}`);
-  const records = await redisGet(env, key);
+  let records = await redisGet(env, key);
+  if ((!Array.isArray(records) || !records.length)) {
+    records = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+    if (Array.isArray(records) && records.length) await redisSet(env, key, records);
+  }
   if (!Array.isArray(records) || !records.length) return json({ success: true, deleted: 0, date });
 
   const current = dedupeHistory(records).records;
