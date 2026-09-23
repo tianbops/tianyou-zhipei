@@ -1,6 +1,7 @@
 // 天友智配One - 修改登录密码
 // 修改密码必须验证当前密码；新密码仅保存 PBKDF2-SHA256 哈希，不保存明文。
 import { authRequired } from './_auth.js';
+import { redisCommand } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -95,16 +96,6 @@ function parseRecord(value) {
   if (!value) return null;
   if (typeof value !== 'string') return value;
   try { const first = JSON.parse(value); return typeof first === 'string' ? JSON.parse(first) : first; } catch { return null; }
-}
-async function redisCommand(env, command) {
-  const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
-  const token = String(env.UPSTASH_REDIS_REST_TOKEN || '');
-  const response = await fetch(`${url}/`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(command), cache: 'no-store' });
-  const text = await response.text();
-  let data = {};
-  try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
-  if (!response.ok || data.error) throw new Error(data.error || `Upstash HTTP ${response.status}`);
-  return data.result;
 }
 function redisReady(env) { return Boolean(String(env.UPSTASH_REDIS_REST_URL || '').trim() && String(env.UPSTASH_REDIS_REST_TOKEN || '').trim()); }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
