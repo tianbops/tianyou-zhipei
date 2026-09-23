@@ -21,7 +21,9 @@
 
     <nav class="tabs" aria-label="管理模块">
       <button class="tab active" data-tab="users">用户管理</button>
-      <button class="tab" data-tab="routes">路线绑定</button><button class="tab" data-tab="logs">管理日志</button>
+      <button class="tab" data-tab="routes">路线绑定</button>
+      <button class="tab" data-tab="logs">管理日志</button>
+      <button class="tab" data-tab="reset">数据重置</button>
     </nav>
 
     <section id="usersTab" class="panel">
@@ -39,7 +41,27 @@
       </div>
       <div id="routeList" class="route-list"></div>
     </section>
-    <section id="logsTab" class="panel hidden"><div class="panel-head"><div><h2>管理日志</h2><span>系统管理操作记录</span></div><button id="refreshLogs" class="primary">刷新</button></div><div id="logList" class="route-list"></div></section>
+
+    <section id="logsTab" class="panel hidden">
+      <div class="panel-head"><div><h2>管理日志</h2><span>系统管理操作记录</span></div><button id="refreshLogs" class="primary">刷新</button></div>
+      <div id="logList" class="route-list"></div>
+    </section>
+
+    <section id="resetTab" class="panel hidden">
+      <div class="reset-card">
+        <div class="reset-title">清空智配One业务数据</div>
+        <p class="reset-warning">此操作不可恢复。将删除当前 Redis 中的用户、路线、基准库、今日运单、历史记录、学习数据、绑定关系、管理日志及登录关联数据。</p>
+        <p class="reset-note">不会修改 GitHub 代码、Cloudflare 环境变量或 Upstash 服务本身。清空后当前管理员账号也会被删除，需要重新注册并重新建立系统管理员。</p>
+        <label class="confirm-label">数据重置密钥
+          <input id="resetKey" type="password" autocomplete="off" placeholder="输入 Cloudflare 中配置的 DATA_RESET_KEY">
+        </label>
+        <label class="confirm-label">确认文字
+          <input id="resetConfirmation" autocomplete="off" placeholder="输入：确认清空智配One数据">
+        </label>
+        <button id="resetDataBtn" class="danger-btn">清空全部智配One业务数据</button>
+        <div id="resetResult" class="reset-result hidden"></div>
+      </div>
+    </section>
   </main>
   <script src="js/admin.js"></script>
 </body>
