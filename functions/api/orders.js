@@ -35,7 +35,20 @@ async function saveOrder(request, env, session) {
   const lockKey = routeOrderKey(route, `lock:${date}`), lockToken = createLockToken();
   if (!(await acquireLock(env, lockKey, lockToken, ORDER_LOCK_TTL_SECONDS))) return json({ error: '当前线路正在保存订单，请稍后再试' }, 409);
   try {
-    const existing = await redisGet(env, key) || (isBoundRoute(session, route) ? await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`)) : null);
+    let existing = await redisGet(env, key);
+    if (!existing && isBoundRoute(session, route)) {
+      const users = await listUsersByRoute(env, route);
+      const candidates = await Promise.all(users.map(async user => {
+        const value = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+      }));
+      candidates.sort((a, b) => {
+        const at = Date.parse(String(a.updatedAt || a.createdAt || '')) || 0;
+        const bt = Date.parse(String(b.updatedAt || b.createdAt || '')) || 0;
+        return bt - at;
+      });
+      existing = candidates.find(item => String(item.orderBatchId || '').trim()) || candidates[0] || null;
+    }
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
     // 订单详情页的“更换车辆”只是修改当日车辆，不应重新按当前基准库计算订单。
     // 历史/今日订单必须继续使用原批次已经确认的门店顺序与匹配结果。
