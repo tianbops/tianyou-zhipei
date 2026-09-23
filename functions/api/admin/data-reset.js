@@ -1,6 +1,5 @@
 // 天友智配One V1.0 - 安全数据重置
-// 仅清理智配One明确使用的Redis命名空间，不执行FLUSHDB，不触碰Cloudflare环境变量。
-// 默认只允许系统管理员查看清理范围；真正删除还需要额外的 DATA_RESET_KEY + 精确确认词。
+// 仅清理智配One已核实的Redis业务键，不执行FLUSHDB，不触碰Cloudflare环境变量。
 import { requireSystemAdmin } from '../_auth.js';
 import { redisCommand } from '../_data.js';
 
@@ -11,38 +10,27 @@ const DELETE_BATCH = 50;
 const APP_PATTERNS = Object.freeze([
   'user:*',
   'route:*',
-  'system:*',
   'lock:*',
-  'wx:*'
+  'system:admin:logs',
+  'system:admin:bootstrap:used',
+  'wx:openid:*',
+  'wx:unionid:*'
 ]);
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
   if (!admin) return json({ success: false, error: '无系统管理权限' }, 403);
-
-  if (request.method !== 'POST') {
-    return json({ success: false, error: 'Method not allowed' }, 405);
-  }
+  if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
 
   const resetKey = String(env.DATA_RESET_KEY || '').trim();
-  if (!resetKey) {
-    return json({
-      success: false,
-      error: 'DATA_RESET_KEY 未配置；当前仅允许在服务器配置该密钥后执行数据重置'
-    }, 503);
-  }
+  if (!resetKey) return json({ success: false, error: 'DATA_RESET_KEY 未配置；当前不会执行数据重置' }, 503);
 
   const suppliedKey = String(request.headers.get('X-Data-Reset-Key') || '');
-  if (!suppliedKey || suppliedKey !== resetKey) {
-    return json({ success: false, error: '数据重置密钥错误' }, 403);
-  }
+  if (!suppliedKey || suppliedKey !== resetKey) return json({ success: false, error: '数据重置密钥错误' }, 403);
 
   const body = await request.json().catch(() => ({}));
   if (String(body.confirmation || '').trim() !== '确认清空智配One数据') {
-    return json({
-      success: false,
-      error: '缺少精确确认词：确认清空智配One数据'
-    }, 400);
+    return json({ success: false, error: '缺少精确确认词：确认清空智配One数据' }, 400);
   }
 
   try {
@@ -51,7 +39,6 @@ export async function onRequest({ request, env }) {
 
     for (let i = 0; i < keys.length; i += DELETE_BATCH) {
       const batch = keys.slice(i, i + DELETE_BATCH);
-      if (!batch.length) continue;
       const result = await redisCommand(env, ['DEL', ...batch]);
       deleted += Number(result || 0);
     }
@@ -65,10 +52,7 @@ export async function onRequest({ request, env }) {
     });
   } catch (error) {
     console.error('admin data reset error', error);
-    return json({
-      success: false,
-      error: error?.message || '数据重置失败'
-    }, 503);
+    return json({ success: false, error: error?.message || '数据重置失败' }, 503);
   }
 }
 
@@ -87,8 +71,8 @@ async function scanAppKeys(env) {
       const result = await redisCommand(env, [
         'SCAN', cursor, 'MATCH', pattern, 'COUNT', String(SCAN_COUNT)
       ]);
-
       cursor = String(result?.[0] ?? '0');
+
       const batch = Array.isArray(result?.[1]) ? result[1] : [];
       for (const key of batch) {
         const value = String(key || '');
@@ -102,12 +86,8 @@ async function scanAppKeys(env) {
 
 function isAppKey(key) {
   return APP_PATTERNS.some(pattern => {
-    if (pattern === 'user:*') return key.startsWith('user:');
-    if (pattern === 'route:*') return key.startsWith('route:');
-    if (pattern === 'system:*') return key.startsWith('system:');
-    if (pattern === 'lock:*') return key.startsWith('lock:');
-    if (pattern === 'wx:*') return key.startsWith('wx:');
-    return false;
+    if (pattern.endsWith(':*')) return key.startsWith(pattern.slice(0, -1));
+    return key === pattern;
   });
 }
 
