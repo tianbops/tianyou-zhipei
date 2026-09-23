@@ -339,7 +339,6 @@ function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.c
 function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId || session?.route) === normalizeRoute(route); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
-function routeOrderKey(route, suffix) { return routeOrderKey(route, suffix); }
 
 async function redisPipelineGet(env, keys) {
   return redisPipeline(env, keys.map(key => ['GET', key])).then(results => results.map(item => {
