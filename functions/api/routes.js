@@ -170,7 +170,7 @@ async function listRoutes(env) {
   const users = await scanUsers(env);
   const byId = new Map(records.map(record => [String(record.id), record]));
   for (const user of users) {
-    const id = normalizeRoute(user?.boundRouteId || user?.route);
+    const id = normalizeRoute(user?.boundRouteId);
     if (!id) continue;
     if (!byId.has(id)) byId.set(id, { id, name: id, driverUserId: '', deliveryUserId: '', boundUserIds: [] });
     const record = byId.get(id);
