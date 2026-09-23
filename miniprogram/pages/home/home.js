@@ -12,7 +12,7 @@ Page({
 
   async onShow() {
     const user = app.globalData.user || wx.getStorageSync('zhipei_user') || {};
-    const selected = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || user.boundRouteId || user.route || '').trim();
+    const selected = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || user.boundRouteId || '').trim();
     this.setData({ user, dispatchRoute: selected });
     await this.loadRoutes(selected);
     await this.loadToday();
