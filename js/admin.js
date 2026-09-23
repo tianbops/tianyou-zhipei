@@ -80,10 +80,12 @@ function renderRoutes(){
 function fillSelects(){
   const options='<option value="">未绑定</option>'+users.filter(u=>u.status==='active'&&u.role!=='system_admin').map(u=>`<option value="${escAttr(u.id)}">${esc(u.name||u.username)} · ${esc(u.boundRouteId||'未绑定')}</option>`).join('');
   $('#driverSelect').innerHTML=options;$('#deliverySelect').innerHTML=options;
+  const routeOptions='<option value="">选择线路</option>'+routes.map(r=>`<option value="${escAttr(r.id||r.name)}">${esc(r.name||r.id)}</option>`).join('');
+  $('#routeInput').innerHTML=routeOptions;
 }
 async function saveRoute(){
   const route=$('#routeInput').value.trim(),driverUserId=$('#driverSelect').value,deliveryUserId=$('#deliverySelect').value;
-  if(!route){notice('请输入路线');return}
+  if(!route){notice('请选择线路');return}
   try{const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});if(!r.success)throw new Error(r.error||'路线绑定失败');notice('路线绑定已保存');await Promise.all([loadUsers(),loadRoutes()])}catch(e){notice(e.message,true)}
 }
 async function resetPassword(id){const password=prompt('输入新的6-72位密码');if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
