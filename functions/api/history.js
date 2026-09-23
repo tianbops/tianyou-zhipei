@@ -26,7 +26,7 @@ export async function onRequest({ request, env }) {
     await purgeExpiredHistory(env, userId, route);
 
     // 不传日期时返回该用户/线路全部历史日期。
-    if (!date) return await listAllHistory(env, userId, route);
+    if (!date) return await listAllHistory(env, userId, route, session);
 
     const key = scopedKey(userId, route, `history:${date}`);
     let records = await readHistoryOrRecover(env, userId, route, date, key, session);
@@ -82,14 +82,14 @@ function recoverFromToday(today, userId, route, date) {
   };
 }
 
-async function listAllHistory(env, userId, route) {
+async function listAllHistory(env, userId, route, session) {
   const historyPattern = scopedKey(userId, route, 'history:*');
   const todayPattern = scopedKey(userId, route, 'today:*');
   let [historyKeys, todayKeys] = await Promise.all([
     scanKeys(env, historyPattern),
     scanKeys(env, todayPattern)
   ]);
-  if (!historyKeys.length && !todayKeys.length) {
+  if (!historyKeys.length && !todayKeys.length && isBoundRoute(session, route)) {
     const legacyPrefix = 'user:' + encodeKey(userId) + ':route:' + encodeKey(route) + ':orders:';
     [historyKeys, todayKeys] = await Promise.all([
       scanKeys(env, legacyPrefix + 'history:*'),
