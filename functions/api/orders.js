@@ -106,8 +106,14 @@ async function readOrder(request, env, session) {
   let today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
   let historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
   if (isBoundRoute(session, route)) {
-    if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
-    if (!historyData) historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+    if (!today) {
+      today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+      if (today) await redisSet(env, scopedKey(userId, route, `today:${date}`), today);
+    }
+    if (!historyData) {
+      historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+      if (historyData) await redisSet(env, scopedKey(userId, route, `history:${date}`), historyData);
+    }
   }
   const history = Array.isArray(historyData) ? historyData : [];
   let selected = today;
