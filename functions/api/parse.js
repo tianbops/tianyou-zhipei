@@ -25,7 +25,7 @@ export async function onRequest({ request, env }) {
     if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该路线' }, 403);
     const [baseRecord, learning] = await Promise.all([
       getBaseStores(env, route, deadline, userId, session.boundRouteId),
-      getLearning(env, route, userId, deadline)
+      getLearning(env, route, userId, deadline, session.boundRouteId)
     ]);
     const dataReadyAt = Date.now();
     const base = getCachedBaseMatchIndex(route, baseRecord.dataVersion, baseRecord.stores);
@@ -234,9 +234,12 @@ function getCachedBaseMatchIndex(route, dataVersion, stores) {
   return index;
 }
 
-async function getLearning(env, route, userId, deadline) {
+async function getLearning(env, route, userId, deadline, boundRouteId) {
   let data = await coreRedisGet(env, routeLearningKey(route));
-  if (!data || typeof data !== 'object') data = await coreRedisGet(env, legacyUserLearningKey(userId, route));
+  if (!data || typeof data !== 'object') {
+    const boundRoute = normalizeRoute(boundRouteId);
+    if (boundRoute === normalizeRoute(route)) data = await coreRedisGet(env, legacyUserLearningKey(userId, route));
+  }
   if (!data || typeof data !== 'object') return { version: 1, route: normalizeRoute(route), aliases: {} };
   return { ...data, version: 1, route: normalizeRoute(route), aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
