@@ -171,8 +171,14 @@ async function listAllHistory(env, userId, route, session) {
       ]);
       return { history: h, today: t };
     }));
-    legacyHistoryKeys = legacyResults.flatMap(item => item.history);
-    legacyTodayKeys = legacyResults.flatMap(item => item.today);
+    legacyHistoryKeys = legacyResults.flatMap(item => item.history).filter(key => {
+      const date = normalizeDate(String(key).split(':history:').pop());
+      return date && isHistoryDateInWindow(date);
+    });
+    legacyTodayKeys = legacyResults.flatMap(item => item.today).filter(key => {
+      const date = normalizeDate(String(key).split(':today:').pop());
+      return date && isHistoryDateInWindow(date);
+    });
   }
 
   const routeHistorySet = new Set(routeHistoryKeys);
@@ -359,6 +365,15 @@ async function releaseMigrationLock(env, key, token) {
 
 function createLockToken() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isHistoryDateInWindow(date) {
+  const normalized = normalizeDate(date);
+  if (!normalized) return false;
+  const today = businessDate();
+  const cutoff = addDays(today, -(HISTORY_DAYS - 1));
+  const futureCutoff = addDays(today, FUTURE_DAYS);
+  return normalized >= cutoff && normalized <= futureCutoff;
 }
 
 async function purgeExpiredHistory(env, userId, route) {
