@@ -203,9 +203,10 @@ async function listAllHistory(env, userId, route, session) {
 async function deleteHistoryRecord(env, userId, route, date, batchId) {
   const key = routeOrderKey(route, `history:${date}`);
   let records = await redisGet(env, key);
-  if ((!Array.isArray(records) || !records.length)) {
-    records = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
-    if (Array.isArray(records) && records.length) await redisSet(env, key, records);
+  // 路线级历史不存在时，删除操作也必须按“全部绑定用户 legacy 数据合并”规则恢复，
+  // 不能只迁移当前用户，否则同线路另一用户的旧历史可能被遗漏。
+  if (!Array.isArray(records)) {
+    records = await migrateLegacyHistory(env, route, date, key);
   }
   if (!Array.isArray(records) || !records.length) return json({ success: true, deleted: 0, date });
 
