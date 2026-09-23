@@ -195,6 +195,6 @@ window.Auth = {
       window.history.back();
       return;
     }
-    window.location.href = fallbackHome();
+    window.location.replace(fallbackHome());
   }, true);
 })();
