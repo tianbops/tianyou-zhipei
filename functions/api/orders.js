@@ -66,30 +66,33 @@ async function saveOrder(request, env, session) {
       recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount, rawOrderCount,
       source: String(body.source || 'web'), updatedAt: new Date().toISOString()
     };
-    await redisSet(env, key, todayData);
-    const saved = await readAfterWrite(env, key, orderBatchId, orders.length);
-    if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
-
-    // 车辆变更属于同一笔运单的资料更新，历史记录也必须同步，
-    // 保证“今日订单”和“历史订单”不会出现车辆不一致。
+    const historyKey = scopedKey(userId, route, `history:${date}`);
+    let updatedHistory = null;
     if (isVehicleOnlyUpdate) {
-      const historyKey = scopedKey(userId, route, `history:${date}`);
       const historyData = await redisGet(env, historyKey);
       if (Array.isArray(historyData)) {
-        const updatedHistory = historyData.map(item =>
+        updatedHistory = historyData.map(item =>
           item?.orderBatchId === orderBatchId
-            ? {
-                ...item,
-                vehicle: saved.vehicle,
-                updatedAt: saved.updatedAt
-              }
+            ? { ...item, vehicle: todayData.vehicle, updatedAt: todayData.updatedAt }
             : item
         );
-        await redisSet(env, historyKey, updatedHistory);
       }
     }
 
-    await redisSet(env, latestKey, { date, orderBatchId, updatedAt: saved.updatedAt });
+    // 正常保存：今日订单与 latest 一起原子提交。
+    // 更换车辆：今日订单、对应历史记录、latest 三者一起原子提交，
+    // 避免网络/Redis故障造成“今日车辆已变、历史车辆未变”的半成功状态。
+    await atomicSaveOrder(env, {
+      todayKey: key,
+      todayData,
+      latestKey,
+      latestData: { date, orderBatchId, updatedAt: todayData.updatedAt },
+      historyKey: isVehicleOnlyUpdate && Array.isArray(updatedHistory) ? historyKey : '',
+      historyData: isVehicleOnlyUpdate && Array.isArray(updatedHistory) ? updatedHistory : null
+    });
+
+    const saved = await readAfterWrite(env, key, orderBatchId, orders.length);
+    if (!saved) throw new Error('订单已提交但服务器未确认保存成功，请重试');
     return json({ success: true, data: saved });
   } finally { await releaseLock(env, lockKey, lockToken).catch(() => {}); }
 }
@@ -200,6 +203,29 @@ async function redisGet(env, key) {
   if (data.result === null || data.result === undefined || data.result === '') return null;
   try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
 }
+async function atomicSaveOrder(env, { todayKey, todayData, latestKey, latestData, historyKey, historyData }) {
+  const keys = [todayKey, latestKey];
+  const values = [JSON.stringify(todayData), JSON.stringify(latestData)];
+  if (historyKey && Array.isArray(historyData)) {
+    keys.push(historyKey);
+    values.push(JSON.stringify(historyData));
+  }
+  const script = [
+    'for i=1,#KEYS do',
+    '  redis.call("SET", KEYS[i], ARGV[i])',
+    'end',
+    'return "OK"'
+  ].join('\n');
+  const response = await redisFetch(env, '/eval', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify([script, keys.length, ...keys, ...values])
+  });
+  if (!response.ok) throw new Error(`订单原子保存失败（HTTP ${response.status}）`);
+  const data = await response.json().catch(() => ({}));
+  if (data.result !== 'OK') throw new Error('订单原子保存未确认');
+}
+
 async function redisSet(env, key, value) {
   const response = await redisFetch(env, `/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
   const data = await response.json().catch(() => ({}));
