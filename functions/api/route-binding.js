@@ -54,30 +54,42 @@ async function createRequest(env, user, request) {
   const existing = await findPendingForUser(env, user.id);
   if (existing) return json({ success: false, error: '已有待审核线路申请，请等待管理员处理' }, 409);
 
-  const routeRecord = await getRoute(env, route);
-  if (!routeRecord || routeRecord.status === 'disabled') return json({ success: false, error: '该线路不存在或已停用' }, 404);
+  // 同一账号并发点击提交时，先锁住“账号申请槽位”，避免产生两条 pending 申请。
+  const requestLockKey = 'route:binding-request:lock:' + encodeKey(user.id);
+  const requestLockToken = crypto.randomUUID();
+  const locked = await acquireRequestLock(env, requestLockKey, requestLockToken);
+  if (!locked) return json({ success: false, error: '线路申请正在处理中，请稍后再试' }, 409);
+  try {
+    const latestExisting = await findPendingForUser(env, user.id);
+    if (latestExisting) return json({ success: false, error: '已有待审核线路申请，请等待管理员处理' }, 409);
 
-  const targetDriver = String(routeRecord.driverUserId || '');
-  const targetDelivery = String(routeRecord.deliveryUserId || '');
-  const targetCount = [targetDriver, targetDelivery].filter(Boolean).length;
-  const targetSlotUserId = duty === 'driver' ? targetDriver : targetDelivery;
-  if (targetSlotUserId && targetSlotUserId !== user.id) {
-    return json({ success: false, error: '该线路对应岗位已有人员，不能进入' }, 409);
-  }
-  if (targetCount >= 2) {
-    return json({ success: false, error: '该线路人员已满，无法进入' }, 409);
-  }
+    const routeRecord = await getRoute(env, route);
+    if (!routeRecord || routeRecord.status === 'disabled') return json({ success: false, error: '该线路不存在或已停用' }, 404);
 
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const record = {
-    schemaVersion: 1, id, userId: user.id, username: user.username,
-    name: user.name || user.username, route, duty, status: 'pending',
-    createdAt: now, updatedAt: now
-  };
-  await redisSet(env, REQUEST_PREFIX + encodeKey(id), record);
-  await redisSet(env, USER_REQUEST_PREFIX + encodeKey(user.id), id);
-  return json({ success: true, request: record }, 201);
+    const targetDriver = String(routeRecord.driverUserId || '');
+    const targetDelivery = String(routeRecord.deliveryUserId || '');
+    const targetCount = [targetDriver, targetDelivery].filter(Boolean).length;
+    const targetSlotUserId = duty === 'driver' ? targetDriver : targetDelivery;
+    if (targetSlotUserId && targetSlotUserId !== user.id) {
+      return json({ success: false, error: '该线路对应岗位已有人员，不能进入' }, 409);
+    }
+    if (targetCount >= 2) {
+      return json({ success: false, error: '该线路人员已满，无法进入' }, 409);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const record = {
+      schemaVersion: 1, id, userId: user.id, username: user.username,
+      name: user.name || user.username, route, duty, status: 'pending',
+      createdAt: now, updatedAt: now
+    };
+    await redisSet(env, REQUEST_PREFIX + encodeKey(id), record);
+    await redisSet(env, USER_REQUEST_PREFIX + encodeKey(user.id), id);
+    return json({ success: true, request: record }, 201);
+  } finally {
+    await releaseRequestLock(env, requestLockKey, requestLockToken);
+  }
 }
 
 async function unbindSelf(env, user) {
@@ -131,6 +143,16 @@ async function findPendingForUser(env, userId) {
   if (!record) return null;
   if (record.status !== 'pending') return null;
   return record;
+}
+
+async function acquireRequestLock(env, key, token) {
+  const result = await redisCommand(env, ['SET', key, token, 'NX', 'EX', '10']);
+  return String(result || '') === 'OK';
+}
+
+async function releaseRequestLock(env, key, token) {
+  const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+  await redisCommand(env, ['EVAL', script, '1', key, token]).catch(() => {});
 }
 
 function json(payload, status = 200) {
