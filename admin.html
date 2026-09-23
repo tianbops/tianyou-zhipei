@@ -22,6 +22,7 @@
     <nav class="tabs" aria-label="管理模块">
       <button class="tab active" data-tab="users">用户管理</button>
       <button class="tab" data-tab="routes">路线绑定</button>
+      <button class="tab" data-tab="requests">绑定申请</button>
       <button class="tab" data-tab="logs">管理日志</button>
       <button class="tab" data-tab="reset">数据重置</button>
     </nav>
@@ -40,6 +41,11 @@
         <button id="saveRoute" class="primary">保存绑定</button>
       </div>
       <div id="routeList" class="route-list"></div>
+    </section>
+
+    <section id="requestsTab" class="panel hidden">
+      <div class="panel-head"><div><h2>绑定申请</h2><span>普通用户提交的线路绑定申请</span></div><button id="refreshRequests" class="primary">刷新</button></div>
+      <div id="requestList" class="route-list"></div>
     </section>
 
     <section id="logsTab" class="panel hidden">
