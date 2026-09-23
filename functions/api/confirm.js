@@ -253,7 +253,6 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
   try {
     const learning = await getLearning(env, learningKey);
     learning.version = 4;
-    learning.userId = userId;
     learning.route = route;
     learning.aliases = learning.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
     const byName = new Map(base.map(store => [key(store.name), store]));
@@ -288,7 +287,16 @@ async function findDuplicateOrder(env, userId, route, date, candidate, boundRout
   const historyKey = routeOrderKey(route, `history:${date}`);
   let [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
   if (normalizeRoute(boundRouteId) === normalizeRoute(route)) {
-    if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+    if (!today) {
+      const users = await listUsersByRoute(env, route);
+      const legacyToday = await Promise.all(users.map(async user => {
+        const legacy = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
+        return legacy && typeof legacy === 'object' && !Array.isArray(legacy) ? legacy : null;
+      }));
+      today = legacyToday
+        .filter(Boolean)
+        .sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')))[0] || null;
+    }
     if (!Array.isArray(history) || !history.length) {
       const users = await listUsersByRoute(env, route);
       const legacyLists = await Promise.all(users.map(async user => {
