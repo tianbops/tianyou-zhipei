@@ -37,6 +37,8 @@ export async function onRequest({ request, env }) {
     const duplicateCount = countDuplicates(canonical);
     const uniqueCanonical = dedupeCanonical(canonical);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
+    const confirmRequestId = String(body.confirmRequestId || '').trim().slice(0, 160);
+    const idempotencyKey = confirmRequestId ? scopedKey(userId, route, `confirm:${date}:${confirmRequestId}`) : '';
     const normalized = uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route));
     const orders = noBase ? normalizeRawOrderList(normalized) : sortOrders(normalized, base);
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
@@ -68,6 +70,13 @@ export async function onRequest({ request, env }) {
     stage = 'acquire-lock';
     if (!(await acquireLock(env, lockKey, token, 20))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试', stage }, 409);
     try {
+      if (idempotencyKey) {
+        const prior = await redisGet(env, idempotencyKey);
+        if (prior?.orderBatchId) {
+          const priorData = await findHistoryBatch(env, userId, route, date, prior.orderBatchId, session.boundRouteId);
+          if (priorData) return json({ success: true, duplicate: true, idempotent: true, data: priorData });
+        }
+      }
       // 重复运单必须在日期锁内判断，避免两个相同确认请求并发穿透。
       // 命中后直接复用第一笔已有批次，不覆盖今日数据、不新增历史记录。
       stage = 'duplicate-check';
@@ -80,6 +89,7 @@ export async function onRequest({ request, env }) {
           orderBatchId: duplicate.orderBatchId,
           updatedAt: duplicate.updatedAt || new Date().toISOString()
         }).catch(error => console.warn('latest 索引更新失败，不影响重复订单返回', error));
+        if (idempotencyKey) await saveIdempotency(env, idempotencyKey, duplicate.orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
         return json({ success: true, duplicate: true, data: duplicate });
       }
 
@@ -123,6 +133,7 @@ export async function onRequest({ request, env }) {
       if (savedToday?.orderBatchId !== orderBatchId || !Array.isArray(savedToday?.orders) || !historyExists) {
         throw new Error('订单已写入但今日/历史数据核验未通过，请重试');
       }
+      if (idempotencyKey) await saveIdempotency(env, idempotencyKey, orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
 
       // 门店学习由前端 /api/store-learning 独立执行，不能阻断核心入库链路。
       return json({ success: true, data: saved });
@@ -411,4 +422,6 @@ async function redisPipelineGet(env, keys) {
 }
 async function redisGet(env, keyName) { const response = await redisFetch(env, `/get/${encodeURIComponent(keyName)}`); if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
 async function redisSet(env, keyName, value) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }); if (!response.ok) throw new Error(`Redis保存失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
+async function saveIdempotency(env, keyName, orderBatchId) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(JSON.stringify({ orderBatchId }))}/EX/86400`, { method: 'POST' }); if (!response.ok) throw new Error(`幂等索引保存失败（HTTP ${response.status}）`); }
+async function findHistoryBatch(env, userId, route, date, orderBatchId, boundRouteId) { const historyKey = scopedKey(userId, route, `history:${date}`); let history = await redisGet(env, historyKey); if ((!Array.isArray(history) || !history.length) && normalizeRoute(boundRouteId) === normalizeRoute(route)) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`)); if (!Array.isArray(history)) return null; return history.find(item => String(item?.orderBatchId || '') === String(orderBatchId)) || null; }
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
