@@ -67,6 +67,19 @@ export async function onRequest({ request, env }) {
     const current = await getRoute(env, route);
     const now = new Date().toISOString();
 
+    // 管理员直接设置线路人员时，也不得静默替换已有岗位人员。
+    const currentDriver = String(current?.driverUserId || '');
+    const currentDelivery = String(current?.deliveryUserId || '');
+    if (driverUserId && currentDriver && currentDriver !== driverUserId) {
+      return json({ success: false, error: '该线路驾驶员岗位已有人员，不能直接替换' }, 409);
+    }
+    if (deliveryUserId && currentDelivery && currentDelivery !== deliveryUserId) {
+      return json({ success: false, error: '该线路配送员岗位已有人员，不能直接替换' }, 409);
+    }
+    if ([driverUserId, deliveryUserId].filter(Boolean).length > 2) {
+      return json({ success: false, error: '线路人员已满，无法继续绑定' }, 409);
+    }
+
     // 清理本次解绑的旧用户绑定字段。
     // 同时读取角色字段，兼容早期路线记录中 boundUserIds 缺失/过期的情况。
     const oldIds = [...new Set([
