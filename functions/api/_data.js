@@ -314,7 +314,7 @@ end
 return 'OK'
 `;
   const result = await redisCommand(env, ['EVAL', script, String(keys.length), ...keys, ...args]);
-  if (result === 'ROUTE_CONFLICT') throw new Error('路线绑定已被其他管理员更新，请刷新后重试');
+  if (result === 'ROUTE_CONFLICT') throw new Error('线路绑定已被其他管理员更新，请刷新后重试');
   if (result === 'USER_CONFLICT') throw new Error('用户绑定状态已发生变化，请刷新后重试');
   if (result !== 'OK') throw new Error('路线绑定原子提交未确认');
   return true;
