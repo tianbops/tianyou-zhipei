@@ -9,7 +9,7 @@ const BASE_INDEX_CACHE_MAX = 16;
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
-  const session = await authRequired(request, env);
+  const session = await authRequired(request, env, { allowAnyRoute: true });
   if (!session) return json({ success: false, error: '登录已失效或无权限' }, 401);
   try {
     const body = await request.json().catch(() => ({}));
