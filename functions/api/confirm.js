@@ -151,7 +151,7 @@ export async function onRequest({ request, env }) {
 async function loadBase(env, route, userId, boundRouteId) {
   const raw = await loadRouteBase(env, route, { allowLegacyUserId: normalizeRoute(boundRouteId) === normalizeRoute(route) ? userId : undefined });
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
-  if (!stores.length) throw new Error(`未找到${route}路线基准数据库`);
+  if (!stores.length) throw new Error(`未找到${route}线路基准数据库`);
   return stores.map((store, index) => ({
     name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
     code: String(store?.code || index + 1).padStart(2, '0'),
