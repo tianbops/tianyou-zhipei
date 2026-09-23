@@ -39,7 +39,7 @@ export async function onRequest({ request, env }) {
     const uniqueCanonical = dedupeCanonical(canonical);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
     const confirmRequestId = String(body.confirmRequestId || '').trim().slice(0, 160);
-    const idempotencyKey = confirmRequestId ? scopedKey(userId, route, `confirm:${date}:${confirmRequestId}`) : '';
+    const idempotencyKey = confirmRequestId ? routeOrderKey(userId, route, `confirm:${date}:${confirmRequestId}`) : '';
     const normalized = uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route));
     const orders = noBase ? normalizeRawOrderList(normalized) : sortOrders(normalized, base);
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
@@ -65,8 +65,8 @@ export async function onRequest({ request, env }) {
     };
 
     stage = 'build-order-data';
-    const todayKey = scopedKey(userId, route, `today:${date}`);
-    const lockKey = scopedKey(userId, route, `lock:${date}`);
+    const todayKey = routeOrderKey(userId, route, `today:${date}`);
+    const lockKey = routeOrderKey(userId, route, `lock:${date}`);
     const token = createLockToken();
     stage = 'acquire-lock';
     if (!(await acquireLock(env, lockKey, token, ORDER_LOCK_TTL_SECONDS))) return json({ success: false, error: '当前线路正在保存订单，请稍后再试', stage }, 409);
@@ -96,7 +96,7 @@ export async function onRequest({ request, env }) {
 
       // Redis SET 成功响应即表示命令已执行，不再额外 GET 三次验证，避免确认录入长时间等待。
       const saved = todayData;
-      const historyKey = scopedKey(userId, route, `history:${date}`);
+      const historyKey = routeOrderKey(userId, route, `history:${date}`);
       stage = 'prepare-history';
       const oldHistory = await redisGet(env, historyKey);
       const list = Array.isArray(oldHistory) ? oldHistory : [];
@@ -121,7 +121,7 @@ export async function onRequest({ request, env }) {
       const writeResult = await redisTransaction(env, [
         ['SET', todayKey, JSON.stringify(todayData)],
         ['SET', historyKey, JSON.stringify(historyPayload)],
-        ['SET', scopedKey(userId, route, 'latest'), JSON.stringify({ date, orderBatchId, updatedAt: saved.updatedAt })]
+        ['SET', routeOrderKey(userId, route, 'latest'), JSON.stringify({ date, orderBatchId, updatedAt: saved.updatedAt })]
       ]);
       if (!Array.isArray(writeResult) || writeResult.length !== 3 || writeResult.some(item => item && item.error)) {
         throw new Error('今日订单与历史记录写入未完成');
@@ -284,8 +284,8 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
 }
 
 async function findDuplicateOrder(env, userId, route, date, candidate, boundRouteId) {
-  const todayKey = scopedKey(userId, route, `today:${date}`);
-  const historyKey = scopedKey(userId, route, `history:${date}`);
+  const todayKey = routeOrderKey(userId, route, `today:${date}`);
+  const historyKey = routeOrderKey(userId, route, `history:${date}`);
   let [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
   if (normalizeRoute(boundRouteId) === normalizeRoute(route)) {
     if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
@@ -311,8 +311,8 @@ async function findDuplicateOrder(env, userId, route, date, candidate, boundRout
 }
 
 async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
-  const historyKey = scopedKey(userId, route, `history:${date}`);
-  const latestKey = scopedKey(userId, route, 'latest');
+  const historyKey = routeOrderKey(userId, route, `history:${date}`);
+  const latestKey = routeOrderKey(userId, route, 'latest');
   let old = await redisGet(env, historyKey);
   const list = Array.isArray(old) ? old : [];
   const record = {
@@ -340,7 +340,7 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
 }
 
 async function saveHistory(env, userId, route, date, today) {
-  const keyName = scopedKey(userId, route, `history:${date}`);
+  const keyName = routeOrderKey(userId, route, `history:${date}`);
   let old = null;
   let lastError = null;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -390,7 +390,7 @@ async function getLearning(env, keyName) {
 }
 
 function scopedBaseKey(userId, route) { return routeBaseKey(route); }
-function scopedKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
+function routeOrderKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
 function scopedLearningKey(userId, route, suffix = '') { return `${routeLearningKey(route)}${suffix ? `:${suffix}` : ''}`; }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
@@ -460,5 +460,5 @@ async function redisPipelineGet(env, keys) {
 async function redisGet(env, keyName) { const response = await redisFetch(env, `/get/${encodeURIComponent(keyName)}`); if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
 async function redisSet(env, keyName, value) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }); if (!response.ok) throw new Error(`Redis保存失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
 async function saveIdempotency(env, keyName, orderBatchId) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(JSON.stringify({ orderBatchId }))}/EX/86400`, { method: 'POST' }); if (!response.ok) throw new Error(`幂等索引保存失败（HTTP ${response.status}）`); }
-async function findHistoryBatch(env, userId, route, date, orderBatchId, boundRouteId) { const historyKey = scopedKey(userId, route, `history:${date}`); let history = await redisGet(env, historyKey); if ((!Array.isArray(history) || !history.length) && normalizeRoute(boundRouteId) === normalizeRoute(route)) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`)); if (!Array.isArray(history)) return null; return history.find(item => String(item?.orderBatchId || '') === String(orderBatchId)) || null; }
+async function findHistoryBatch(env, userId, route, date, orderBatchId, boundRouteId) { const historyKey = routeOrderKey(userId, route, `history:${date}`); let history = await redisGet(env, historyKey); if ((!Array.isArray(history) || !history.length) && normalizeRoute(boundRouteId) === normalizeRoute(route)) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`)); if (!Array.isArray(history)) return null; return history.find(item => String(item?.orderBatchId || '') === String(orderBatchId)) || null; }
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
