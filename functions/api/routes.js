@@ -19,7 +19,7 @@ export async function onRequest({ request, env }) {
     // GET：所有正常用户都可以读取任意路线的基准库，用于调度。
     if (request.method === 'GET') {
       if (!route) return json({ success: true, routes: await listRoutes(env) });
-      const base = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId || session.id });
+      const base = await loadRouteBase(env, route, legacyBaseOptions(session, route));
       if (!base) return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0, migrationRequired: true });
       return json({
         route,
@@ -49,7 +49,7 @@ export async function onRequest({ request, env }) {
       }
 
       try {
-        const current = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId || session.id });
+        const current = await loadRouteBase(env, route, legacyBaseOptions(session, route));
         const currentVersion = Number(current?.dataVersion) || 0;
         const expectedVersion = body.expectedDataVersion === undefined || body.expectedDataVersion === null
           ? null : Number(body.expectedDataVersion);
@@ -103,6 +103,13 @@ export async function onRequest({ request, env }) {
     console.error('routes api error', error);
     return json({ error: '线路基准数据库服务异常' }, 503);
   }
+}
+
+function legacyBaseOptions(session, route) {
+  const boundRoute = normalizeRoute(session?.boundRouteId || session?.route);
+  return boundRoute === normalizeRoute(route) && session?.id
+    ? { allowLegacyUserId: session.id }
+    : {};
 }
 
 async function acquireLock(env, key, value, ttl) {
