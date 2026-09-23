@@ -192,10 +192,12 @@ async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining
   const script = `
 local currentHistory = redis.call('GET', KEYS[1])
 if currentHistory ~= ARGV[1] then return 'CONFLICT' end
-redis.call('SET', KEYS[1], ARGV[2])
 if ARGV[3] == '1' then
   local currentToday = redis.call('GET', KEYS[2])
   if currentToday ~= ARGV[4] then return 'CONFLICT_TODAY' end
+end
+redis.call('SET', KEYS[1], ARGV[2])
+if ARGV[3] == '1' then
   redis.call('DEL', KEYS[2])
 end
 return 'OK'
