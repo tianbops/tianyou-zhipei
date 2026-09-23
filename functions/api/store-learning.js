@@ -2,7 +2,7 @@
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
 // 学习数据按线路写入 Upstash Redis；同一路线绑定用户共享同一学习库。
 import { authRequired } from './_auth.js';
-import { canManageRoute, legacyUserLearningKey, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
+import { canManageRoute, getRoute, legacyUserLearningKey, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
 
 const MAX_ALIASES = 1000;
 const MAX_BATCH = 100;
@@ -104,14 +104,75 @@ async function getBaseStores(env, route, userId) {
 
 async function getLearning(env, key, userId, route, boundRouteId) {
   let data = await redisGet(env, key);
-  let fromLegacy = false;
-  if ((!data || typeof data !== 'object') && normalizeRoute(boundRouteId) === normalizeRoute(route)) {
-    data = await redisGet(env, legacyUserLearningKey(userId, route));
-    fromLegacy = Boolean(data && typeof data === 'object');
+  if (data && typeof data === 'object') {
+    return { ...data, version: 4, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
   }
-  if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
-  if (fromLegacy) await redisSet(env, key, { ...data, version: 4, route, migratedFromUserId: userId, migratedAt: new Date().toISOString() });
-  return { ...data, version: 4, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
+
+  // 路线学习库尚未建立时，兼容迁移所有“当前绑定用户”的旧学习库，
+  // 避免第一个访问用户的旧数据把第二个绑定用户的历史学习数据永久覆盖。
+  if (normalizeRoute(boundRouteId) !== normalizeRoute(route)) {
+    return { version: 4, route, aliases: {} };
+  }
+
+  const routeRecord = await getRoute(env, route);
+  const boundIds = Array.isArray(routeRecord?.boundUserIds)
+    ? routeRecord.boundUserIds.map(id => String(id || '').trim()).filter(Boolean)
+    : [userId];
+
+  if (!boundIds.includes(userId)) boundIds.push(userId);
+
+  const legacyValues = await Promise.all(
+    [...new Set(boundIds)].map(id => redisGet(env, legacyUserLearningKey(id, route)).catch(() => null))
+  );
+  const merged = mergeLegacyLearning(legacyValues, route);
+  if (!merged.aliases || !Object.keys(merged.aliases).length) {
+    return { version: 4, route, aliases: {} };
+  }
+
+  const migrated = {
+    ...merged,
+    version: 4,
+    route,
+    migratedFromUserIds: [...new Set(boundIds)],
+    migratedAt: new Date().toISOString(),
+    updatedAt: merged.updatedAt || new Date().toISOString()
+  };
+  await redisSet(env, key, migrated);
+  return migrated;
+}
+
+function mergeLegacyLearning(values, route) {
+  const aliases = {};
+  let latestUpdatedAt = '';
+  for (const data of values) {
+    if (!data || typeof data !== 'object' || !data.aliases || typeof data.aliases !== 'object') continue;
+    if (String(data.updatedAt || '') > latestUpdatedAt) latestUpdatedAt = String(data.updatedAt || '');
+    for (const [aliasKey, value] of Object.entries(data.aliases)) {
+      if (!aliasKey || !value || typeof value !== 'object') continue;
+      const previous = aliases[aliasKey];
+      if (!previous) {
+        aliases[aliasKey] = { ...value };
+        continue;
+      }
+      const previousCount = Number(previous.count) || 0;
+      const incomingCount = Number(value.count) || 0;
+      const preferred = incomingCount >= previousCount ? value : previous;
+      const examples = [...new Set([
+        ...(Array.isArray(previous.rawExamples) ? previous.rawExamples : []),
+        ...(Array.isArray(value.rawExamples) ? value.rawExamples : [])
+      ].filter(Boolean))].slice(-3);
+      aliases[aliasKey] = {
+        ...previous,
+        ...preferred,
+        count: previousCount + incomingCount || 1,
+        firstSeenAt: [previous.firstSeenAt, value.firstSeenAt].filter(Boolean).sort()[0] || '',
+        updatedAt: [previous.updatedAt, value.updatedAt].filter(Boolean).sort().at(-1) || '',
+        rawExamples: examples
+      };
+    }
+  }
+  pruneAliases(aliases, MAX_ALIASES);
+  return { version: 4, route, aliases, updatedAt: latestUpdatedAt };
 }
 
 function scopedBaseKey(userId, route) { return `route:${encodeKey(route)}:base`; }
