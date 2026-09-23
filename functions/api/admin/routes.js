@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：路线绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, atomicRouteBinding, publicUser, recordAdminLog } from '../_data.js';
+import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -11,6 +11,39 @@ export async function onRequest({ request, env }) {
       if (!route) return json({ success: false, error: '缺少 route' }, 400);
       const record = await getRoute(env, route);
       return json({ success: true, route: record || { id: route, name: route, driverUserId: '', deliveryUserId: '', boundUserIds: [] } });
+    }
+
+    if (request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const route = normalizeRoute(body.route);
+      if (!route || !/^\\d+号线$/.test(route)) return json({ success: false, error: '请输入有效线路，例如 17号线' }, 400);
+      const now = new Date().toISOString();
+      const record = {
+        schemaVersion: 1,
+        id: route,
+        name: route,
+        driverUserId: '',
+        deliveryUserId: '',
+        boundUserIds: [],
+        status: 'active',
+        createdAt: now,
+        updatedAt: now
+      };
+      const base = {
+        schemaVersion: 1,
+        route,
+        stores: [],
+        dataVersion: 1,
+        updatedAt: now,
+        updatedBy: admin.id,
+        source: 'route-create'
+      };
+      const script = "if redis.call('exists', KEYS[1]) == 1 then return 0 end if redis.call('exists', KEYS[2]) == 1 then return -1 end redis.call('set', KEYS[1], ARGV[1]) redis.call('set', KEYS[2], ARGV[2]) return 1";
+      const result = await redisCommand(env, ['EVAL', script, '2', routeRecordKey(route), routeBaseKey(route), JSON.stringify(record), JSON.stringify(base)]);
+      if (Number(result) === 0) return json({ success: false, error: '该线路已存在', code: 'ROUTE_EXISTS' }, 409);
+      if (Number(result) !== 1) return json({ success: false, error: '该线路已有残留基准数据，请先检查后再创建', code: 'ROUTE_BASE_EXISTS' }, 409);
+      await recordAdminLog(env, admin, 'create_route', 'route', route, { status: 'active' }).catch(error => console.warn('create route audit log failed', error));
+      return json({ success: true, route: record, base });
     }
 
     if (request.method !== 'PUT') return json({ success: false, error: 'Method not allowed' }, 405);
