@@ -12,7 +12,13 @@ $('#createRoute').onclick=createRoute;
   $('#resetDataBtn').onclick=resetData;
   $('#toggleResetKey').onclick=()=>toggleResetKey();
   $('#saveRoute').onclick=saveRoute;
-  $('#backBtn').onclick=()=>{\n    const ref=document.referrer;\n    let sameOrigin=false;\n    try{sameOrigin=!!ref&&new URL(ref,location.href).origin===location.origin&&new URL(ref,location.href).pathname!==location.pathname}catch(_){}\n    if(sameOrigin&&history.length>1){history.back();return}\n    location.replace('home.html');\n  };
+  $('#backBtn').onclick=()=>{
+    const ref=document.referrer;
+    let sameOrigin=false;
+    try{sameOrigin=!!ref&&new URL(ref,location.href).origin===location.origin&&new URL(ref,location.href).pathname!==location.pathname}catch(_){}
+    if(sameOrigin&&history.length>1){history.back();return}
+    location.replace('home.html');
+  };
   await boot();
 });
 
