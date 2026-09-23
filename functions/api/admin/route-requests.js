@@ -62,7 +62,7 @@ async function reviewRequest(env, admin, request) {
   const current = await getRoute(env, route);
   if (!current || current.status === 'disabled') return json({ success: false, error: '申请线路不存在或已停用' }, 409);
 
-  const currentBound = normalizeRoute(user.boundRouteId || user.route);
+  const currentBound = normalizeRoute(user.boundRouteId);
   if (currentBound && currentBound !== route) return json({ success: false, error: '申请用户已经绑定其他线路，请先解除后再审核' }, 409);
   if (currentBound === route && user.routeDuty === pending.duty) {
     return finishApprovedWithoutRewrite(env, admin, pending, key);
