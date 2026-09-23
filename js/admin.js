@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
   $('#refreshUsers').onclick=loadUsers;
   $('#refreshRoutes').onclick=loadRoutes;
+  $('#refreshRequests').onclick=loadRequests;
   $('#refreshLogs').onclick=loadLogs;
   $('#resetDataBtn').onclick=resetData;
   $('#toggleResetKey').onclick=()=>toggleResetKey();
@@ -19,7 +20,7 @@ async function boot(){
     const me=await api('/api/me');
     if(!me.success||me.user?.role!=='system_admin') throw new Error('当前账号没有系统管理权限');
     $('#adminUser').textContent=(me.user.name||me.user.username)+' · 系统管理员';
-    const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadLogs()]);
+    const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
     if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
   }catch(e){notice(e.message||'管理员身份验证失败',true)}
@@ -29,6 +30,25 @@ async function loadUsers(){
 }
 async function loadRoutes(){
   try{const r=await api('/api/routes'); if(!r.success) throw new Error(r.error||'路线读取失败'); routes=r.routes||[]; renderRoutes()}catch(e){notice(e.message,true)}
+}
+async function loadRequests(){
+  const endpoint='/api/admin/route-requests';
+  try{
+    const r=await api(endpoint); if(!r.success) throw new Error(r.error||'申请读取失败');
+    const list=r.requests||[];
+    $('#requestList').innerHTML=list.map(x=>`<article class="route-card"><div class="route-main"><div><div class="name">${esc(x.name||x.username||'用户')}</div><div class="meta">${esc(x.username||'')} · 申请：${esc(x.route)} · 身份：${esc(x.duty==='driver'?'驾驶员':'配送员')}</div></div><span class="badge">待审核</span></div><div class="meta">${esc(x.createdAt||'')}</div><div class="actions"><button onclick="reviewRouteRequest('${escAttr(x.id)}','approve')">通过</button><button onclick="reviewRouteRequest('${escAttr(x.id)}','reject')">拒绝</button></div></article>`).join('')||'<div class="meta">暂无待审核申请</div>';
+    return true;
+  }catch(e){notice(e.message,true); throw e}
+}
+async function reviewRouteRequest(id,action){
+  const label=action==='approve'?'通过':'拒绝';
+  if(!confirm(`确定${label}该线路绑定申请吗？`))return;
+  try{
+    const r=await api('/api/admin/route-requests',{method:'PATCH',body:{requestId:id,action}});
+    if(!r.success)throw new Error(r.error||'审核失败');
+    notice(`线路绑定申请已${label}`);
+    await Promise.all([loadRequests(),loadUsers(),loadRoutes()]);
+  }catch(e){notice(e.message,true)}
 }
 async function loadLogs(){
   const endpoint='/api/admin/logs';
@@ -80,6 +100,7 @@ function switchTab(tab){
   $('#usersTab').classList.toggle('hidden',tab!=='users');
   $('#routesTab').classList.toggle('hidden',tab!=='routes');
   $('#logsTab').classList.toggle('hidden',tab!=='logs');
+  $('#requestsTab').classList.toggle('hidden',tab!=='requests');
   $('#resetTab').classList.toggle('hidden',tab!=='reset');
 }
 function toggleResetKey(){
