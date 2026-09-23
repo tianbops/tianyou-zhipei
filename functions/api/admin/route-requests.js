@@ -1,7 +1,7 @@
 // 天友智配One V1.0 - 管理员审核线路绑定申请
 import { requireSystemAdmin } from '../_auth.js';
 import {
-  atomicRouteBinding, encodeKey, getRoute, getUser, normalizeRoute, publicUser,
+  atomicRouteBinding, atomicRouteSwitch, encodeKey, getRoute, getUser, normalizeRoute, publicUser,
   redisCommand, redisGet, redisSet, routeRecordKey, recordAdminLog
 } from '../_data.js';
 
@@ -63,55 +63,103 @@ async function reviewRequest(env, admin, request) {
   if (!current || current.status === 'disabled') return json({ success: false, error: '申请线路不存在或已停用' }, 409);
 
   const currentBound = normalizeRoute(user.boundRouteId);
-  if (currentBound && currentBound !== route) return json({ success: false, error: '申请用户已经绑定其他线路，请先解除后再审核' }, 409);
-  if (currentBound === route && user.routeDuty === pending.duty) {
+  const duty = pending.duty === 'delivery' ? 'delivery' : 'driver';
+
+  // 同一线路同一岗位已经绑定本人：仅结束申请，不重复写绑定数据。
+  if (currentBound === route && user.routeDuty === duty) {
     return finishApprovedWithoutRewrite(env, admin, pending, key);
   }
 
-  const duty = pending.duty === 'delivery' ? 'delivery' : 'driver';
-  const oldSlotUserId = duty === 'driver' ? String(current.driverUserId || '') : String(current.deliveryUserId || '');
-  const driverUserId = duty === 'driver' ? user.id : String(current.driverUserId || '');
-  const deliveryUserId = duty === 'delivery' ? user.id : String(current.deliveryUserId || '');
-  if (driverUserId && deliveryUserId && driverUserId === deliveryUserId) return json({ success: false, error: '驾驶员和配送员不能是同一用户' }, 409);
-
-  const now = new Date().toISOString();
-  const updates = [{
-    key: 'user:' + encodeKey(user.id),
-    expectedSessionVersion: Number(user.sessionVersion || 1),
-    user: { ...user, boundRouteId: route, route, routeDuty: duty, updatedAt: now, sessionVersion: Number(user.sessionVersion || 1) + 1 }
-  }];
-
-  if (oldSlotUserId && oldSlotUserId !== user.id) {
-    const oldUser = await getUser(env, oldSlotUserId);
-    if (oldUser) {
-      updates.push({
-        key: 'user:' + encodeKey(oldUser.id),
-        expectedSessionVersion: Number(oldUser.sessionVersion || 1),
-        user: { ...oldUser, boundRouteId: '', route: '', routeDuty: '', updatedAt: now, sessionVersion: Number(oldUser.sessionVersion || 1) + 1 }
-      });
-    }
+  // 新线路只能在“无人”或“尚未满员”时进入；对应岗位已有其他人员时也不得替换。
+  const targetDriver = String(current.driverUserId || '');
+  const targetDelivery = String(current.deliveryUserId || '');
+  const targetCount = [targetDriver, targetDelivery].filter(Boolean).length;
+  const targetSlotUserId = duty === 'driver' ? targetDriver : targetDelivery;
+  if (targetSlotUserId && targetSlotUserId !== user.id) {
+    return json({ success: false, error: '该线路对应岗位已有人员，不能替换原绑定人员' }, 409);
+  }
+  if (targetCount >= 2 && ![targetDriver, targetDelivery].includes(user.id)) {
+    return json({ success: false, error: '该线路人员已满，无法进入新线路' }, 409);
   }
 
-  const updatedRoute = {
+  const now = new Date().toISOString();
+  const targetDriverUserId = duty === 'driver' ? user.id : targetDriver;
+  const targetDeliveryUserId = duty === 'delivery' ? user.id : targetDelivery;
+  if (targetDriverUserId && targetDeliveryUserId && targetDriverUserId === targetDeliveryUserId) {
+    return json({ success: false, error: '驾驶员和配送员不能是同一用户' }, 409);
+  }
+
+  const updatedTargetRoute = {
     ...current,
-    driverUserId,
-    deliveryUserId,
-    boundUserIds: [driverUserId, deliveryUserId].filter(Boolean),
+    driverUserId: targetDriverUserId,
+    deliveryUserId: targetDeliveryUserId,
+    boundUserIds: [targetDriverUserId, targetDeliveryUserId].filter(Boolean),
     updatedAt: now
   };
-  await atomicRouteBinding(env, {
-    routeKey: routeRecordKey(route),
-    expectedRouteUpdatedAt: current.updatedAt || '',
-    routeRecord: updatedRoute,
-    userUpdates: updates
-  });
+
+  const updatedUser = {
+    ...user,
+    boundRouteId: route,
+    route,
+    routeDuty: duty,
+    updatedAt: now,
+    sessionVersion: Number(user.sessionVersion || 1) + 1
+  };
+
+  if (!currentBound) {
+    await atomicRouteBinding(env, {
+      routeKey: routeRecordKey(route),
+      expectedRouteUpdatedAt: current.updatedAt || '',
+      routeRecord: updatedTargetRoute,
+      userUpdates: [{
+        key: 'user:' + encodeKey(user.id),
+        expectedSessionVersion: Number(user.sessionVersion || 1),
+        user: updatedUser
+      }]
+    });
+  } else {
+    // 已绑定旧线路时，进入新线路与退出旧线路必须一次性提交，禁止出现双线路绑定。
+    const oldRoute = await getRoute(env, currentBound);
+    if (!oldRoute || oldRoute.status === 'disabled') {
+      return json({ success: false, error: '原绑定线路不存在或已停用，请先处理原线路绑定状态' }, 409);
+    }
+
+    const oldDriver = String(oldRoute.driverUserId || '');
+    const oldDelivery = String(oldRoute.deliveryUserId || '');
+    if (oldDriver !== user.id && oldDelivery !== user.id) {
+      return json({ success: false, error: '原线路人员绑定数据不一致，请刷新后重试' }, 409);
+    }
+
+    const updatedOldRoute = {
+      ...oldRoute,
+      driverUserId: oldDriver === user.id ? '' : oldDriver,
+      deliveryUserId: oldDelivery === user.id ? '' : oldDelivery,
+      boundUserIds: [oldDriver === user.id ? '' : oldDriver, oldDelivery === user.id ? '' : oldDelivery].filter(Boolean),
+      updatedAt: now
+    };
+
+    await atomicRouteSwitch(env, {
+      fromRouteKey: routeRecordKey(currentBound),
+      fromExpectedRouteUpdatedAt: oldRoute.updatedAt || '',
+      fromRouteRecord: updatedOldRoute,
+      toRouteKey: routeRecordKey(route),
+      toExpectedRouteUpdatedAt: current.updatedAt || '',
+      toRouteRecord: updatedTargetRoute,
+      userUpdates: [{
+        key: 'user:' + encodeKey(user.id),
+        expectedSessionVersion: Number(user.sessionVersion || 1),
+        user: updatedUser
+      }]
+    });
+  }
 
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
   await redisSet(env, key, approved);
-  await recordAdminLog(env, admin, 'approve_route_request', 'route_request', requestId, { userId: user.id, route, duty });
-  return json({ success: true, request: approved, user: publicUser(user), route: updatedRoute });
+  await recordAdminLog(env, admin, 'approve_route_request', 'route_request', requestId, {
+    userId: user.id, fromRoute: currentBound || '', route, duty
+  });
+  return json({ success: true, request: approved, user: publicUser(updatedUser), route: updatedTargetRoute });
 }
-
 async function finishApprovedWithoutRewrite(env, admin, pending, key) {
   const now = new Date().toISOString();
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
