@@ -213,6 +213,15 @@ async function readOrder(request, env, session) {
   if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
   else if (!selected || !Array.isArray(selected.orders)) selected = history[history.length - 1] || null;
 
+  // 历史恢复/旧版数据中个别记录可能缺少 date 字段，但它已经位于
+  // history:${date} 这个确定的业务日键下。不能因此把有效运单过滤成 null。
+  if (selected && Array.isArray(selected.orders) && normalizeDate(selected.date) !== date) {
+    const selectedDate = normalizeDate(selected.date);
+    if (!selectedDate || selectedDate === date) {
+      selected = { ...selected, date, route: selected.route || route };
+    }
+  }
+
   // 首页保持原有“今日任务”结构，但当天可以存在多笔独立运单。
   // today 仍返回当前最新一笔，新增汇总字段仅供首页显示多运单汇总，不改变既有详情接口语义。
   const dailyRecords = history.filter(item => normalizeDate(item?.date) === date);
