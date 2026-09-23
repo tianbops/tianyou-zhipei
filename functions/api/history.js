@@ -13,13 +13,13 @@ export async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const date = normalizeDate(url.searchParams.get('date'));
   const route = normalizeRoute(url.searchParams.get('route') || session.boundRouteId), userId = normalizeUserId(session.id);
-  if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
+  if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该线路' }, 403);
 
   try {
     if (request.method === 'DELETE') {
       // 历史记录属于线路业务数据。可调度线路的用户可以查看，但只有该线路绑定用户可删除。
       if (!canManageRoute(session.user || session, route)) {
-        return json({ success: false, error: '只有绑定该路线的用户可以删除历史记录' }, 403);
+        return json({ success: false, error: '只有绑定该线路的用户可以删除历史记录' }, 403);
       }
       if (!date) return json({ success: false, error: 'Missing date parameter' }, 400);
       return await deleteHistoryRecord(env, userId, route, date, String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim());
