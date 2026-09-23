@@ -66,17 +66,8 @@ async function createRequest(env, user, request) {
     const routeRecord = await getRoute(env, route);
     if (!routeRecord || routeRecord.status === 'disabled') return json({ success: false, error: '该线路不存在或已停用' }, 404);
 
-    const targetDriver = String(routeRecord.driverUserId || '');
-    const targetDelivery = String(routeRecord.deliveryUserId || '');
-    const targetCount = [targetDriver, targetDelivery].filter(Boolean).length;
-    const targetSlotUserId = duty === 'driver' ? targetDriver : targetDelivery;
-    if (targetSlotUserId && targetSlotUserId !== user.id) {
-      return json({ success: false, error: '该线路对应岗位已有人员，不能进入' }, 409);
-    }
-    if (targetCount >= 2) {
-      return json({ success: false, error: '该线路人员已满，无法进入' }, 409);
-    }
-
+    // 待审核申请不占用线路正式岗位名额。
+    // 同一线路、同一岗位可以同时存在多个不同用户的待审核申请，最终由管理员在审核通过时实时竞争岗位。
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const record = {
