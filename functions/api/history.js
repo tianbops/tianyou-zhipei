@@ -251,44 +251,54 @@ async function listAllHistory(env, userId, route, session) {
 
 async function deleteHistoryRecord(env, userId, route, date, batchId) {
   const key = routeOrderKey(route, `history:${date}`);
-  let records = await redisGet(env, key);
-  // 路线级历史不存在时，删除操作也必须按“全部绑定用户 legacy 数据合并”规则恢复，
-  // 不能只迁移当前用户，否则同线路另一用户的旧历史可能被遗漏。
-  if (!Array.isArray(records)) {
-    records = await migrateLegacyHistory(env, route, date, key);
+  const lockKey = routeOrderKey(route, `lock:${date}`);
+  const lockToken = createLockToken();
+  if (!(await acquireMigrationLock(env, lockKey, lockToken, 30))) {
+    return json({ success: false, error: '该日期数据正在处理中，请稍后重试' }, 409);
   }
-  if (!Array.isArray(records) || !records.length) return json({ success: true, deleted: 0, date });
 
-  const current = dedupeHistory(records).records;
-  const target = batchId ? current.find(item => String(item?.orderBatchId || '').trim() === batchId) : null;
-  if (!target) return json({ success: false, error: '未找到要删除的历史记录' }, 404);
+  try {
+    let records = await redisGet(env, key);
+    // 路线级历史不存在时，删除操作也必须按“全部绑定用户 legacy 数据合并”规则恢复，
+    // 不能只迁移当前用户，否则同线路另一用户的旧历史可能被遗漏。
+    if (!Array.isArray(records)) {
+      records = await migrateLegacyHistory(env, route, date, key);
+    }
+    if (!Array.isArray(records) || !records.length) return json({ success: true, deleted: 0, date });
 
-  const targetBatchId = String(target?.orderBatchId || '').trim();
-  const remaining = targetBatchId
-    ? current.filter(item => String(item?.orderBatchId || '').trim() !== targetBatchId)
-    : current.filter(item => historySignature(item) !== historySignature(target));
-  const deleted = current.length - remaining.length;
+    const current = dedupeHistory(records).records;
+    const target = batchId ? current.find(item => String(item?.orderBatchId || '').trim() === batchId) : null;
+    if (!target) return json({ success: false, error: '未找到要删除的历史记录' }, 404);
 
-  const todayKey = routeOrderKey(route, `today:${date}`);
-  const latestKey = routeOrderKey(route, 'latest');
-  const [today, latest] = await Promise.all([
-    redisGet(env, todayKey),
-    redisGet(env, latestKey)
-  ]);
-  const deleteToday = Boolean(today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId);
-  const clearLatest = Boolean(latest && targetBatchId && String(latest?.orderBatchId || '').trim() === targetBatchId && normalizeDate(latest?.date) === date);
-  await atomicDeleteHistory(env, {
-    historyKey: key,
-    expectedHistory: current,
-    remaining,
-    todayKey,
-    deleteToday,
-    expectedToday: today,
-    latestKey,
-    clearLatest,
-    expectedLatest: latest
-  });
-  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: deleteToday, latestCleared: clearLatest });
+    const targetBatchId = String(target?.orderBatchId || '').trim();
+    const remaining = targetBatchId
+      ? current.filter(item => String(item?.orderBatchId || '').trim() !== targetBatchId)
+      : current.filter(item => historySignature(item) !== historySignature(target));
+    const deleted = current.length - remaining.length;
+
+    const todayKey = routeOrderKey(route, `today:${date}`);
+    const latestKey = routeOrderKey(route, 'latest');
+    const [today, latest] = await Promise.all([
+      redisGet(env, todayKey),
+      redisGet(env, latestKey)
+    ]);
+    const deleteToday = Boolean(today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId);
+    const clearLatest = Boolean(latest && targetBatchId && String(latest?.orderBatchId || '').trim() === targetBatchId && normalizeDate(latest?.date) === date);
+    await atomicDeleteHistory(env, {
+      historyKey: key,
+      expectedHistory: current,
+      remaining,
+      todayKey,
+      deleteToday,
+      expectedToday: today,
+      latestKey,
+      clearLatest,
+      expectedLatest: latest
+    });
+    return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: deleteToday, latestCleared: clearLatest });
+  } finally {
+    await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
+  }
 }
 
 
