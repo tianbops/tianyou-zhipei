@@ -15,7 +15,7 @@ export async function onRequest({ request, env }) {
     const body = await request.json().catch(() => ({}));
     const text = String(body?.text || '').trim();
     if (!text) return json({ success: false, error: '请输入或先识别运单文字' }, 400);
-    const route = normalizeRoute(body.route || session.route);
+    const route = normalizeRoute(body.route || session.boundRouteId);
     const userId = normalizeUserId(session.id);
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
