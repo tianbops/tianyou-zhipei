@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, loadRouteBase, normalizeRoute, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 
@@ -83,12 +83,12 @@ export async function onRequest({ request, env }) {
       const duplicate = await findDuplicateOrder(env, userId, route, date, todayData, session.boundRouteId);
       if (duplicate) {
         stage = 'duplicate-history';
-        await saveHistory(env, userId, route, date, duplicate);
-        await redisSet(env, scopedKey(userId, route, 'latest'), {
+        const duplicateLatest = {
           date,
           orderBatchId: duplicate.orderBatchId,
           updatedAt: duplicate.updatedAt || new Date().toISOString()
-        }).catch(error => console.warn('latest 索引更新失败，不影响重复订单返回', error));
+        };
+        await saveHistoryAndLatest(env, userId, route, date, duplicate, duplicateLatest);
         if (idempotencyKey) await saveIdempotency(env, idempotencyKey, duplicate.orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
         return json({ success: true, duplicate: true, data: duplicate });
       }
@@ -288,18 +288,54 @@ async function findDuplicateOrder(env, userId, route, date, candidate, boundRout
   let [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
   if (normalizeRoute(boundRouteId) === normalizeRoute(route)) {
     if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
-    if (!Array.isArray(history) || !history.length) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+    if (!Array.isArray(history) || !history.length) {
+      const users = await listUsersByRoute(env, route);
+      const legacyLists = await Promise.all(users.map(async user => {
+        const legacy = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
+        return Array.isArray(legacy) ? legacy : [];
+      }));
+      history = legacyLists.flat();
+    }
   }
   if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) return today;
   if (Array.isArray(history)) {
     const signature = businessOrderSignature(candidate);
     if (signature) {
       const match = history.filter(item => businessOrderSignature(item) === signature)
-        .sort((x, y) => String(x?.updatedAt || '').localeCompare(String(y?.updatedAt || '')))[0];
+        .sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')))[0];
       if (match) return match;
     }
   }
   return null;
+}
+
+async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
+  const historyKey = scopedKey(userId, route, `history:${date}`);
+  const latestKey = scopedKey(userId, route, 'latest');
+  let old = await redisGet(env, historyKey);
+  const list = Array.isArray(old) ? old : [];
+  const record = {
+    orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle,
+    count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count,
+    weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders,
+    matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: 0,
+    duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount,
+    rawOrderCount: today.rawOrderCount, baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
+    source: today.source, updatedAt: today.updatedAt
+  };
+  const signature = historySignature(record);
+  const index = list.findIndex(item => historySignature(item) === signature);
+  if (index >= 0) list[index] = record;
+  else list.push(record);
+  list.sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')));
+  const payload = list.slice(0, 90);
+  const result = await redisTransaction(env, [
+    ['SET', historyKey, JSON.stringify(payload)],
+    ['SET', latestKey, JSON.stringify(latest)]
+  ]);
+  if (!Array.isArray(result) || result.length !== 2 || result.some(item => item && item.error)) {
+    throw new Error('重复订单历史与索引写入未完成');
+  }
 }
 
 async function saveHistory(env, userId, route, date, today) {
