@@ -143,11 +143,18 @@ function recoverFromToday(today, userId, route, date) {
 async function listAllHistory(env, userId, route, session) {
   const historyPattern = routeOrderKey(route, 'history:*');
   const todayPattern = routeOrderKey(route, 'today:*');
-  let [historyKeys, todayKeys] = await Promise.all([
+  const [routeHistoryKeys, routeTodayKeys] = await Promise.all([
     scanKeys(env, historyPattern),
     scanKeys(env, todayPattern)
   ]);
-  if (isBoundRoute(session, route) && !historyKeys.length && !todayKeys.length) {
+
+  // 线路级数据与旧版 user 级数据可能处于“部分迁移”状态。
+  // 绑定用户查询历史时必须同时发现两侧数据：
+  // - 线路级 key 已存在：该日期以线路级数据为准（包括 []，防止已删除记录被 legacy 重新复活）。
+  // - 线路级 key 不存在：才使用全部绑定用户的 legacy 数据，并按批次去重。
+  let legacyHistoryKeys = [];
+  let legacyTodayKeys = [];
+  if (isBoundRoute(session, route)) {
     const users = await listUsersByRoute(env, route);
     const legacyResults = await Promise.all(users.map(async user => {
       const legacyPrefix = 'user:' + encodeKey(user.id) + ':route:' + encodeKey(route) + ':orders:';
@@ -157,34 +164,69 @@ async function listAllHistory(env, userId, route, session) {
       ]);
       return { history: h, today: t };
     }));
-    historyKeys = legacyResults.flatMap(item => item.history);
-    todayKeys = legacyResults.flatMap(item => item.today);
+    legacyHistoryKeys = legacyResults.flatMap(item => item.history);
+    legacyTodayKeys = legacyResults.flatMap(item => item.today);
   }
+
+  const routeHistorySet = new Set(routeHistoryKeys);
+  const routeTodaySet = new Set(routeTodayKeys);
+
+  // 先读取所有需要参与展示的 key；同一 key 只保留一次。
   const keyMap = new Map();
-  historyKeys.forEach(key => keyMap.set(key, 'history'));
-  todayKeys.forEach(key => keyMap.set(key, 'today'));
+  routeHistoryKeys.forEach(key => keyMap.set(key, { type: 'history', source: 'route' }));
+  routeTodayKeys.forEach(key => keyMap.set(key, { type: 'today', source: 'route' }));
+
+  // legacy key 不能直接覆盖线路级 key；后面按“日期”判断线路级 key 是否存在。
+  legacyHistoryKeys.forEach(key => {
+    const date = normalizeDate(String(key).split(':history:').pop());
+    if (!date || routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
+    keyMap.set(key, { type: 'history', source: 'legacy' });
+  });
+  legacyTodayKeys.forEach(key => {
+    const date = normalizeDate(String(key).split(':today:').pop());
+    if (!date || routeTodayKeys.some(routeKey => String(routeKey).endsWith(':today:' + date))) return;
+    keyMap.set(key, { type: 'today', source: 'legacy' });
+  });
+
   const keys = [...keyMap.keys()];
   if (!keys.length) return json([]);
 
   const values = await redisPipelineGet(env, keys);
   const grouped = new Map();
 
+  // 路线级 history 优先；同日期的 legacy history 不参与，避免部分删除后旧数据复活。
   keys.forEach((key, index) => {
-    const type = keyMap.get(key);
+    const meta = keyMap.get(key);
     const raw = values[index];
+    const type = meta.type;
+    const source = meta.source;
+
     if (type === 'history') {
       const date = normalizeDate(String(key).split(':history:').pop());
       if (!date) return;
       const records = Array.isArray(raw) ? raw : [];
-      if (!records.length) return;
-      grouped.set(date, records);
+
+      // 线路级 key 存在即拥有该日期的权威性，即使 records=[] 也不能用 legacy 补回。
+      if (source === 'route') {
+        grouped.set(date, records);
+        return;
+      }
+
+      // legacy 只用于线路级 key 尚不存在的日期。
+      if (routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
+      const existing = grouped.get(date) || [];
+      grouped.set(date, existing.concat(records));
       return;
     }
 
-    // 旧数据兼容：today 有而 history 没有时自动补历史。
     const date = normalizeDate(String(key).split(':today:').pop());
     if (!date || !raw || !Array.isArray(raw.orders) || !raw.orders.length) return;
+
+    // history 优先于 today；route today 也优先于 legacy today。
     if (grouped.has(date)) return;
+    if (routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
+    if (source === 'legacy' && routeTodaySet.has(routeOrderKey(route, 'today:' + date))) return;
+
     const recovered = recoverFromToday(raw, userId, route, date);
     if (!historySignature(recovered)) return;
     grouped.set(date, [recovered]);
