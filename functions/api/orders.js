@@ -1,7 +1,7 @@
 // Zhipei One - 用户独立订单 API
 // 订单按用户ID+线路+日期存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, loadRouteBase, routeBaseKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 8000;
 
@@ -176,23 +176,6 @@ function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d
 function parseWeightToTons(value) { const s = String(value ?? '').trim().replace(/,/g, ''); const m = s.match(/[\\d]+(?:\\.\\d+)?/); if (!m) return 0; const n = Number(m[0]); if (!Number.isFinite(n)) return 0; if (/吨|\\bt\\b/i.test(s)) return n; if (/kg|千克|公斤/i.test(s)) return n / 1000; return n >= 1000 ? n / 1000 : n; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
-function normalizeRoute(value) { const s = String(value || '').trim(); const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
-function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
-function createBatchId(date, route) { const stamp = new Date().toISOString().replace(/[-:.TZ]/g, ''); const suffix = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/gi, '').slice(0, 12); return `${date}-${route.replace(/\D/g, '')}-${stamp}-${suffix}`; }
-function createLockToken() { return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.() || ''}`; }
-
-async function redisFetch(env, path, options = {}) {
-  const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, '');
-  if (!base) throw new Error('Redis URL 未配置');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REDIS_TIMEOUT_MS);
-  try {
-    return await fetch(`${base}${path}`, { ...options, headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, ...(options.headers || {}) }, cache: 'no-store', signal: controller.signal });
-  } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('Redis 请求超时');
-    throw new Error(`Redis 网络请求失败：${error?.message || 'unknown error'}`);
-  } finally { clearTimeout(timer); }
-}
 
 async function acquireLock(env, key, token, seconds) {
   const response = await redisFetch(env, `/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST' });
