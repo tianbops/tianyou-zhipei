@@ -29,7 +29,7 @@ export async function onRequest({ request, env }) {
     if (!date) return await listAllHistory(env, userId, route);
 
     const key = scopedKey(userId, route, `history:${date}`);
-    let records = await readHistoryOrRecover(env, userId, route, date, key);
+    let records = await readHistoryOrRecover(env, userId, route, date, key, session);
     const { records: cleaned, changed } = dedupeHistory(records);
     if (changed || cleaned.length !== records.length) await redisSet(env, key, cleaned);
     return json(cleaned);
@@ -39,15 +39,15 @@ export async function onRequest({ request, env }) {
   }
 }
 
-async function readHistoryOrRecover(env, userId, route, date, key) {
+async function readHistoryOrRecover(env, userId, route, date, key, session) {
   let result = await redisGet(env, key);
-  if (!Array.isArray(result) || !result.length) result = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+  if ((!Array.isArray(result) || !result.length) && isBoundRoute(session, route)) result = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
   let records = Array.isArray(result) ? result : [];
   if (records.length) return records;
 
   // 兼容旧版本半成功数据：历史没有记录，但同日期 today 数据仍存在。
   const todayKey = scopedKey(userId, route, `today:${date}`);
-  const today = await redisGet(env, todayKey) || await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+  const today = await redisGet(env, todayKey) || (isBoundRoute(session, route) ? await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`)) : null);
   if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
     const recovered = recoverFromToday(today, userId, route, date);
     if (historySignature(recovered)) {
@@ -196,6 +196,7 @@ function normalizeStoreName(value) { return String(value || '').trim().replace(/
 function normalizeNumber(value) { const n = Number(value); return Number.isFinite(n) ? Math.round(n * 1000000) / 1000000 : 0; }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n < 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; return `${(Math.round((tons + Number.EPSILON) * 1000000) / 1000000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`; }
 function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0) - (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0); }
+function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId || session?.route) === normalizeRoute(route); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function scopedKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
