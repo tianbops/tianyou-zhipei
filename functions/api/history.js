@@ -12,7 +12,7 @@ export async function onRequest({ request, env }) {
   if (!session?.id) return json({ error: '登录已失效或权限信息不完整' }, 401);
   const url = new URL(request.url);
   const date = normalizeDate(url.searchParams.get('date'));
-  const route = normalizeRoute(url.searchParams.get('route') || session.route), userId = normalizeUserId(session.id);
+  const route = normalizeRoute(url.searchParams.get('route') || session.boundRouteId), userId = normalizeUserId(session.id);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
 
   try {
