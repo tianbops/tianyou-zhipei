@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
   $('#refreshUsers').onclick=loadUsers;
   $('#refreshRoutes').onclick=loadRoutes;
+$('#createRoute').onclick=createRoute;
   $('#refreshRequests').onclick=loadRequests;
   $('#refreshLogs').onclick=loadLogs;
   $('#resetDataBtn').onclick=resetData;
@@ -27,6 +28,12 @@ async function boot(){
 }
 async function loadUsers(){
   try{const r=await api('/api/admin/users'); if(!r.success) throw new Error(r.error||'用户读取失败'); users=r.users||[]; renderUsers(); fillSelects()}catch(e){notice(e.message,true)}
+}
+async function createRoute(){
+  const input=$('#newRouteInput'); const route=input.value.trim();
+  if(!route){notice('请输入线路，例如 17号线',true);return}
+  const button=$('#createRoute'); button.disabled=true; button.textContent='创建中…';
+  try{const r=await api('/api/admin/routes',{method:'POST',body:{route}});if(!r.success)throw new Error(r.error||'线路创建失败');input.value='';notice('线路 '+r.route.name+' 已创建');await loadRoutes();fillSelects()}catch(e){notice(e.message||'线路创建失败',true)}finally{button.disabled=false;button.textContent='创建线路'}
 }
 async function loadRoutes(){
   try{const r=await api('/api/routes'); if(!r.success) throw new Error(r.error||'路线读取失败'); routes=r.routes||[]; renderRoutes()}catch(e){notice(e.message,true)}
