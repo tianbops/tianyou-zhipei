@@ -4,7 +4,7 @@ function saveSession(token, user) {
   app.globalData.token = String(token || '');
   app.globalData.user = user || null;
   // 新会话不能继承上一账号的调度线路，避免账号切换后串线。
-  const boundRoute = String(user?.boundRouteId || user?.route || '').trim();
+  const boundRoute = String(user?.boundRouteId || '').trim();
   app.globalData.dispatchRoute = boundRoute;
   wx.removeStorageSync('zhipei_dispatch_route');
   if (boundRoute) wx.setStorageSync('zhipei_dispatch_route', boundRoute);
