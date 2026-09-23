@@ -147,12 +147,18 @@ async function listAllHistory(env, userId, route, session) {
     scanKeys(env, historyPattern),
     scanKeys(env, todayPattern)
   ]);
-  if (!historyKeys.length && !todayKeys.length && isBoundRoute(session, route)) {
-    const legacyPrefix = 'user:' + encodeKey(userId) + ':route:' + encodeKey(route) + ':orders:';
-    [historyKeys, todayKeys] = await Promise.all([
-      scanKeys(env, legacyPrefix + 'history:*'),
-      scanKeys(env, legacyPrefix + 'today:*')
-    ]);
+  if (isBoundRoute(session, route) && !historyKeys.length && !todayKeys.length) {
+    const users = await listUsersByRoute(env, route);
+    const legacyResults = await Promise.all(users.map(async user => {
+      const legacyPrefix = 'user:' + encodeKey(user.id) + ':route:' + encodeKey(route) + ':orders:';
+      const [h, t] = await Promise.all([
+        scanKeys(env, legacyPrefix + 'history:*'),
+        scanKeys(env, legacyPrefix + 'today:*')
+      ]);
+      return { history: h, today: t };
+    }));
+    historyKeys = legacyResults.flatMap(item => item.history);
+    todayKeys = legacyResults.flatMap(item => item.today);
   }
   const keyMap = new Map();
   historyKeys.forEach(key => keyMap.set(key, 'history'));
