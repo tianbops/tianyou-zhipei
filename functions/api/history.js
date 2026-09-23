@@ -1,7 +1,7 @@
 // Zhipei One - 用户独立历史查询 API
 // 历史数据按用户ID+线路+日期独立存储；允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
@@ -199,26 +199,6 @@ function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.c
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function scopedKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
-function normalizeRoute(value) { const s = String(value || '').trim(), m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
-function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
-function addDays(date, days) { const d = new Date(`${date}T00:00:00+08:00`); d.setUTCDate(d.getUTCDate() + days); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); }
-async function redisGet(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis读取失败'); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
-async function redisSet(env, key, value) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(value), cache: 'no-store' }); if (!response.ok) throw new Error('Redis保存失败'); }
-async function redisDelete(env, key) { const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/del/${encodeURIComponent(key)}`, { method: 'POST', headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' }); if (!response.ok) throw new Error('Redis删除失败'); }
-async function redisPipeline(env, commands) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/pipeline`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(commands),
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error(`Redis pipeline HTTP ${response.status}`);
-  const data = await response.json().catch(() => []);
-  if (!Array.isArray(data)) throw new Error('Redis pipeline 返回格式异常');
-  const failed = data.find(item => item && item.error);
-  if (failed) throw new Error(String(failed.error));
-  return data;
-}
 
 async function redisPipelineGet(env, keys) {
   return redisPipeline(env, keys.map(key => ['GET', key])).then(results => results.map(item => {
