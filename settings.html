@@ -33,6 +33,17 @@
   </div>
 </section>
 
+<section class="group" id="adminSetupGroup" style="display:none">
+  <div class="group-title">系统初始化</div>
+  <div class="settings-card">
+    <button class="setting-row" type="button" onclick="openModal('adminSetupModal')">
+      <span class="row-icon"><span class="z-icon" aria-hidden="true">⚙</span></span>
+      <span class="row-main"><span class="row-title">初始化系统管理员</span><span class="row-sub">将当前账号设置为系统管理员</span></span>
+      <span class="row-arrow" aria-hidden="true">›</span>
+    </button>
+  </div>
+</section>
+
 <section class="group">
   <div class="group-title">账号与安全</div>
   <div class="settings-card">
@@ -63,6 +74,8 @@
 <button class="logout-btn" type="button" onclick="Auth.logout()">退出登录</button>
 </main>
 
+<div class="modal" id="adminSetupModal" onclick="backdropClose(event,'adminSetupModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="adminSetupTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="adminSetupTitle">初始化系统管理员</div><button class="close-btn" type="button" onclick="closeModal('adminSetupModal')" aria-label="关闭">×</button></div><div class="sheet-note">仅将当前登录账号提升为系统管理员。初始化密钥仅用于本次验证，不会保存到浏览器。</div><div class="field"><label class="field-label" for="adminSetupKey">管理员初始化密钥</label><div class="input-wrap"><input id="adminSetupKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="请输入初始化密钥"><button class="eye" type="button" onclick="togglePassword('adminSetupKey',this)" aria-label="显示或隐藏密钥">◉</button></div></div><div id="adminSetupMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('adminSetupModal')">取消</button><button class="primary-btn" id="adminSetupButton" type="button" onclick="bootstrapAdmin()">初始化</button></div></section></div>
+
 <div class="modal" id="deliveryModal" onclick="backdropClose(event,'deliveryModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="deliveryTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="deliveryTitle">配送资料</div><button class="close-btn" type="button" onclick="closeModal('deliveryModal')" aria-label="关闭">×</button></div><div class="field"><label class="field-label" for="route">配送线路</label><div class="input-wrap"><input id="route" type="text" inputmode="numeric" placeholder="例如 17号线" autocomplete="off"></div></div><div class="field"><label class="field-label" for="vehicle">默认车辆</label><div class="input-wrap"><input id="vehicle" type="text" placeholder="例如 渝DK7692" autocomplete="off" maxlength="30"></div></div><div id="profileMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('deliveryModal')">取消</button><button class="primary-btn" id="saveButton" type="button" onclick="saveProfile()">保存</button></div></section></div>
 
 <div class="modal" id="usernameModal" onclick="backdropClose(event,'usernameModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="usernameTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="usernameTitle">更改账号</div><button class="close-btn" type="button" onclick="closeModal('usernameModal')" aria-label="关闭">×</button></div><div class="sheet-note">账号用于登录 Zhipei One。更改后原账号立即失效。</div><div class="field"><label class="field-label" for="currentUsername">当前账号</label><div class="input-wrap"><input id="currentUsername" type="text" readonly></div></div><div class="field"><label class="field-label" for="newUsername">新账号</label><div class="input-wrap"><input id="newUsername" type="text" placeholder="3-32位字母、数字或下划线" autocomplete="username" maxlength="32"></div></div><div class="field"><label class="field-label" for="accountPassword">当前密码</label><div class="input-wrap"><input id="accountPassword" type="password" autocomplete="current-password" placeholder="请输入当前密码"><button class="eye" type="button" onclick="togglePassword('accountPassword',this)" aria-label="显示或隐藏密码">◉</button></div></div><div id="accountMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('usernameModal')">取消</button><button class="primary-btn" id="accountButton" type="button" onclick="changeUsername()">确认更改</button></div></section></div>
@@ -90,14 +103,32 @@ async function init(){
     updateHero(user);
     $('route').value=user?.route||'';
     $('vehicle').value=user?.vehicle||'';
-    if(new URLSearchParams(location.search).get('setup')==='1' && !user?.route){
+    const setupMode = new URLSearchParams(location.search).get('setup') === '1';
+    if(setupMode){
+      $('adminSetupGroup').style.display='';
       history.replaceState({},'', 'settings.html');
-      setTimeout(()=>openModal('deliveryModal'),120);
+      setTimeout(()=>openModal('adminSetupModal'),120);
     }
   }catch(error){
     if(error.status===401){location.href='index.html';return}
     updateHero({name:'用户',username:'—'})
   }
+}
+async function bootstrapAdmin(){
+  const key=$('adminSetupKey').value.trim();
+  const button=$('adminSetupButton');
+  hideMessage('adminSetupMessage');
+  if(!key)return showMessage('adminSetupMessage','请输入管理员初始化密钥');
+  button.disabled=true;button.textContent='初始化中…';
+  try{
+    const response=await fetch('/api/admin/bootstrap',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Bootstrap-Key':key},credentials:'same-origin',cache:'no-store',body:JSON.stringify({username:currentUser?.username||''})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok||!data.success)throw new Error(data.error||`初始化失败（HTTP ${response.status}）`);
+    $('adminSetupKey').value='';
+    showMessage('adminSetupMessage','系统管理员初始化成功，请重新登录。','success');
+    setTimeout(()=>{Auth.logout();location.replace('index.html?adminInitialized=1')},800);
+  }catch(error){showMessage('adminSetupMessage',error.message||'初始化失败，请检查密钥后重试');}
+  finally{button.disabled=false;button.textContent='初始化'}
 }
 async function saveProfile(){const route=$('route').value.trim();const vehicle=$('vehicle').value.trim();const name=String(currentUser?.name||'').trim();const button=$('saveButton');hideMessage('profileMessage');if(!name)return showMessage('profileMessage','账户资料读取失败，请刷新后重试');if(!Auth.isValidRouteCode(route))return showMessage('profileMessage','请输入有效线路，例如 17号线');button.disabled=true;button.textContent='保存中…';try{const user=await Auth.updateProfile({name,route,vehicle});updateHero(user);showMessage('profileMessage','配送资料已保存','success');setTimeout(()=>{closeModal('deliveryModal');location.replace('home.html')},500)}catch(error){showMessage('profileMessage',error.message||'保存失败，请稍后重试')}finally{button.disabled=false;button.textContent='保存'}}
 async function changeUsername(){const newUsername=$('newUsername').value.trim();const password=$('accountPassword').value;const button=$('accountButton');hideMessage('accountMessage');if(!/^[a-zA-Z0-9_]{3,32}$/.test(newUsername))return showMessage('accountMessage','新账号需为3-32位字母、数字或下划线');if(!password)return showMessage('accountMessage','请输入当前密码');if(newUsername.toLowerCase()===$('currentUsername').value.toLowerCase())return showMessage('accountMessage','新账号不能与当前账号相同');button.disabled=true;button.textContent='更改中…';try{const response=await fetch('/api/change-username',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({newUsername,password})});const data=await response.json().catch(()=>({}));if(response.status===401){location.href='index.html';return}if(!response.ok||!data.success)throw new Error(data.error||'账号更改失败，请稍后重试');updateHero(data.user);$('newUsername').value='';$('accountPassword').value='';showMessage('accountMessage','账号更改成功','success');setTimeout(()=>closeModal('usernameModal'),700)}catch(error){showMessage('accountMessage',error.message||'账号更改失败，请稍后重试')}finally{button.disabled=false;button.textContent='确认更改'}}
