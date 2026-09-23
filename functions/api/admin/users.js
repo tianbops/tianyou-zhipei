@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：用户
 import { requireSystemAdmin } from '../_auth.js';
-import { normalizeRole, publicUser, redisGet, redisSet, scanUsers, recordAdminLog } from '../_data.js';
+import { normalizeRole, publicUser, redisGet, redisSet, scanUsers, recordAdminLog, redisCommand, encodeKey } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -24,10 +24,11 @@ export async function onRequest({ request, env }) {
     const body = await request.json().catch(() => ({}));
     const userId = String(body.userId || '').trim();
     if (!userId) return json({ success: false, error: '缺少 userId' }, 400);
-    const user = await redisGet(env, `user:${encodeURIComponent(userId).replace(/%/g, '_')}`);
-    if (!user) return json({ success: false, error: '用户不存在' }, 404);
-
+    if (request.method === 'DELETE') return deleteUser(env, admin, userId);
     if (request.method !== 'PATCH') return json({ success: false, error: 'Method not allowed' }, 405);
+
+    const user = await redisGet(env, `user:${encodeKey(userId)}`);
+    if (!user) return json({ success: false, error: '用户不存在' }, 404);
 
     const updated = { ...user };
     if (body.name !== undefined) updated.name = String(body.name || '').trim().slice(0, 40);
@@ -43,7 +44,7 @@ export async function onRequest({ request, env }) {
     }
     updated.updatedAt = new Date().toISOString();
     updated.sessionVersion = Number(updated.sessionVersion || 1) + 1;
-    await redisSet(env, `user:${encodeURIComponent(userId).replace(/%/g, '_')}`, updated);
+    await redisSet(env, `user:${encodeKey(userId)}`, updated);
     await recordAdminLog(env, admin, 'update_user', 'user', userId, { fields: Object.keys(body).filter(key => key !== 'userId') });
 
     return json({ success: true, user: publicUser(updated) });
@@ -51,6 +52,46 @@ export async function onRequest({ request, env }) {
     console.error('admin users error', error);
     return json({ success: false, error: error?.message || '用户管理失败' }, 503);
   }
+}
+
+async function deleteUser(env, admin, userId) {
+  if (String(admin?.id || '') === userId) return json({ success: false, error: '不能删除当前登录的系统管理员账号' }, 400);
+
+  const user = await redisGet(env, `user:${encodeKey(userId)}`);
+  if (!user) return json({ success: false, error: '用户不存在' }, 404);
+
+  if (normalizeRole(user.role) === 'system_admin') {
+    return json({ success: false, error: '不能直接删除系统管理员账号，请先取消管理员身份' }, 400);
+  }
+
+  const boundRoute = String(user.boundRouteId || user.route || '').trim();
+  if (boundRoute) return json({ success: false, error: '该用户已绑定路线，请先解除路线绑定' }, 409);
+
+  const userKey = `user:${encodeKey(userId)}`;
+  const usernameKey = `user:username:${encodeURIComponent(String(user.username || '').trim().toLowerCase())}`;
+  const script = `
+local userKey = KEYS[1]
+local usernameKey = KEYS[2]
+local expectedId = ARGV[1]
+local current = redis.call('GET', userKey)
+if not current then return 'NOT_FOUND' end
+local ok, obj = pcall(cjson.decode, current)
+if not ok or tostring(obj.id or '') ~= expectedId then return 'CONFLICT' end
+redis.call('DEL', userKey)
+local indexedId = redis.call('GET', usernameKey)
+if indexedId == expectedId then redis.call('DEL', usernameKey) end
+return 'OK'
+`;
+  const result = await redisCommand(env, ['EVAL', script, '2', userKey, usernameKey, userId]);
+  if (result === 'NOT_FOUND') return json({ success: false, error: '用户不存在' }, 404);
+  if (result === 'CONFLICT') return json({ success: false, error: '用户数据已变化，请刷新后重试' }, 409);
+  if (result !== 'OK') throw new Error('用户删除未确认');
+
+  await recordAdminLog(env, admin, 'delete_user', 'user', userId, {
+    username: String(user.username || ''),
+    reason: 'admin_cleanup'
+  });
+  return json({ success: true, deletedUserId: userId });
 }
 
 function json(payload, status = 200) {
