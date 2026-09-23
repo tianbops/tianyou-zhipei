@@ -27,7 +27,7 @@ export async function onRequest({ request, env }) {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
     // 历史数据保留100天；每次进入历史查询时执行一次清理。
-    await purgeExpiredHistory(env, userId, route);
+    await purgeExpiredHistory(env, userId, route).catch(error => console.warn('历史清理失败，继续读取历史数据', error?.message || error));
 
     // 不传日期时返回该用户/线路全部历史日期。
     if (!date) return await listAllHistory(env, userId, route, session);
@@ -162,23 +162,27 @@ async function listAllHistory(env, userId, route, session) {
   let legacyHistoryKeys = [];
   let legacyTodayKeys = [];
   if (isBoundRoute(session, route)) {
-    const users = await listUsersByRoute(env, route);
-    const legacyResults = await Promise.all(users.map(async user => {
-      const legacyPrefix = 'user:' + encodeKey(user.id) + ':route:' + encodeKey(route) + ':orders:';
-      const [h, t] = await Promise.all([
-        scanKeys(env, legacyPrefix + 'history:*'),
-        scanKeys(env, legacyPrefix + 'today:*')
-      ]);
-      return { history: h, today: t };
-    }));
-    legacyHistoryKeys = legacyResults.flatMap(item => item.history).filter(key => {
-      const date = normalizeDate(String(key).split(':history:').pop());
-      return date && isHistoryDateInWindow(date);
-    });
-    legacyTodayKeys = legacyResults.flatMap(item => item.today).filter(key => {
-      const date = normalizeDate(String(key).split(':today:').pop());
-      return date && isHistoryDateInWindow(date);
-    });
+    try {
+      const users = await listUsersByRoute(env, route);
+      const legacyResults = await Promise.all(users.map(async user => {
+        const legacyPrefix = 'user:' + encodeKey(user.id) + ':route:' + encodeKey(route) + ':orders:';
+        const [h, t] = await Promise.all([
+          scanKeys(env, legacyPrefix + 'history:*'),
+          scanKeys(env, legacyPrefix + 'today:*')
+        ]);
+        return { history: h, today: t };
+      }));
+      legacyHistoryKeys = legacyResults.flatMap(item => item.history).filter(key => {
+        const date = normalizeDate(String(key).split(':history:').pop());
+        return date && isHistoryDateInWindow(date);
+      });
+      legacyTodayKeys = legacyResults.flatMap(item => item.today).filter(key => {
+        const date = normalizeDate(String(key).split(':today:').pop());
+        return date && isHistoryDateInWindow(date);
+      });
+    } catch (error) {
+      console.warn('旧版历史索引读取失败，继续使用线路级历史', error?.message || error);
+    }
   }
 
   const routeHistorySet = new Set(routeHistoryKeys);
@@ -457,7 +461,7 @@ async function redisPipeline(env, commands) {
 
 async function redisPipelineGet(env, keys) {
   return redisPipeline(env, keys.map(key => ['GET', key])).then(results => results.map(item => {
-    const value = item?.result;
+    const value = item?.result !== undefined ? item.result : item;
     if (value === null || value === undefined || value === '') return null;
     try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
   }));
