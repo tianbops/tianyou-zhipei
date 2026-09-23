@@ -88,14 +88,18 @@ export async function onRequest({ request, env }) {
       routeRecord: record,
       userUpdates
     });
-    await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId });
 
+    // 核心绑定事务成功后，日志失败不能把“已成功绑定”误报成接口失败。
+    await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId })
+      .catch(error => console.warn('bind route audit log failed', error));
+
+    const boundUsers = new Map(userUpdates.map(item => [String(item.user?.id || ''), item.user]));
     return json({
       success: true,
       route: record,
       users: {
-        driver: driverUserId ? publicUser(await getUser(env, driverUserId)) : null,
-        delivery: deliveryUserId ? publicUser(await getUser(env, deliveryUserId)) : null
+        driver: driverUserId ? publicUser(boundUsers.get(driverUserId)) : null,
+        delivery: deliveryUserId ? publicUser(boundUsers.get(deliveryUserId)) : null
       }
     });
   } catch (error) {
