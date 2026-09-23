@@ -58,16 +58,6 @@ function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function publicUser(user) {
-  return {
-    id: String(user.id),
-    username: String(user.username),
-    name: String(user.name || user.username),
-    route: normalizeRoute(user.route),
-    vehicle: String(user.vehicle || '')
-  };
-}
-
 async function verifyPassword(password, encoded) {
   try {
     const value = String(encoded || '');
@@ -120,34 +110,8 @@ function parseRecord(value) {
 }
 
 const LOGIN_REDIS_TIMEOUT_MS = 10000;
-async function redisGet(env, key) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LOGIN_REDIS_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-      cache: 'no-store',
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error('Redis 读取失败');
-    const data = await response.json().catch(() => ({}));
-    return data.result || null;
-  } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('登录服务连接超时，请稍后重试');
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 function redisReady(env) {
   return Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
-}
-
-function normalizeRoute(value) {
-  const s = String(value || '').trim();
-  const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
-  return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s;
 }
 
 function json(payload, status = 200) {
