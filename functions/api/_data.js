@@ -250,6 +250,50 @@ export async function redisCommand(env, command) {
   return data.result;
 }
 
+// 路线绑定需要同时更新路线记录和多个用户记录；使用单次 EVAL 保证整组写入原子提交。
+// 同时用 expectedUpdatedAt / expectedSessionVersion 做乐观并发校验，避免并发管理员覆盖最新绑定。
+export async function atomicRouteBinding(env, { routeKey, expectedRouteUpdatedAt = '', routeRecord, userUpdates = [] }) {
+  const updates = Array.isArray(userUpdates) ? userUpdates.filter(item => item?.key && item?.user) : [];
+  const keys = [routeKey, ...updates.map(item => item.key)];
+  const args = [String(expectedRouteUpdatedAt || ''), JSON.stringify(routeRecord), ...updates.flatMap(item => [
+    String(Number(item.expectedSessionVersion || 1)),
+    JSON.stringify(item.user)
+  ])];
+  const script = `
+local expectedRouteUpdatedAt = ARGV[1]
+local routeJson = ARGV[2]
+local currentRoute = redis.call('GET', KEYS[1])
+if expectedRouteUpdatedAt ~= '' then
+  if not currentRoute then return 'ROUTE_CONFLICT' end
+  local ok, obj = pcall(cjson.decode, currentRoute)
+  if not ok or tostring(obj.updatedAt or '') ~= expectedRouteUpdatedAt then return 'ROUTE_CONFLICT' end
+else
+  if currentRoute then return 'ROUTE_CONFLICT' end
+end
+
+for i = 2, #KEYS do
+  local argIndex = 3 + (i - 2) * 2
+  local expectedVersion = tonumber(ARGV[argIndex]) or 1
+  local currentUser = redis.call('GET', KEYS[i])
+  if not currentUser then return 'USER_CONFLICT' end
+  local ok, obj = pcall(cjson.decode, currentUser)
+  if not ok or tonumber(obj.sessionVersion or 1) ~= expectedVersion then return 'USER_CONFLICT' end
+end
+
+redis.call('SET', KEYS[1], routeJson)
+for i = 2, #KEYS do
+  local argIndex = 3 + (i - 2) * 2
+  redis.call('SET', KEYS[i], ARGV[argIndex + 1])
+end
+return 'OK'
+`;
+  const result = await redisCommand(env, ['EVAL', script, String(keys.length), ...keys, ...args]);
+  if (result === 'ROUTE_CONFLICT') throw new Error('路线绑定已被其他管理员更新，请刷新后重试');
+  if (result === 'USER_CONFLICT') throw new Error('用户绑定状态已发生变化，请刷新后重试');
+  if (result !== 'OK') throw new Error('路线绑定原子提交未确认');
+  return true;
+}
+
 async function redisFetch(env, path, options = {}) {
   const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, '');
   if (!base || !env.UPSTASH_REDIS_REST_TOKEN) throw new Error('Redis未配置');
