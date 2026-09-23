@@ -75,7 +75,7 @@ function renderUsers(){
   </article>`).join('')||'<div class="meta">暂无用户</div>';
 }
 function renderRoutes(){
-  $('#routeList').innerHTML=routes.map(r=>`<article class="route-card"><div class="route-main"><div><div class="name">${esc(r.name||r.id)}</div><div class="meta">驾驶员：${esc(findUser(r.driverUserId)?.name||'未绑定')} · 配送员：${esc(findUser(r.deliveryUserId)?.name||'未绑定')}</div></div><span class="badge">${esc(r.status||'active')}</span></div></article>`).join('')||'<div class="meta">暂无已登记路线</div>';
+  $('#routeList').innerHTML=routes.map(r=>`<article class="route-card"><div class="route-main"><div><div class="name">${esc(r.name||r.id)}</div><div class="meta">驾驶员：${esc(findUser(r.driverUserId)?.name||'未绑定')} · 配送员：${esc(findUser(r.deliveryUserId)?.name||'未绑定')}</div></div><span class="badge">${esc(r.status||'active')}</span></div></article>`).join('')||'<div class="meta">暂无已登记线路</div>';
 }
 function fillSelects(){
   const options='<option value="">未绑定</option>'+users.filter(u=>u.status==='active'&&u.role!=='system_admin').map(u=>`<option value="${escAttr(u.id)}">${esc(u.name||u.username)} · ${esc(u.boundRouteId||'未绑定')}</option>`).join('');
@@ -132,7 +132,7 @@ async function resetData(){
   try{
     const r=await api('/api/admin/data-reset',{method:'POST',headers:{'X-Data-Reset-Key':key},body:{confirmation}});
     if(!r.success) throw new Error(r.error||'数据重置失败');
-    $('#resetResult').textContent=`已清空：扫描 ${r.scanned||0} 个键，删除 ${r.deleted||0} 个键。请重新注册管理员并建立路线数据。`;
+    $('#resetResult').textContent=`已清空：扫描 ${r.scanned||0} 个键，删除 ${r.deleted||0} 个键。请重新注册管理员并建立线路数据。`;
     $('#resetResult').classList.remove('hidden');
     notice('数据重置完成。当前管理员账号已删除，请重新注册。');
     $('#resetKey').value='';
