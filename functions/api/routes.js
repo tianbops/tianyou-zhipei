@@ -45,7 +45,7 @@ export async function onRequest({ request, env }) {
       const lockKey = `lock:route-base:${encodeURIComponent(route)}`;
       const lockValue = crypto.randomUUID();
       if (!(await acquireLock(env, lockKey, lockValue, LOCK_TTL_SECONDS))) {
-        return json({ error: '该路线基准库正在被修改，请稍后重试' }, 409);
+        return json({ error: '该线路基准库正在被修改，请稍后重试' }, 409);
       }
 
       try {
@@ -56,7 +56,7 @@ export async function onRequest({ request, env }) {
 
         if (expectedVersion !== null && expectedVersion !== currentVersion) {
           return json({
-            error: '路线基准库已被其他维护用户更新，请刷新后再保存',
+            error: '线路基准库已被其他维护用户更新，请刷新后再保存',
             code: 'DATA_CONFLICT',
             dataVersion: currentVersion
           }, 409);
@@ -153,7 +153,7 @@ async function listRoutes(env) {
       body: JSON.stringify(['SCAN', cursor, 'MATCH', 'route:*', 'COUNT', '200']),
       cache: 'no-store'
     });
-    if (!response.ok) throw new Error('路线列表读取失败');
+    if (!response.ok) throw new Error('线路列表读取失败');
     const data = await response.json().catch(() => ({}));
     cursor = String(data?.result?.[0] || '0');
     const keys = Array.isArray(data?.result?.[1]) ? data.result[1] : [];
