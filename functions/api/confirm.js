@@ -379,19 +379,19 @@ function key(value) { return String(value || '').trim().replace(/[\s\u3000（）
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
-  const text = String(value).trim().replace(/,/g, ''), match = text.match(/[\\d]+(?:\\.\\d+)?/);
+  const text = String(value).trim().replace(/,/g, ''), match = text.match(/[\d]+(?:\.\d+)?/);
   if (!match) return '';
   const n = Number(match[0]);
   if (!Number.isFinite(n) || n <= 0) return '';
-  const tons = /吨|\\bt\\b/i.test(text) ? n : /kg|千克|公斤/i.test(text) ? n / 1000 : n >= 1000 ? n / 1000 : n;
+  const tons = /吨|\bt\b/i.test(text) ? n : /kg|千克|公斤/i.test(text) ? n / 1000 : n >= 1000 ? n / 1000 : n;
   const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000;
-  return String(precise.toFixed(6).replace(/0+$/, '').replace(/\\.$/, '') || '0') + 't';
+  return String(precise.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0') + 't';
 }
 function resolveTotalWeight(value, rawText) {
   const direct = normalizeWeight(value);
   if (direct) return direct;
-  const source = String(rawText || '').replace(/\\s+/g, ' ');
-  const match = source.match(/总\\s*重\\s*量\\s*[:：]?\\s*([\\d]+(?:\\.[\\d]+)?)\\s*(kg|千克|公斤|吨|t)?/i) || source.match(/(?:总重|重量)\\s*[:：]?\\s*([\\d]+(?:\\.[\\d]+)?)\\s*(kg|千克|公斤|吨|t)?/i);
+  const source = String(rawText || '').replace(/\s+/g, ' ');
+  const match = source.match(/总\s*重\s*量\s*[:：]?\s*([\d]+(?:\.[\d]+)?)\s*(kg|千克|公斤|吨|t)?/i) || source.match(/(?:总重|重量)\s*[:：]?\s*([\d]+(?:\.[\d]+)?)\s*(kg|千克|公斤|吨|t)?/i);
   return match ? normalizeWeight(String(match[1]) + String(match[2] || '')) : '';
 }
 function businessOrderSignature(record) {
