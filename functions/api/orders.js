@@ -83,7 +83,7 @@ async function saveOrder(request, env, session) {
           const legacy = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
           return Array.isArray(legacy) ? legacy : [];
         }));
-        const merged = legacyLists.flat();
+        const merged = dedupeHistoryRecords(legacyLists.flat());
         historyData = merged.length ? merged : null;
       }
       if (Array.isArray(historyData)) {
@@ -202,6 +202,41 @@ function normalizeWeight(value) { if (value === null || value === undefined || v
 function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d+)?/); return !m || Number(m[0]) === 0; }
 function parseWeightToTons(value) { const s = String(value ?? '').trim().replace(/,/g, ''); const m = s.match(/[\\d]+(?:\\.\\d+)?/); if (!m) return 0; const n = Number(m[0]); if (!Number.isFinite(n)) return 0; if (/吨|\\bt\\b/i.test(s)) return n; if (/kg|千克|公斤/i.test(s)) return n / 1000; return n >= 1000 ? n / 1000 : n; }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
+function dedupeHistoryRecords(input) {
+  const byBatch = new Map();
+  const fallback = new Map();
+  for (const item of Array.isArray(input) ? input : []) {
+    if (!item || typeof item !== 'object') continue;
+    const batchId = String(item.orderBatchId || '').trim();
+    const updated = Date.parse(String(item.updatedAt || item.createdAt || '')) || 0;
+    if (batchId) {
+      const old = byBatch.get(batchId);
+      const oldUpdated = Date.parse(String(old?.updatedAt || old?.createdAt || '')) || 0;
+      if (!old || updated >= oldUpdated) byBatch.set(batchId, item);
+      continue;
+    }
+    const signature = historyRecordSignature(item);
+    if (!signature) continue;
+    const old = fallback.get(signature);
+    const oldUpdated = Date.parse(String(old?.updatedAt || old?.createdAt || '')) || 0;
+    if (!old || updated >= oldUpdated) fallback.set(signature, item);
+  }
+  return [...byBatch.values(), ...fallback.values()].sort((a, b) => {
+    const at = Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0;
+    const bt = Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0;
+    return bt - at;
+  });
+}
+function historyRecordSignature(record) {
+  const stores = Array.isArray(record?.orders) ? record.orders.map(item => normalizeStoreName(item?.name)).filter(Boolean).sort() : [];
+  return JSON.stringify({
+    route: String(record?.route || ''),
+    date: String(record?.date || ''),
+    vehicle: String(record?.vehicle || ''),
+    weight: normalizeWeight(record?.totalWeight ?? record?.weight),
+    stores
+  });
+}
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 
 async function acquireLock(env, key, token, seconds) {
