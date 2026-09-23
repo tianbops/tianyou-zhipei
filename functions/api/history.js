@@ -1,5 +1,5 @@
-// Zhipei One - 用户独立历史查询 API
-// 历史数据按用户ID+线路+日期独立存储；允许提前一天上传并查询明日运单。
+// Zhipei One - 路线历史查询 API
+// 今日订单/历史记录按线路+日期统一存储；userId 保留在记录内用于审计与兼容。允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
 import { canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey } from './_data.js';
 
