@@ -2,7 +2,7 @@
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
 // 学习数据按用户ID+线路写入 Upstash Redis，任何账号之间互不共享。
 import { authRequired } from './_auth.js';
-import { canManageRoute, legacyUserLearningKey, loadRouteBase, routeLearningKey } from './_data.js';
+import { canManageRoute, legacyUserLearningKey, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
 
 const MAX_ALIASES = 1000;
 const MAX_BATCH = 100;
@@ -167,10 +167,6 @@ function matchKey(value) {
   return clean(value).replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, roman => romanMap[roman] || roman).replace(/[∥〢丨]/g, 'II').replace(/谊品鲜/g, '谊品生鲜').replace(/客户中心/g, '客服中心').replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
 
-function normalizeRoute(value) {
-  const text = String(value || '').trim(), match = text.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
-  return match ? `${String(parseInt(match[1] || match[2], 10)).padStart(2, '0')}号线` : text;
-}
 
 function createLockToken() { return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.() || ''}`; }
 function json(data, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
