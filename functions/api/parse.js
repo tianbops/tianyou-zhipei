@@ -2,7 +2,7 @@
 // OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前用户线路基准库匹配。
 // 基准库按线路独立；学习库进一步按用户ID+线路隔离，避免不同账号互相学习。
 import { authRequired } from './_auth.js';
-import { loadRouteBase, routeLearningKey, legacyUserLearningKey, canUseRoute, redisGet as coreRedisGet } from './_data.js';
+import { loadRouteBase, routeLearningKey, legacyUserLearningKey, canUseRoute, normalizeRoute, redisGet as coreRedisGet } from './_data.js';
 
 const baseMatchIndexCache = new Map();
 const BASE_INDEX_CACHE_MAX = 16;
@@ -839,10 +839,6 @@ function matchKey(value) {
     .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '').toLowerCase();
 }
 
-function normalizeRoute(value) {
-  const text = String(value || '').trim(), match = text.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
-  return match ? `${String(parseInt(match[1] || match[2], 10)).padStart(2, '0')}号线` : text;
-}
 
 function normalizeWeight(value) {
   if (value === null || value === undefined || value === '') return '';
