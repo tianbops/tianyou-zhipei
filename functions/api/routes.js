@@ -2,7 +2,7 @@
 import { authRequired } from './_auth.js';
 import {
   canManageRoute, getRoute, getUser, loadRouteBase, normalizeRoute,
-  normalizeStores, routeBaseKey, saveRoute, redisSet, scanUsers
+  normalizeStores, routeBaseKey, redisSet, scanUsers
 } from './_data.js';
 
 const LOCK_TTL_SECONDS = 20;
@@ -75,13 +75,9 @@ export async function onRequest({ request, env }) {
         };
         await redisSet(env, routeBaseKey(route), value);
 
-        // 路线实体不存在时自动建立，但不会改变其他绑定。
+        // 线路实体必须由系统管理员创建；基准维护不能隐式创建线路。
         const routeRecord = await getRoute(env, route);
-        if (!routeRecord) await saveRoute(env, route, {
-          driverUserId: '',
-          deliveryUserId: '',
-          createdAt: updatedAt
-        });
+        if (!routeRecord) return json({ error: '线路不存在，请先由系统管理员创建该线路', code: 'ROUTE_NOT_FOUND' }, 404);
 
         return json({
           success: true,
