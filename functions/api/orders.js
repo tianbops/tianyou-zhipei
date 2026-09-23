@@ -22,7 +22,7 @@ export async function onRequest({ request, env }) {
 
 async function saveOrder(request, env, session) {
   const body = await request.json().catch(() => ({}));
-  const route = normalizeRoute(body.route || session.route), userId = normalizeUserId(session.id);
+  const route = normalizeRoute(body.route || session.boundRouteId), userId = normalizeUserId(session.id);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
   // /api/orders POST 仅保留“订单详情页更换车辆”这一增量写操作。
   // 正式运单录入必须经过 /api/confirm，避免出现“今日订单已写入、历史记录未生成”的半确认状态。
@@ -128,7 +128,7 @@ async function saveOrder(request, env, session) {
 
 async function readOrder(request, env, session) {
   const url = new URL(request.url), requestedDate = normalizeDate(url.searchParams.get('date'));
-  const route = normalizeRoute(url.searchParams.get('route') || session.route), userId = normalizeUserId(session.id);
+  const route = normalizeRoute(url.searchParams.get('route') || session.boundRouteId), userId = normalizeUserId(session.id);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该路线' }, 403);
   const batch = String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim();
 
