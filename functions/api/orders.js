@@ -190,42 +190,53 @@ async function readOrder(request, env, session) {
   }
   const history = Array.isArray(historyData) ? historyData : [];
 
-  // 历史数据恢复后，旧数据可能已经存在 history:${date}，但线路级 today:${date}
-  // 尚未重新建立。首页和“当日运单”都必须以当日线路级数据为入口，因此这里
-  // 将同一业务日的最新历史记录提升回 today key，完成一次性数据自愈。
-  if (!today && history.length) {
-    const sameDay = history
-      .filter(item => normalizeDate(item?.date) === date && Array.isArray(item?.orders) && item.orders.length)
-      .sort((a, b) => (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0) - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0));
-    if (sameDay[0]) {
-      today = sameDay[0];
-      try {
-        await redisSet(env, routeOrderKey(route, 'today:' + date), today);
-      } catch (error) {
-        console.warn('当日订单从历史恢复到today失败，继续返回恢复数据', route, date, error?.message || error);
-      }
+  // 当日订单读取必须以“有有效门店”为有效数据。
+  // 旧版本可能留下 today:<date> = 空对象/空 orders；这种脏数据不能阻断 history:<date> 的有效记录。
+  const hasOrders = item => Boolean(item && Array.isArray(item.orders) && item.orders.length > 0);
+  const isSameBusinessDay = item => {
+    if (!item || typeof item !== 'object') return false;
+    const itemDate = normalizeDate(item.date);
+    return !itemDate || itemDate === date;
+  };
+  const historyCandidates = history
+    .filter(item => hasOrders(item) && isSameBusinessDay(item))
+    .sort((a, b) => (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0) - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0));
+
+  // 关键自愈：today 不存在、为空、或失效时，都允许从同日有效历史恢复。
+  if (!hasOrders(today) && historyCandidates.length) {
+    today = { ...historyCandidates[0], date, route: historyCandidates[0].route || route };
+    try {
+      await redisSet(env, routeOrderKey(route, 'today:' + date), today);
+    } catch (error) {
+      console.warn('当日订单从历史恢复到today失败，继续返回恢复数据', route, date, error?.message || error);
     }
   }
 
-  // 线路级 today 读取失败但旧用户订单迁移成功时，仍允许正常返回；
-  // 只有所有可用数据源都无法读取时才由外层统一报告 503。
-  let selected = today;
-  if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
-  else if (!selected || !Array.isArray(selected.orders)) selected = history[history.length - 1] || null;
+  // 指定批次时优先返回指定批次；未指定批次时返回当日最新有效记录。
+  let selected = hasOrders(today) ? today : null;
+  if (batch) {
+    selected = historyCandidates.find(item => String(item?.orderBatchId || '').trim() === batch)
+      || (String(today?.orderBatchId || '').trim() === batch && hasOrders(today) ? today : null);
+  } else if (!selected) {
+    selected = historyCandidates[0] || null;
+  }
 
-  // 历史恢复/旧版数据中个别记录可能缺少 date 字段，但它已经位于
-  // history:${date} 这个确定的业务日键下。不能因此把有效运单过滤成 null。
-  if (selected && Array.isArray(selected.orders) && normalizeDate(selected.date) !== date) {
-    const selectedDate = normalizeDate(selected.date);
-    if (!selectedDate || selectedDate === date) {
-      selected = { ...selected, date, route: selected.route || route };
+  // 选中的记录一律补齐业务日/线路，避免旧历史记录因 date 缺失而被响应层过滤。
+  if (hasOrders(selected)) selected = { ...selected, date, route: selected.route || route };
+
+  // today 有效但 history 缺少对应批次时，顺手恢复历史索引。
+  if (hasOrders(selected) && !historyCandidates.some(item => String(item?.orderBatchId || '').trim() === String(selected.orderBatchId || '').trim())) {
+    try {
+      const repaired = [...history, { ...selected }];
+      repaired.sort((a, b) => (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0) - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0));
+      await redisSet(env, routeOrderKey(route, 'history:' + date), repaired.slice(0, 90));
+    } catch (error) {
+      console.warn('当日订单恢复历史索引失败', route, date, error?.message || error);
     }
   }
 
-  // 首页保持原有“今日任务”结构，但当天可以存在多笔独立运单。
-  // today 仍返回当前最新一笔，新增汇总字段仅供首页显示多运单汇总，不改变既有详情接口语义。
-  const dailyRecords = history.filter(item => normalizeDate(item?.date) === date);
-  const summaryRecords = dailyRecords.length ? dailyRecords : (today && normalizeDate(today.date) === date ? [today] : []);
+  const dailyRecords = historyCandidates.length ? historyCandidates : (hasOrders(selected) ? [selected] : []);
+  const summaryRecords = dailyRecords;
   const todayWaybillCount = summaryRecords.length;
   const summaryStores = summaryRecords.reduce((sum, item) => sum + (Number(item?.uniqueStoreCount) || Number(item?.count) || (Array.isArray(item?.orders) ? item.orders.length : 0)), 0);
   const summaryWeight = summaryRecords.reduce((sum, item) => sum + parseWeightToTons(item?.totalWeight ?? item?.weight), 0);
@@ -233,7 +244,8 @@ async function readOrder(request, env, session) {
     storeCount: summaryStores,
     totalWeight: summaryWeight > 0 ? (Math.round((summaryWeight + Number.EPSILON) * 1000000) / 1000000) + 't' : ''
   };
-  return json({ success: true, today: selected && normalizeDate(selected.date) === date ? selected : null, history, todayWaybillCount, todaySummary });
+  const responseToday = hasOrders(selected) ? selected : null;
+  return json({ success: true, today: responseToday, history: dailyRecords, todayWaybillCount, todaySummary });
 }
 
 async function loadBaseData(env, route, userId) {
