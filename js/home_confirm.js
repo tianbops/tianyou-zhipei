@@ -108,6 +108,7 @@
   window.onOrderParsed=syncParsed;
   async function reparseEditedText(){const text=String($('manualOrderInput')?.value||'').trim();if(!text)throw Error('请先输入或识别运单文字');const route=routeContext();if(!route)throw Error('未指定配送线路');if(typeof window.parseManualInput==='function'){const stores=await window.parseManualInput();if(!Array.isArray(stores)||!stores.length)throw Error('没有识别到有效门店');return{route:metaState.route||route,date:metaState.date||'',vehicle:metaState.vehicle||'',totalWeight:metaState.totalWeight||'',baseDatabaseAvailable:metaState.baseDatabaseAvailable,stores:parsedState};}const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({text,route})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)throw Error(data.error||`重新解析失败（${response.status}）`);syncParsed(data.data||{});return data.data||{};}
   async function saveConfirmedLearning(){const route=routeContext();if(!route||metaState.baseDatabaseAvailable===false)return;const items=[];for(const item of parsedState){if(!item||item.isNew===true||item.matched!==true||item.needsReview===true)continue;const baseName=String(item.baseName||item.name||'').trim();const rawNames=Array.isArray(item.rawNames)?item.rawNames.map(v=>String(v||'').trim()).filter(Boolean):[];const fallback=String(item.rawName||'').trim();if(fallback&&!rawNames.includes(fallback))rawNames.push(fallback);for(const rawName of rawNames){if(!rawName||rawName===baseName)continue;items.push({rawName,baseName,baseCode:String(item.baseCode||'').trim()});}}if(!items.length)return;const unique=new Map();for(const item of items){const key=`${item.rawName}\u0000${item.baseCode}\u0000${item.baseName}`;unique.set(key,item);}try{const response=await fetch('/api/store-learning',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({items:[...unique.values()]})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)console.warn('门店学习库保存失败',data.error||response.status);}catch(error){console.warn('门店学习库请求失败',error);}}
+  function createClientRequestId(){return `confirm-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;}
   let confirmAbortController=null;
   let confirmInFlight=false;
   let confirmStartedAt=0;
@@ -120,6 +121,7 @@
     confirmInFlight=true;
     confirmStartedAt=Date.now();
     let timer=null;
+    const confirmRequestId=metaState.confirmRequestId||(metaState.confirmRequestId=createClientRequestId());
     window.renderUnifiedStatus?.('loading',15,'正在连接服务器确认录入…');
     try{
       if(!parsedState.length){
@@ -170,7 +172,8 @@
           source:metaState.source||'web-confirm',
           recognizedCount:Number(metaState.recognizedCount)||parsedState.length,
           rawOrderCount:Number(metaState.rawOrderCount)||0,
-          baseDatabaseAvailable:metaState.baseDatabaseAvailable!==false
+          baseDatabaseAvailable:metaState.baseDatabaseAvailable!==false,
+          confirmRequestId
         })
       });
 
