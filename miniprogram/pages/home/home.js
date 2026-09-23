@@ -6,6 +6,7 @@ Page({
     user: {},
     routes: [],
     dispatchRoute: '',
+    routeIndex: 0,
     order: { count: 0, weight: '0.00t', stores: [] }
   },
 
@@ -25,7 +26,8 @@ Page({
       const dispatchRoute = exists ? selected : String(routes[0]?.id || selected || '').trim();
       app.globalData.dispatchRoute = dispatchRoute;
       if (dispatchRoute) wx.setStorageSync('zhipei_dispatch_route', dispatchRoute);
-      this.setData({ routes, dispatchRoute });
+      const routeIndex = Math.max(0, routes.findIndex(item => String(item?.id || '').trim() === dispatchRoute));
+      this.setData({ routes, dispatchRoute, routeIndex });
     } catch (e) {
       // 路线列表失败不阻断已保存路线的今日查询。
     }
@@ -37,7 +39,8 @@ Page({
     if (!route) return;
     app.globalData.dispatchRoute = route;
     wx.setStorageSync('zhipei_dispatch_route', route);
-    this.setData({ dispatchRoute: route, order: { count: 0, weight: '0.00t', stores: [] } });
+    const routeIndex = this.data.routes.findIndex(item => String(item?.id || '').trim() === route);
+    this.setData({ dispatchRoute: route, routeIndex: Math.max(0, routeIndex), order: { count: 0, weight: '0.00t', stores: [] } });
     this.loadToday();
   },
 
