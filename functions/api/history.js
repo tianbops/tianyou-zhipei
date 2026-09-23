@@ -1,7 +1,7 @@
 // Zhipei One - 路线历史查询 API
 // 今日订单/历史记录按线路+日期统一存储；userId 保留在记录内用于审计与兼容。允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey } from './_data.js';
+import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
@@ -17,6 +17,10 @@ export async function onRequest({ request, env }) {
 
   try {
     if (request.method === 'DELETE') {
+      // 历史记录属于线路业务数据。可调度线路的用户可以查看，但只有该线路绑定用户可删除。
+      if (!canManageRoute(session.user || session, route)) {
+        return json({ success: false, error: '只有绑定该路线的用户可以删除历史记录' }, 403);
+      }
       if (!date) return json({ success: false, error: 'Missing date parameter' }, 400);
       return await deleteHistoryRecord(env, userId, route, date, String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim());
     }
