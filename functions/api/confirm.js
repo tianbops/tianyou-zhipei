@@ -3,6 +3,7 @@ import { authRequired } from './_auth.js';
 import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
+const ORDER_LOCK_TTL_SECONDS = 60;
 
 export async function onRequest({ request, env }) {
   let stage = 'start';
@@ -68,7 +69,7 @@ export async function onRequest({ request, env }) {
     const lockKey = scopedKey(userId, route, `lock:${date}`);
     const token = createLockToken();
     stage = 'acquire-lock';
-    if (!(await acquireLock(env, lockKey, token, 20))) return json({ success: false, error: '当前用户正在保存订单，请稍后再试', stage }, 409);
+    if (!(await acquireLock(env, lockKey, token, ORDER_LOCK_TTL_SECONDS))) return json({ success: false, error: '当前线路正在保存订单，请稍后再试', stage }, 409);
     try {
       if (idempotencyKey) {
         const prior = await redisGet(env, idempotencyKey);
