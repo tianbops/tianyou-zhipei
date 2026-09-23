@@ -70,29 +70,9 @@ export async function onRequest({ request, env }) {
 async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  // Cloudflare Workers 当前 Web Crypto 对 PBKDF2 的迭代上限为 100000。
   const iterations = 100000;
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, material, 256);
   return `pbkdf2-sha256$${iterations}$${base64(salt)}:${base64(new Uint8Array(bits))}`;
-}
-
-async function redisCommand(env, command) {
-  const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
-  const token = String(env.UPSTASH_REDIS_REST_TOKEN || '');
-  const response = await fetch(`${url}/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(command),
-    cache: 'no-store'
-  });
-  const text = await response.text();
-  let data = {};
-  try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
-  if (!response.ok || data.error) throw new Error(data.error || `Upstash HTTP ${response.status}`);
-  return data.result;
 }
 
 function base64(bytes) {
