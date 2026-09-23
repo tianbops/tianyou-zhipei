@@ -14,7 +14,7 @@ export async function onRequest({ request, env }) {
   if (!session?.id) return json({ success: false, error: '登录已失效或权限信息不完整' }, 401);
   try {
     const body = await request.json().catch(() => ({}));
-    const route = normalizeRoute(body.route || session.route);
+    const route = normalizeRoute(body.route || session.boundRouteId);
     const userId = normalizeUserId(session.id);
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!canManageRoute(session.user || session, route)) return json({ success: false, error: '只有绑定该路线的用户可以维护门店学习数据' }, 403);
