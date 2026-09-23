@@ -12,7 +12,7 @@ $('#createRoute').onclick=createRoute;
   $('#resetDataBtn').onclick=resetData;
   $('#toggleResetKey').onclick=()=>toggleResetKey();
   $('#saveRoute').onclick=saveRoute;
-  $('#backBtn').onclick=()=>history.back();
+  $('#backBtn').onclick=()=>{\n    const ref=document.referrer;\n    let sameOrigin=false;\n    try{sameOrigin=!!ref&&new URL(ref,location.href).origin===location.origin&&new URL(ref,location.href).pathname!==location.pathname}catch(_){}\n    if(sameOrigin&&history.length>1){history.back();return}\n    location.replace('home.html');\n  };
   await boot();
 });
 
