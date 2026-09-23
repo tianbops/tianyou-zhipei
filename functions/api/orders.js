@@ -1,5 +1,5 @@
 // Zhipei One - 用户独立订单 API
-// 订单按用户ID+线路+日期存储，服务器为唯一真实数据源。
+// 订单按线路+日期统一存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
 import { canUseRoute, legacyUserOrderKey, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey } from './_data.js';
 
@@ -31,8 +31,8 @@ async function saveOrder(request, env, session) {
   if (!String(body.orderBatchId || '').trim()) return json({ error: '缺少原订单批次，不能修改车辆' }, 400);
   if (!Array.isArray(body.orders) || !body.orders.length) return json({ error: '缺少订单数据' }, 400);
   const date = normalizeDate(body.date) || businessDate();
-  const key = scopedKey(userId, route, `today:${date}`), latestKey = scopedKey(userId, route, 'latest');
-  const lockKey = scopedKey(userId, route, `lock:${date}`), lockToken = createLockToken();
+  const key = routeOrderKey(userId, route, `today:${date}`), latestKey = routeOrderKey(userId, route, 'latest');
+  const lockKey = routeOrderKey(userId, route, `lock:${date}`), lockToken = createLockToken();
   if (!(await acquireLock(env, lockKey, lockToken, ORDER_LOCK_TTL_SECONDS))) return json({ error: '当前线路正在保存订单，请稍后再试' }, 409);
   try {
     const existing = await redisGet(env, key) || (isBoundRoute(session, route) ? await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`)) : null);
@@ -73,7 +73,7 @@ async function saveOrder(request, env, session) {
       recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount, rawOrderCount,
       source, updatedAt: new Date().toISOString()
     };
-    const historyKey = scopedKey(userId, route, `history:${date}`);
+    const historyKey = routeOrderKey(userId, route, `history:${date}`);
     let updatedHistory = null;
     if (isVehicleOnlyUpdate) {
       const historyData = await redisGet(env, historyKey);
@@ -113,16 +113,16 @@ async function readOrder(request, env, session) {
   // 未指定日期时只读取业务日，避免明日预上传通过 latest 提前进入首页“今日任务”。
   // 需要读取历史或明日数据的页面必须显式传 date。
   const date = requestedDate || businessDate();
-  let today = await redisGet(env, scopedKey(userId, route, `today:${date}`));
-  let historyData = await redisGet(env, scopedKey(userId, route, `history:${date}`));
+  let today = await redisGet(env, routeOrderKey(userId, route, `today:${date}`));
+  let historyData = await redisGet(env, routeOrderKey(userId, route, `history:${date}`));
   if (isBoundRoute(session, route)) {
     if (!today) {
       today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
-      if (today) await redisSet(env, scopedKey(userId, route, `today:${date}`), today);
+      if (today) await redisSet(env, routeOrderKey(userId, route, `today:${date}`), today);
     }
     if (!historyData) {
       historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
-      if (historyData) await redisSet(env, scopedKey(userId, route, `history:${date}`), historyData);
+      if (historyData) await redisSet(env, routeOrderKey(userId, route, `history:${date}`), historyData);
     }
   }
   const history = Array.isArray(historyData) ? historyData : [];
@@ -189,7 +189,7 @@ function isBoundRoute(session, route) { return normalizeRoute(session?.boundRout
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function scopedBaseKey(userId, route) { return routeBaseKey(route); }
-function scopedKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
+function routeOrderKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/,'').replace(/\.$/,'') || '0'}t`; }
 function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d+)?/); return !m || Number(m[0]) === 0; }
 function parseWeightToTons(value) { const s = String(value ?? '').trim().replace(/,/g, ''); const m = s.match(/[\\d]+(?:\\.\\d+)?/); if (!m) return 0; const n = Number(m[0]); if (!Number.isFinite(n)) return 0; if (/吨|\\bt\\b/i.test(s)) return n; if (/kg|千克|公斤/i.test(s)) return n / 1000; return n >= 1000 ? n / 1000 : n; }
