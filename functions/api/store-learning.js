@@ -40,8 +40,9 @@ export async function onRequest({ request, env }) {
     try {
       const learning = await getLearning(env, key, userId, route, session.boundRouteId);
       learning.version = 4;
-      learning.userId = userId;
+      delete learning.userId;
       learning.route = route;
+      learning.updatedBy = userId;
       learning.aliases = learning.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
       const now = new Date().toISOString();
       let learnedCount = 0;
@@ -105,7 +106,7 @@ async function getLearning(env, key, userId, route, boundRouteId) {
   let data = await redisGet(env, key);
   if ((!data || typeof data !== 'object') && normalizeRoute(boundRouteId) === normalizeRoute(route)) data = await redisGet(env, legacyUserLearningKey(userId, route));
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
-  return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
+  return { ...data, version: 4, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
 function scopedBaseKey(userId, route) { return `route:${encodeKey(route)}:base`; }
