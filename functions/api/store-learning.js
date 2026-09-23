@@ -2,7 +2,7 @@
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
 // 学习数据按线路写入 Upstash Redis；同一路线绑定用户共享同一学习库。
 import { authRequired } from './_auth.js';
-import { canManageRoute, getRoute, legacyUserLearningKey, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
+import { canManageRoute, legacyUserLearningKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
 
 const MAX_ALIASES = 1000;
 const MAX_BATCH = 100;
@@ -114,11 +114,10 @@ async function getLearning(env, key, userId, route, boundRouteId) {
     return { version: 4, route, aliases: {} };
   }
 
-  const routeRecord = await getRoute(env, route);
-  const boundIds = Array.isArray(routeRecord?.boundUserIds)
-    ? routeRecord.boundUserIds.map(id => String(id || '').trim()).filter(Boolean)
-    : [userId];
-
+  const boundUsers = await listUsersByRoute(env, route);
+  const boundIds = boundUsers
+    .map(user => String(user?.id || '').trim())
+    .filter(Boolean);
   if (!boundIds.includes(userId)) boundIds.push(userId);
 
   const legacyValues = await Promise.all(
@@ -175,7 +174,6 @@ function mergeLegacyLearning(values, route) {
   return { version: 4, route, aliases, updatedAt: latestUpdatedAt };
 }
 
-function scopedBaseKey(userId, route) { return `route:${encodeKey(route)}:base`; }
 function learningKey(userId, route) {
   return routeLearningKey(route);
 }
