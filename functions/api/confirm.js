@@ -376,6 +376,38 @@ function scopedLearningKey(userId, route, suffix = '') { return `${routeLearning
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function key(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]{}]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/客户中心/g, '客服中心').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase(); }
+function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
+function normalizeWeight(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const text = String(value).trim().replace(/,/g, ''), match = text.match(/[\\d]+(?:\\.\\d+)?/);
+  if (!match) return '';
+  const n = Number(match[0]);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const tons = /吨|\\bt\\b/i.test(text) ? n : /kg|千克|公斤/i.test(text) ? n / 1000 : n >= 1000 ? n / 1000 : n;
+  const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000;
+  return String(precise.toFixed(6).replace(/0+$/, '').replace(/\\.$/, '') || '0') + 't';
+}
+function resolveTotalWeight(value, rawText) {
+  const direct = normalizeWeight(value);
+  if (direct) return direct;
+  const source = String(rawText || '').replace(/\\s+/g, ' ');
+  const match = source.match(/总\\s*重\\s*量\\s*[:：]?\\s*([\\d]+(?:\\.[\\d]+)?)\\s*(kg|千克|公斤|吨|t)?/i) || source.match(/(?:总重|重量)\\s*[:：]?\\s*([\\d]+(?:\\.[\\d]+)?)\\s*(kg|千克|公斤|吨|t)?/i);
+  return match ? normalizeWeight(String(match[1]) + String(match[2] || '')) : '';
+}
+function businessOrderSignature(record) {
+  if (!record || typeof record !== 'object') return '';
+  const route = normalizeRoute(record.route);
+  const date = normalizeDate(record.date);
+  const weight = normalizeWeight(record.totalWeight ?? record.weight);
+  const orders = Array.isArray(record.orders) ? record.orders : [];
+  const stores = orders.map(item => {
+    const storeId = String(item?.storeId || item?.baseCode || '').trim();
+    const name = key(item?.name || item?.storeName || item?.shopName || '');
+    return storeId ? 'id:' + storeId : name ? 'name:' + name : '';
+  }).filter(Boolean).sort();
+  if (!route || !date || !weight || !stores.length) return '';
+  return JSON.stringify({ route, date, weight, stores });
+}
 function cleanCode(value) { const text = String(value || '').trim(), match = text.match(/\d+/); return match ? String(Number(match[0])).padStart(2, '0') : text; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
