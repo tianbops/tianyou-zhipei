@@ -24,7 +24,7 @@ export async function onRequest({ request, env }) {
     const deadline = startedAt + 120000;
     if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该路线' }, 403);
     const [baseRecord, learning] = await Promise.all([
-      getBaseStores(env, route, deadline, userId),
+      getBaseStores(env, route, deadline, userId, session.boundRouteId),
       getLearning(env, route, userId, deadline)
     ]);
     const dataReadyAt = Date.now();
@@ -205,8 +205,8 @@ function extractVolume(source) {
   return match ? `${match[1]}m³` : '';
 }
 
-async function getBaseStores(env, route, deadline, userId) {
-  const data = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId === route ? userId : undefined });
+async function getBaseStores(env, route, deadline, userId, boundRouteId) {
+  const data = await loadRouteBase(env, route, { allowLegacyUserId: normalizeRoute(boundRouteId) === normalizeRoute(route) ? userId : undefined });
   if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error('未找到' + normalizeRoute(route) + '路线基准数据库');
   return {
     stores: data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean),
