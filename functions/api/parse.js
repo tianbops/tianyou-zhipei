@@ -2,7 +2,7 @@
 // OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前调度线路基准库匹配。
 // 基准库与学习库均按线路独立；旧版用户级学习库仅作为迁移兼容来源。
 import { authRequired } from './_auth.js';
-import { loadRouteBase, routeLearningKey, legacyUserLearningKey, canUseRoute, normalizeRoute, redisGet as coreRedisGet } from './_data.js';
+import { loadRouteBase, routeLearningKey, legacyUserLearningKey, listUsersByRoute, canUseRoute, normalizeRoute, redisGet as coreRedisGet } from './_data.js';
 
 const baseMatchIndexCache = new Map();
 const BASE_INDEX_CACHE_MAX = 16;
@@ -235,13 +235,36 @@ function getCachedBaseMatchIndex(route, dataVersion, stores) {
 }
 
 async function getLearning(env, route, userId, deadline, boundRouteId) {
-  let data = await coreRedisGet(env, routeLearningKey(route));
+  const normalizedRoute = normalizeRoute(route);
+  let data = await coreRedisGet(env, routeLearningKey(normalizedRoute));
   if (!data || typeof data !== 'object') {
     const boundRoute = normalizeRoute(boundRouteId);
-    if (boundRoute === normalizeRoute(route)) data = await coreRedisGet(env, legacyUserLearningKey(userId, route));
+    if (boundRoute === normalizedRoute) {
+      const users = await listUsersByRoute(env, normalizedRoute);
+      const ids = [...new Set([...users.map(user => String(user?.id || '').trim()), String(userId || '').trim()].filter(Boolean))];
+      const legacyLists = await Promise.all(ids.map(async id => {
+        const legacy = await coreRedisGet(env, legacyUserLearningKey(id, normalizedRoute));
+        return legacy && typeof legacy === 'object' ? legacy : null;
+      }));
+      const aliases = {};
+      let latest = null;
+      for (const legacy of legacyLists) {
+        if (!legacy) continue;
+        if (!latest || String(legacy.updatedAt || '').localeCompare(String(latest.updatedAt || '')) > 0) latest = legacy;
+        for (const [alias, item] of Object.entries(legacy.aliases && typeof legacy.aliases === 'object' ? legacy.aliases : {})) {
+          const prev = aliases[alias];
+          if (!prev || Number(item?.count || 0) > Number(prev?.count || 0) || String(item?.updatedAt || '').localeCompare(String(prev?.updatedAt || '')) > 0) {
+            aliases[alias] = item;
+          } else if (prev) {
+            aliases[alias] = { ...prev, count: Number(prev.count || 0) + Number(item?.count || 0) };
+          }
+        }
+      }
+      if (Object.keys(aliases).length) data = { ...(latest || {}), aliases };
+    }
   }
-  if (!data || typeof data !== 'object') return { version: 1, route: normalizeRoute(route), aliases: {} };
-  return { ...data, version: 1, route: normalizeRoute(route), aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
+  if (!data || typeof data !== 'object') return { version: 1, route: normalizedRoute, aliases: {} };
+  return { ...data, version: 1, route: normalizedRoute, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
