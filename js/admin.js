@@ -43,6 +43,7 @@ function renderUsers(){
       <button onclick="toggleUser('${escAttr(u.id)}','${u.status==='active'?'disabled':'active'}')">${u.status==='active'?'停用':'启用'}</button>
       <button onclick="resetPassword('${escAttr(u.id)}')">重置密码</button>
       <button onclick="setRole('${escAttr(u.id)}','${u.role==='system_admin'?'driver':'system_admin'}')">${u.role==='system_admin'?'取消管理员':'设为管理员'}</button>
+      ${u.role!=='system_admin'&&!u.boundRouteId?'<button onclick="deleteUser(\''+escAttr(u.id)+'\')">删除账号</button>':''}
     </div>
   </article>`).join('')||'<div class="meta">暂无用户</div>';
 }
@@ -61,6 +62,19 @@ async function saveRoute(){
 async function resetPassword(id){const password=prompt('输入新的6-72位密码');if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
 async function setRole(id,role){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,role}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
+async function deleteUser(id){
+  const user=users.find(x=>x.id===id);
+  if(!user)return;
+  if(user.role==='system_admin'){notice('不能删除系统管理员账号',true);return}
+  if(user.boundRouteId){notice('该用户已绑定路线，请先解除绑定',true);return}
+  if(!confirm('确定删除账号“'+user.username+'”吗？删除后账号及登录索引将永久移除。'))return;
+  try{
+    const r=await api('/api/admin/users',{method:'DELETE',body:{userId:id}});
+    if(!r.success)throw new Error(r.error||'账号删除失败');
+    notice('重复账号已删除');
+    await loadUsers();
+  }catch(e){notice(e.message||'账号删除失败',true)}
+}
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
   $('#usersTab').classList.toggle('hidden',tab!=='users');
