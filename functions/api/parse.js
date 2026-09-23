@@ -206,7 +206,7 @@ function extractVolume(source) {
 }
 
 async function getBaseStores(env, route, deadline, userId) {
-  const data = await loadRouteBase(env, route, { allowLegacyUserId: userId });
+  const data = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId === route ? userId : undefined });
   if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error('未找到' + normalizeRoute(route) + '路线基准数据库');
   return {
     stores: data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean),
