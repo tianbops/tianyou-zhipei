@@ -212,13 +212,20 @@ async function readOrder(request, env, session) {
     }
   }
 
-  // 指定批次时优先返回指定批次；未指定批次时返回当日最新有效记录。
+  // 指定批次时严格返回指定批次；未指定批次时比较 today 与 history 的更新时间，避免旧 today 覆盖当天更新。
+  const updatedAtOf = item => Date.parse(String(item?.updatedAt || item?.createdAt || '')) || 0;
   let selected = hasOrders(today) ? today : null;
   if (batch) {
     selected = historyCandidates.find(item => String(item?.orderBatchId || '').trim() === batch)
       || (String(today?.orderBatchId || '').trim() === batch && hasOrders(today) ? today : null);
-  } else if (!selected) {
-    selected = historyCandidates[0] || null;
+  } else {
+    const latestHistory = historyCandidates[0] || null;
+    if (!selected || (latestHistory && updatedAtOf(latestHistory) > updatedAtOf(selected))) selected = latestHistory;
+    if (hasOrders(selected) && (!hasOrders(today) || updatedAtOf(selected) > updatedAtOf(today))) {
+      today = selected;
+      try { await redisSet(env, routeOrderKey(route, 'today:' + date), today); }
+      catch (error) { console.warn('最新当日订单回写today失败', route, date, error?.message || error); }
+    }
   }
 
   // 选中的记录一律补齐业务日/线路，避免旧历史记录因 date 缺失而被响应层过滤。
