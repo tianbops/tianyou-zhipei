@@ -4,7 +4,7 @@ Page({
   data:{items:[],dispatchRoute:''},
   async onShow(){
     const user=app.globalData.user||wx.getStorageSync('zhipei_user')||{};
-    const route=String(app.globalData.dispatchRoute||wx.getStorageSync('zhipei_dispatch_route')||user.boundRouteId||user.route||'').trim();
+    const route=String(app.globalData.dispatchRoute||wx.getStorageSync('zhipei_dispatch_route')||user.boundRouteId||'').trim();
     this.setData({dispatchRoute:route});
     try{
       const url=route?'/api/history?route='+encodeURIComponent(route):'/api/history';
