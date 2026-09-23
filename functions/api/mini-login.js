@@ -1,6 +1,7 @@
 // Zhipei One - 微信小程序统一登录
 // 微信身份只绑定现有 userId，不创建第二套账号。
 import { createMiniToken } from './_auth.js';
+import { publicUser, redisGet } from './_data.js';
 
 export async function onRequestPost({ request, env }) {
   if (request.method !== 'POST') return json({ message: 'Method not allowed' }, 405);
@@ -122,16 +123,6 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
-async function redisGet(env, key) {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error('Redis 读取失败');
-  const data = await response.json().catch(() => ({}));
-  return data.result || null;
-}
-
 async function redisSetNx(env, key, value) {
   const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}/NX`, {
     headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
@@ -154,24 +145,8 @@ function parseRecord(value) {
   }
 }
 
-function publicUser(user) {
-  return {
-    id: String(user.id),
-    username: String(user.username),
-    name: String(user.name || user.username),
-    route: normalizeRoute(user.route),
-    vehicle: String(user.vehicle || '')
-  };
-}
-
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
-}
-
-function normalizeRoute(value) {
-  const s = String(value || '').trim();
-  const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);
-  return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s;
 }
 
 function redisReady(env) {
