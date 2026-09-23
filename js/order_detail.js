@@ -43,7 +43,7 @@ window.goBack=()=>{
       return;
     }
   }catch(_){}
-  location.href='../home.html';
+  location.replace('../home.html');
 };
 window.logout=()=>{hidePopups();if(confirm('确定退出登录吗？'))Auth.logout()};
 async function refreshTodayDetail(){if(historyMode||currentData.date!==currentDate())return;try{const latest=await load();currentData=latest;header();render(currentData.orders,currentData.weight)}catch(e){console.error('刷新当日运单失败',e)}}
