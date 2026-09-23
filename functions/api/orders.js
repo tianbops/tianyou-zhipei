@@ -137,7 +137,14 @@ async function readOrder(request, env, session) {
   const date = requestedDate || businessDate();
   // 今日任务的主数据与历史汇总解耦：今日 key 可用时，历史迁移/汇总异常不能把首页或详情页整体变成 503。
   // 这尤其重要于旧用户数据迁移期间：history 缺失会触发 SCAN user:*，不应阻断已有的线路级 today 数据。
-  let today = await redisGet(env, routeOrderKey(route, `today:${date}`));
+  let today = null;
+  let todayReadError = null;
+  try {
+    today = await redisGet(env, routeOrderKey(route, `today:${date}`));
+  } catch (error) {
+    todayReadError = error;
+    console.warn('读取线路当日订单失败，继续尝试旧数据迁移', route, date, error?.message || error);
+  }
   let historyData = null;
   try {
     historyData = await redisGet(env, routeOrderKey(route, `history:${date}`));
@@ -182,6 +189,8 @@ async function readOrder(request, env, session) {
     }
   }
   const history = Array.isArray(historyData) ? historyData : [];
+  // 线路级 today 读取失败但旧用户订单迁移成功时，仍允许正常返回；
+  // 只有所有可用数据源都无法读取时才由外层统一报告 503。
   let selected = today;
   if (batch && selected?.orderBatchId !== batch) selected = history.find(item => item?.orderBatchId === batch) || null;
   else if (!selected || !Array.isArray(selected.orders)) selected = history[history.length - 1] || null;
