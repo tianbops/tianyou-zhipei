@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：路线绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand } from '../_data.js';
+import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, scanUsers } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -8,9 +8,42 @@ export async function onRequest({ request, env }) {
   try {
     if (request.method === 'GET') {
       const route = normalizeRoute(new URL(request.url).searchParams.get('route'));
-      if (!route) return json({ success: false, error: '缺少 route' }, 400);
-      const record = await getRoute(env, route);
-      return json({ success: true, route: record || { id: route, name: route, driverUserId: '', deliveryUserId: '', boundUserIds: [] } });
+      if (route) {
+        const record = await getRoute(env, route);
+        return json({ success: true, route: record || { id: route, name: route, driverUserId: '', deliveryUserId: '', boundUserIds: [] } });
+      }
+
+      // 系统管理页面使用管理员专用列表接口，避免依赖普通调度接口。
+      const records = [];
+      let cursor = '0';
+      do {
+        const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', 'route:*', 'COUNT', '200']);
+        cursor = String(result?.[0] || '0');
+        const keys = Array.isArray(result?.[1]) ? result[1] : [];
+        for (const key of keys) {
+          if (key.includes(':base') || key.includes(':orders:') || key.includes(':learning')) continue;
+          const value = await redisCommand(env, ['GET', key]).catch(() => null);
+          if (!value || typeof value !== 'object' || !value.id) continue;
+          records.push(value);
+        }
+      } while (cursor !== '0');
+
+      const users = await scanUsers(env);
+      const byId = new Map(records.map(record => [String(record.id), record]));
+      for (const user of users) {
+        const id = normalizeRoute(user?.boundRouteId);
+        if (!id) continue;
+        if (!byId.has(id)) byId.set(id, { id, name: id, driverUserId: '', deliveryUserId: '', boundUserIds: [] });
+        const record = byId.get(id);
+        if (user.routeDuty === 'driver') record.driverUserId = user.id;
+        if (user.routeDuty === 'delivery') record.deliveryUserId = user.id;
+        if (!Array.isArray(record.boundUserIds)) record.boundUserIds = [];
+        if (!record.boundUserIds.includes(user.id)) record.boundUserIds.push(user.id);
+      }
+      return json({
+        success: true,
+        routes: [...byId.values()].sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }))
+      });
     }
 
     if (request.method === 'POST') {
