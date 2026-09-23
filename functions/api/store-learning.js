@@ -1,6 +1,6 @@
-// 天友智配One - 用户独立门店学习库
+// 天友智配One - 线路共享门店学习库
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
-// 学习数据按用户ID+线路写入 Upstash Redis，任何账号之间互不共享。
+// 学习数据按线路写入 Upstash Redis；同一路线绑定用户共享同一学习库。
 import { authRequired } from './_auth.js';
 import { canManageRoute, legacyUserLearningKey, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
 
@@ -34,7 +34,7 @@ export async function onRequest({ request, env }) {
     }
 
     const key = learningKey(userId, route);
-    const lockKey = `lock:learning:${encodeKey(userId)}:${encodeKey(route)}`;
+    const lockKey = `lock:learning:${encodeKey(route)}`;
     const lockToken = createLockToken();
     if (!(await acquireLock(env, lockKey, lockToken, LOCK_SECONDS))) return json({ success: false, error: '当前用户学习库正在更新，请稍后再试' }, 409);
     try {
