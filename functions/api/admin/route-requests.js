@@ -154,7 +154,7 @@ async function reviewRequest(env, admin, request) {
   }
 
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
-  await redisSet(env, key, approved);
+  await persistApprovedRequest(env, key, approved);
   await recordAdminLog(env, admin, 'approve_route_request', 'route_request', requestId, {
     userId: user.id, fromRoute: currentBound || '', route, duty
   });
@@ -163,9 +163,24 @@ async function reviewRequest(env, admin, request) {
 async function finishApprovedWithoutRewrite(env, admin, pending, key) {
   const now = new Date().toISOString();
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
-  await redisSet(env, key, approved);
+  await persistApprovedRequest(env, key, approved);
   await recordAdminLog(env, admin, 'approve_route_request', 'route_request', pending.id, { userId: pending.userId, route: pending.route, duty: pending.duty });
   return json({ success: true, request: approved });
+}
+
+async function persistApprovedRequest(env, key, approved) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await redisSet(env, key, approved);
+      const saved = await redisGet(env, key);
+      if (saved && saved.status === 'approved' && saved.id === approved.id) return true;
+      lastError = new Error('审核状态写入后未确认');
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error('线路绑定已完成，但审核状态同步未确认，请刷新申请列表后重试');
 }
 
 function json(payload, status = 200) {
