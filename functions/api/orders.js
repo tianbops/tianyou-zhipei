@@ -125,12 +125,31 @@ async function readOrder(request, env, session) {
   let today = await redisGet(env, routeOrderKey(route, `today:${date}`));
   let historyData = await redisGet(env, routeOrderKey(route, `history:${date}`));
   if (isBoundRoute(session, route)) {
+    // 线路级数据是唯一权威来源；只有线路级 key 不存在时才读取 legacy。
+    // legacy 可能分散在司机/送货员多个用户下，因此必须合并全部当前绑定用户。
     if (!today) {
-      today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+      const users = await listUsersByRoute(env, route);
+      const legacyToday = await Promise.all(users.map(async user => {
+        const value = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+      }));
+      const candidates = legacyToday.filter(Boolean);
+      candidates.sort((a, b) => {
+        const at = Date.parse(String(a.updatedAt || a.createdAt || '')) || 0;
+        const bt = Date.parse(String(b.updatedAt || b.createdAt || '')) || 0;
+        return bt - at;
+      });
+      today = candidates[0] || null;
       if (today) await redisSet(env, routeOrderKey(route, `today:${date}`), today);
     }
     if (!historyData) {
-      historyData = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+      const users = await listUsersByRoute(env, route);
+      const legacyLists = await Promise.all(users.map(async user => {
+        const value = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
+        return Array.isArray(value) ? value : [];
+      }));
+      const merged = dedupeHistoryRecords(legacyLists.flat());
+      historyData = merged.length ? merged : null;
       if (historyData) await redisSet(env, routeOrderKey(route, `history:${date}`), historyData);
     }
   }
