@@ -1,7 +1,7 @@
 // 天友智配One - 更改登录账号
 // 更改账号必须验证当前密码，并原子占用新账号名。
 import { authRequired, createSession, sessionCookie } from './_auth.js';
-import { publicUser, normalizeRoute, redisCommand } from './_data.js';
+import { publicUser, redisCommand } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -60,12 +60,10 @@ export async function onRequest({ request, env }) {
 }
 
 function normalizeUsername(value) { return String(value || '').trim().toLowerCase(); }
-function normalizeRoute(value) { const s = String(value || '').trim(); const m = s.match(/^(?:([0-9]+)|([0-9]+)号线)$/); return m ? `${String(parseInt(m[1] || m[2], 10)).padStart(2, '0')}号线` : s; }
 function parseRecord(value) { if (!value) return null; if (typeof value !== 'string') return value; try { const first = JSON.parse(value); return typeof first === 'string' ? JSON.parse(first) : first; } catch { return null; } }
 async function verifyPassword(password, encoded) { try { const value = String(encoded || ''); let iterations = 100000; let salt; let stored; const parts = value.split('$'); if (parts.length === 3 && parts[0] === 'pbkdf2-sha256') { iterations = Number(parts[1]); [salt, stored] = parts[2].split(':'); } else { [salt, stored] = value.split(':'); } if (!salt || !stored || !Number.isInteger(iterations) || iterations < 1 || iterations > 100000) return false; const derived = await derivePassword(password, decodeBase64(salt), iterations); return timingSafeEqual(derived, decodeBase64(stored)); } catch { return false; } }
 async function derivePassword(password, salt, iterations) { const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']); const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, material, 256); return new Uint8Array(bits); }
 function decodeBase64(value) { const raw = atob(String(value || '')); return Uint8Array.from(raw, char => char.charCodeAt(0)); }
 function timingSafeEqual(a, b) { if (a.length !== b.length) return false; let diff = 0; for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i]; return diff === 0; }
-async function redisCommand(env, command) { const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, ''); const token = String(env.UPSTASH_REDIS_REST_TOKEN || ''); const response = await fetch(`${url}/`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(command), cache: 'no-store' }); const text = await response.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = {}; } if (!response.ok || data.error) throw new Error(data.error || `Upstash HTTP ${response.status}`); return data.result; }
 function redisReady(env) { return Boolean(String(env.UPSTASH_REDIS_REST_URL || '').trim() && String(env.UPSTASH_REDIS_REST_TOKEN || '').trim()); }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
