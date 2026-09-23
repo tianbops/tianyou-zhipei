@@ -1,6 +1,7 @@
 // 天友智配One - 注销账号
 // 注销需验证当前密码；删除该用户的账号、订单、历史记录与学习数据，不删除线路公共基准库。
 import { authRequired, clearSessionCookie } from './_auth.js';
+import { redisCommand } from './_data.js';
 
 const SCAN_COUNT = 100;
 const MAX_SCAN_ROUNDS = 100;
@@ -93,15 +94,5 @@ async function derivePassword(password, salt, iterations) {
 function decodeBase64(value) { const raw = atob(String(value || '')); return Uint8Array.from(raw, char => char.charCodeAt(0)); }
 function timingSafeEqual(a, b) { if (a.length !== b.length) return false; let diff = 0; for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i]; return diff === 0; }
 function parseRecord(value) { if (!value) return null; if (typeof value !== 'string') return value; try { const first = JSON.parse(value); return typeof first === 'string' ? JSON.parse(first) : first; } catch { return null; } }
-async function redisCommand(env, command) {
-  const url = String(env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
-  const token = String(env.UPSTASH_REDIS_REST_TOKEN || '');
-  const response = await fetch(`${url}/`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(command), cache: 'no-store' });
-  const text = await response.text();
-  let data = {};
-  try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
-  if (!response.ok || data.error) throw new Error(data.error || `Upstash HTTP ${response.status}`);
-  return data.result;
-}
 function redisReady(env) { return Boolean(String(env.UPSTASH_REDIS_REST_URL || '').trim() && String(env.UPSTASH_REDIS_REST_TOKEN || '').trim()); }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
