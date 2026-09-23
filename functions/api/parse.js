@@ -1,6 +1,6 @@
 // 天友智配One - 今日运单解析
-// OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前用户线路基准库匹配。
-// 基准库按线路独立；学习库进一步按用户ID+线路隔离，避免不同账号互相学习。
+// OCR原文 -> 元数据 -> 跨行恢复 -> 门店切分 -> 当前调度线路基准库匹配。
+// 基准库与学习库均按线路独立；旧版用户级学习库仅作为迁移兼容来源。
 import { authRequired } from './_auth.js';
 import { loadRouteBase, routeLearningKey, legacyUserLearningKey, canUseRoute, normalizeRoute, redisGet as coreRedisGet } from './_data.js';
 
