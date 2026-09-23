@@ -101,7 +101,9 @@ export async function onRequest({ request, env }) {
           orderBatchId: duplicate.orderBatchId,
           updatedAt: duplicate.updatedAt || new Date().toISOString()
         };
+        // 重复确认也必须修复 today key：旧数据迁移/清理后可能出现“历史有数据、today 缺失/为空”。
         await saveHistoryAndLatest(env, userId, route, date, duplicate, duplicateLatest);
+        await redisSet(env, routeOrderKey(route, 'today:' + date), duplicate);
         if (idempotencyKey) await saveIdempotency(env, idempotencyKey, duplicate.orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
         return json({ success: true, duplicate: true, data: duplicate });
       }
