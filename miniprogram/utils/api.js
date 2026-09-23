@@ -13,7 +13,11 @@ function request(path, options = {}) {
       header,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.data);
-        reject(new Error(res.data?.message || `请求失败：${res.statusCode}`));
+        const detail = res.data?.message || res.data?.error || `请求失败：${res.statusCode}`;
+        const error = new Error(detail);
+        error.statusCode = res.statusCode;
+        error.code = res.data?.code || res.data?.errorCode || '';
+        reject(error);
       },
       fail: reject
     });
