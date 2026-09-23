@@ -59,7 +59,7 @@ export async function onRequest({ request, env }) {
     for (const id of ids) {
       const user = await getUser(env, id);
       if (!user || user.status === 'disabled') return json({ success: false, error: '绑定用户不存在或已停用' }, 400);
-      const bound = normalizeRoute(user.boundRouteId || user.route);
+      const bound = normalizeRoute(user.boundRouteId);
       if (bound && bound !== route) return json({ success: false, error: `用户 ${user.name || user.username} 已绑定 ${bound}，一个用户只能绑定一条路线` }, 409);
       users.push(user);
     }
