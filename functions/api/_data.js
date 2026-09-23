@@ -116,55 +116,74 @@ export async function loadRouteBase(env, route, options = {}) {
   const normalized = normalizeRoute(route);
   if (!normalized) return null;
 
-  const current = await redisGet(env, routeBaseKey(normalized));
+  let current = await redisGet(env, routeBaseKey(normalized));
   if (current && Array.isArray(current.stores)) {
-    return {
-      ...current,
-      route: normalized,
-      stores: normalizeStores(current.stores),
-      source: 'route'
-    };
+    return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
   }
 
-  // V1.0 迁移兼容：旧版是 user:{userId}:route:{route}:base。
-  // 若路线基准尚未建立，则从绑定用户的旧库迁移一次。
-  const record = await getRoute(env, normalized);
-  const candidates = Array.isArray(record?.boundUserIds) ? record.boundUserIds.filter(Boolean) : [];
-  for (const userId of candidates) {
-    const legacy = await redisGet(env, legacyUserBaseKey(userId, normalized));
-    if (!legacy || !Array.isArray(legacy.stores) || !legacy.stores.length) continue;
+  const lockKey = `lock:route-base-migration:${encodeKey(normalized)}`;
+  const lockToken = createLockToken();
+  if (await acquireMigrationLock(env, lockKey, lockToken, 10)) {
+    try {
+      current = await redisGet(env, routeBaseKey(normalized));
+      if (current && Array.isArray(current.stores)) {
+        return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
+      }
 
-    const migrated = {
-      schemaVersion: 1,
-      route: normalized,
-      stores: normalizeStores(legacy.stores),
-      dataVersion: Math.max(1, Number(legacy.dataVersion) || 1),
-      updatedAt: legacy.updatedAt || new Date().toISOString(),
-      source: 'route-migration',
-      migratedFromUserId: userId
-    };
-    await redisSet(env, routeBaseKey(normalized), migrated);
-    return { ...migrated, source: 'route-migration' };
-  }
+      const record = await getRoute(env, normalized);
+      const candidates = Array.isArray(record?.boundUserIds) ? record.boundUserIds.filter(Boolean) : [];
+      for (const userId of candidates) {
+        const legacy = await redisGet(env, legacyUserBaseKey(userId, normalized));
+        if (!legacy || !Array.isArray(legacy.stores) || !legacy.stores.length) continue;
+        const migrated = {
+          schemaVersion: 1, route: normalized, stores: normalizeStores(legacy.stores),
+          dataVersion: Math.max(1, Number(legacy.dataVersion) || 1),
+          updatedAt: legacy.updatedAt || new Date().toISOString(),
+          source: 'route-migration', migratedFromUserId: userId
+        };
+        await redisSet(env, routeBaseKey(normalized), migrated);
+        return { ...migrated, source: 'route-migration' };
+      }
 
-  if (options.allowLegacyUserId) {
-    const legacy = await redisGet(env, legacyUserBaseKey(options.allowLegacyUserId, normalized));
-    if (legacy && Array.isArray(legacy.stores) && legacy.stores.length) {
-      const migrated = {
-        schemaVersion: 1,
-        route: normalized,
-        stores: normalizeStores(legacy.stores),
-        dataVersion: Math.max(1, Number(legacy.dataVersion) || 1),
-        updatedAt: legacy.updatedAt || new Date().toISOString(),
-        source: 'route-migration',
-        migratedFromUserId: options.allowLegacyUserId
-      };
-      await redisSet(env, routeBaseKey(normalized), migrated);
-      return { ...migrated, source: 'route-migration' };
+      if (options.allowLegacyUserId) {
+        const legacy = await redisGet(env, legacyUserBaseKey(options.allowLegacyUserId, normalized));
+        if (legacy && Array.isArray(legacy.stores) && legacy.stores.length) {
+          const migrated = {
+            schemaVersion: 1, route: normalized, stores: normalizeStores(legacy.stores),
+            dataVersion: Math.max(1, Number(legacy.dataVersion) || 1),
+            updatedAt: legacy.updatedAt || new Date().toISOString(),
+            source: 'route-migration', migratedFromUserId: options.allowLegacyUserId
+          };
+          await redisSet(env, routeBaseKey(normalized), migrated);
+          return { ...migrated, source: 'route-migration' };
+        }
+      }
+    } finally {
+      await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
     }
   }
 
+  current = await redisGet(env, routeBaseKey(normalized));
+  if (current && Array.isArray(current.stores)) {
+    return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
+  }
   return null;
+}
+
+async function acquireMigrationLock(env, key, token, seconds) {
+  const response = await redisFetch(env, `/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`);
+  if (!response.ok) return false;
+  const data = await response.json().catch(() => ({}));
+  return data.result === 'OK';
+}
+
+async function releaseMigrationLock(env, key, token) {
+  const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+  await redisFetch(env, '/eval', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify([script, 1, key, token])
+  });
 }
 
 export function normalizeStores(stores) {
