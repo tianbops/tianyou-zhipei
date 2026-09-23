@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：路线绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { getRoute, getUser, normalizeRoute, redisSet, saveRoute, publicUser, recordAdminLog } from '../_data.js';
+import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, atomicRouteBinding, publicUser, recordAdminLog } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -33,24 +33,6 @@ export async function onRequest({ request, env }) {
 
     const current = await getRoute(env, route);
     const now = new Date().toISOString();
-    const record = await saveRoute(env, route, {
-      driverUserId,
-      deliveryUserId,
-      createdAt: current?.createdAt || now
-    });
-
-    for (const user of users) {
-      const duty = user.id === driverUserId ? 'driver' : 'delivery';
-      const updated = {
-        ...user,
-        boundRouteId: route,
-        route,
-        routeDuty: duty,
-        updatedAt: now,
-        sessionVersion: Number(user.sessionVersion || 1) + 1
-      };
-      await redisSet(env, `user:${encodeURIComponent(user.id).replace(/%/g, '_')}`, updated);
-    }
 
     // 清理本次解绑的旧用户绑定字段。
     // 同时读取角色字段，兼容早期路线记录中 boundUserIds 缺失/过期的情况。
@@ -59,15 +41,54 @@ export async function onRequest({ request, env }) {
       String(current?.driverUserId || ''),
       String(current?.deliveryUserId || '')
     ].filter(Boolean))];
-    await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId });
+
+    const userUpdates = [];
+    for (const user of users) {
+      const duty = user.id === driverUserId ? 'driver' : 'delivery';
+      userUpdates.push({
+        key: `user:${encodeKey(user.id)}`,
+        expectedSessionVersion: Number(user.sessionVersion || 1),
+        user: {
+          ...user,
+          boundRouteId: route,
+          route,
+          routeDuty: duty,
+          updatedAt: now,
+          sessionVersion: Number(user.sessionVersion || 1) + 1
+        }
+      });
+    }
 
     for (const oldId of oldIds) {
       if (ids.includes(oldId)) continue;
       const oldUser = await getUser(env, oldId);
       if (!oldUser) continue;
-      const updated = { ...oldUser, boundRouteId: '', route: '', routeDuty: '', updatedAt: now, sessionVersion: Number(oldUser.sessionVersion || 1) + 1 };
-      await redisSet(env, `user:${encodeURIComponent(oldId).replace(/%/g, '_')}`, updated);
+      userUpdates.push({
+        key: `user:${encodeKey(oldId)}`,
+        expectedSessionVersion: Number(oldUser.sessionVersion || 1),
+        user: { ...oldUser, boundRouteId: '', route: '', routeDuty: '', updatedAt: now, sessionVersion: Number(oldUser.sessionVersion || 1) + 1 }
+      });
     }
+
+    const record = {
+      schemaVersion: 1,
+      id: route,
+      name: route,
+      driverUserId,
+      deliveryUserId,
+      boundUserIds: [...new Set([driverUserId, deliveryUserId].filter(Boolean))],
+      status: current?.status === 'disabled' ? 'disabled' : 'active',
+      createdAt: current?.createdAt || now,
+      updatedAt: now
+    };
+
+    await atomicRouteBinding(env, {
+      routeKey: routeRecordKey(route),
+      expectedRouteUpdatedAt: current?.updatedAt || '',
+      routeRecord: record,
+      userUpdates
+    });
+    await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId });
 
     return json({
       success: true,
