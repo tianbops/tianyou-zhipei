@@ -1,7 +1,13 @@
 <view class="page">
   <view class="card task-card">
     <view class="task-title"><text>今日任务</text><text>● 🚚 {{user.vehicle || '未绑定车辆'}}</text></view>
-    <view class="route">{{user.route || '未绑定线路'}}</view>
+    <view class="route">{{dispatchRoute || '未选择线路'}}</view>
+    <view class="route-picker" wx:if="{{routes.length > 1}}">
+      <text class="muted">当前调度线路</text>
+      <picker mode="selector" range="{{routes}}" range-key="name" value="{{routes.findIndex ? 0 : 0}}" bindchange="onRouteChange">
+        <view class="picker-value">{{routes.length ? (routes[0].name || routes[0].id) : dispatchRoute}} ▾</view>
+      </picker>
+    </view>
     <view class="stats">
       <view><text class="muted">今日配送</text><text class="stat-value">{{order.count}}家</text></view>
       <view><text class="muted">商品总量</text><text class="stat-value">{{order.weight}}</text></view>
