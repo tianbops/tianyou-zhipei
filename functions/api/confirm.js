@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeLearningKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -243,43 +243,6 @@ function normalizeOrder(item, index, batchId, date, route) {
     route, date,
     matchType: String(item.matchType || '').trim()
   };
-}
-
-async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
-  const learningKey = scopedLearningKey(userId, route);
-  const lockKey = scopedLearningKey(userId, route, 'lock');
-  const token = createLockToken();
-  if (!(await acquireLock(env, lockKey, token, 10))) return;
-  try {
-    const learning = await getLearning(env, learningKey);
-    learning.version = 4;
-    learning.route = route;
-    learning.aliases = learning.aliases && typeof learning.aliases === 'object' ? learning.aliases : {};
-    const byName = new Map(base.map(store => [key(store.name), store]));
-    const byCode = new Map(base.map(store => [String(store.code), store]));
-    const now = new Date().toISOString();
-    for (const rawItem of inputOrders) {
-      const raw = typeof rawItem === 'string' ? { name: rawItem } : (rawItem || {});
-      if (raw.isNew === true || raw.newStore === true || raw.needsReview === true || raw.matchType === 'review') continue;
-      const rawName = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
-      if (!rawName) continue;
-      const target = byName.get(key(rawName)) || byCode.get(cleanCode(raw.baseCode || raw.code));
-      const baseName = String(raw.baseName || raw.canonicalName || target?.name || '').trim();
-      if (!baseName || key(rawName) === key(baseName)) continue;
-      const targetStore = target || base.find(store => key(store.name) === key(baseName));
-      if (!targetStore) continue;
-      const aliasKey = key(rawName);
-      const previous = learning.aliases[aliasKey];
-      const examples = Array.isArray(previous?.rawExamples) ? previous.rawExamples.filter(Boolean) : [];
-      if (!examples.includes(rawName)) examples.push(rawName);
-      learning.aliases[aliasKey] = { baseKey: key(targetStore.name), baseCode: String(targetStore.code || ''), baseName: targetStore.name, count: Math.max(1, Number(previous?.count) || 0) + 1, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, rawExamples: examples.slice(-3) };
-    }
-    pruneAliases(learning.aliases, 1000);
-    learning.updatedAt = now;
-    await redisSet(env, learningKey, learning);
-  } finally {
-    await releaseLock(env, lockKey, token).catch(() => {});
-  }
 }
 
 async function findDuplicateOrder(env, userId, route, date, candidate, boundRouteId) {
