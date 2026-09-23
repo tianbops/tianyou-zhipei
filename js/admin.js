@@ -17,7 +17,9 @@ async function boot(){
     const me=await api('/api/me');
     if(!me.success||me.user?.role!=='system_admin') throw new Error('当前账号没有系统管理权限');
     $('#adminUser').textContent=(me.user.name||me.user.username)+' · 系统管理员';
-    await Promise.all([loadUsers(),loadRoutes(),loadLogs()]);
+    const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadLogs()]);
+    const failed = results.filter(x => x.status === 'rejected');
+    if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
   }catch(e){notice(e.message||'管理员身份验证失败',true)}
 }
 async function loadUsers(){
@@ -26,7 +28,10 @@ async function loadUsers(){
 async function loadRoutes(){
   try{const r=await api('/api/routes'); if(!r.success) throw new Error(r.error||'路线读取失败'); routes=r.routes||[]; renderRoutes()}catch(e){notice(e.message,true)}
 }
-async function loadLogs(){try{const r=await api('/api/admin/logs');if(!r.success)throw new Error(r.error||'日志读取失败');$('#logList').innerHTML=(r.logs||[]).map(x=>`<article class="route-card"><div class="name">${esc(x.action)}</div><div class="meta">${esc(x.createdAt)} · ${esc(x.targetType)} · ${esc(x.targetId)}</div></article>`).join('')||'<div class="meta">暂无日志</div>'}catch(e){notice(e.message,true)}}
+async function loadLogs(){
+  const endpoint='/api/admin/logs';
+  try{const r=await api(endpoint);if(!r.success)throw new Error(`${endpoint}：${r.error||'日志读取失败'}`);$('#logList').innerHTML=(r.logs||[]).map(x=>`<article class="route-card"><div class="name">${esc(x.action)}</div><div class="meta">${esc(x.createdAt)} · ${esc(x.targetType)} · ${esc(x.targetId)}</div></article>`).join('')||'<div class="meta">暂无日志</div>'; return true}
+  catch(e){notice(e.message,true); throw e}}
 function renderUsers(){
   $('#userCount').textContent=users.length;
   $('#userList').innerHTML=users.map(u=>`<article class="user-card">
@@ -56,7 +61,7 @@ async function toggleUser(id,status){try{const r=await api('/api/admin/users',{m
 async function setRole(id,role){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,role}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
 function switchTab(tab){document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));$('#usersTab').classList.toggle('hidden',tab!=='users');$('#routesTab').classList.toggle('hidden',tab!=='routes');$('#logsTab').classList.toggle('hidden',tab!=='logs')}
 function findUser(id){return users.find(u=>u.id===id)}
-async function api(url,opt={}){const o={method:opt.method||'GET',headers:{'Content-Type':'application/json'}};if(opt.body)o.body=JSON.stringify(opt.body);const res=await fetch(url,o);const data=await res.json().catch(()=>({success:false,error:'服务器返回异常'}));if(!res.ok&&data.success!==false)throw new Error('HTTP '+res.status);return data}
+async function api(url,opt={}){const o={method:opt.method||'GET',headers:{'Content-Type':'application/json'}};if(opt.body)o.body=JSON.stringify(opt.body);const res=await fetch(url,o);const raw=await res.text();let data=null;try{data=raw?JSON.parse(raw):null}catch{}if(!res.ok){if(data&&data.error)throw new Error(`${url} HTTP ${res.status}：${data.error}`);throw new Error(`${url} HTTP ${res.status}：${raw.slice(0,160)||'服务器无响应内容'}`)}if(!data)throw new Error(`${url}：服务器返回非JSON响应`);return data}
 function notice(msg,error=false){const n=$('#notice');n.textContent=msg;n.classList.remove('hidden');n.style.borderLeft=error?'3px solid var(--danger)':'3px solid var(--blue)'}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function escAttr(v){return esc(v)}
