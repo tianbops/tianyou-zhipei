@@ -106,7 +106,7 @@ export async function onRequest({ request, env }) {
 }
 
 function legacyBaseOptions(session, route) {
-  const boundRoute = normalizeRoute(session?.boundRouteId || session?.route);
+  const boundRoute = normalizeRoute(session?.boundRouteId);
   return boundRoute === normalizeRoute(route) && session?.id
     ? { allowLegacyUserId: session.id }
     : {};
