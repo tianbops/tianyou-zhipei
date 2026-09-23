@@ -63,6 +63,9 @@ export async function onRequest({ request, env }) {
       if (ids.includes(oldId)) continue;
       const oldUser = await getUser(env, oldId);
       if (!oldUser) continue;
+      // 防止旧路线记录中的过期绑定ID误清空用户当前已经绑定的新路线。
+      const oldUserBoundRoute = normalizeRoute(oldUser.boundRouteId || oldUser.route);
+      if (oldUserBoundRoute && oldUserBoundRoute !== route) continue;
       userUpdates.push({
         key: `user:${encodeKey(oldId)}`,
         expectedSessionVersion: Number(oldUser.sessionVersion || 1),
