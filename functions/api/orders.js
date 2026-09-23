@@ -4,6 +4,7 @@ import { authRequired } from './_auth.js';
 import { canUseRoute, legacyUserOrderKey, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 8000;
+const ORDER_LOCK_TTL_SECONDS = 60;
 
 export async function onRequest({ request, env }) {
   if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ error: 'Redis not configured' }, 500);
@@ -27,7 +28,7 @@ async function saveOrder(request, env, session) {
   const date = normalizeDate(body.date) || businessDate();
   const key = scopedKey(userId, route, `today:${date}`), latestKey = scopedKey(userId, route, 'latest');
   const lockKey = scopedKey(userId, route, `lock:${date}`), lockToken = createLockToken();
-  if (!(await acquireLock(env, lockKey, lockToken, 15))) return json({ error: '当前用户正在保存订单，请稍后再试' }, 409);
+  if (!(await acquireLock(env, lockKey, lockToken, ORDER_LOCK_TTL_SECONDS))) return json({ error: '当前线路正在保存订单，请稍后再试' }, 409);
   try {
     const existing = await redisGet(env, key) || (isBoundRoute(session, route) ? await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`)) : null);
     const orderBatchId = String(body.orderBatchId || '').trim() || existing?.orderBatchId || createBatchId(date, route);
