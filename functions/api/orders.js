@@ -193,13 +193,11 @@ async function readOrder(request, env, session) {
   // 当日订单读取必须以“有有效门店”为有效数据。
   // 旧版本可能留下 today:<date> = 空对象/空 orders；这种脏数据不能阻断 history:<date> 的有效记录。
   const hasOrders = item => Boolean(item && Array.isArray(item.orders) && item.orders.length > 0);
-  const isSameBusinessDay = item => {
-    if (!item || typeof item !== 'object') return false;
-    const itemDate = normalizeDate(item.date);
-    return !itemDate || itemDate === date;
-  };
+  // history:<date> 本身就是服务器确认的业务日期，不能再因为旧记录内部 date
+  // 缺失/格式不同/遗留旧日期而把有效运单过滤掉。
+  // 历史查询入口正是按这个 key 读取，因此今日订单入口必须采用同一日期事实来源。
   const historyCandidates = history
-    .filter(item => hasOrders(item) && isSameBusinessDay(item))
+    .filter(item => hasOrders(item))
     .sort((a, b) => (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0) - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0));
 
   // 关键自愈：today 不存在、为空、或失效时，都允许从同日有效历史恢复。
@@ -229,7 +227,10 @@ async function readOrder(request, env, session) {
   }
 
   // 选中的记录一律补齐业务日/线路，避免旧历史记录因 date 缺失而被响应层过滤。
-  if (hasOrders(selected)) selected = { ...selected, date, route: selected.route || route };
+  if (hasOrders(selected)) {
+    // 以 history:<date>/today:<date> 的业务日期为准，统一修正旧记录内部 date。
+    selected = { ...selected, date, route: selected.route || route };
+  }
 
   // today 有效但 history 缺少对应批次时，顺手恢复历史索引。
   if (hasOrders(selected) && !historyCandidates.some(item => String(item?.orderBatchId || '').trim() === String(selected.orderBatchId || '').trim())) {
