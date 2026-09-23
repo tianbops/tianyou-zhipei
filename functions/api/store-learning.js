@@ -38,7 +38,7 @@ export async function onRequest({ request, env }) {
     const lockToken = createLockToken();
     if (!(await acquireLock(env, lockKey, lockToken, LOCK_SECONDS))) return json({ success: false, error: '当前用户学习库正在更新，请稍后再试' }, 409);
     try {
-      const learning = await getLearning(env, key, userId, route);
+      const learning = await getLearning(env, key, userId, route, session.boundRouteId);
       learning.version = 4;
       learning.userId = userId;
       learning.route = route;
@@ -96,14 +96,14 @@ function resolveTarget(base, item) {
 }
 
 async function getBaseStores(env, route, userId) {
-  const data = await loadRouteBase(env, route, { allowLegacyUserId: userId });
+  const data = await loadRouteBase(env, route);
   if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${route}独立基准数据库`);
   return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
-async function getLearning(env, key, userId, route) {
+async function getLearning(env, key, userId, route, boundRouteId) {
   let data = await redisGet(env, key);
-  if (!data || typeof data !== 'object') data = await redisGet(env, legacyUserLearningKey(userId, route));
+  if (!data || typeof data !== 'object' && normalizeRoute(boundRouteId) === normalizeRoute(route)) data = await redisGet(env, legacyUserLearningKey(userId, route));
   if (!data || typeof data !== 'object') return { version: 4, userId, route, aliases: {} };
   return { ...data, version: 4, userId, route, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
