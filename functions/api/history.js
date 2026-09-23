@@ -1,7 +1,7 @@
 // Zhipei One - 路线历史查询 API
 // 今日订单/历史记录按线路+日期统一存储；userId 保留在记录内用于审计与兼容。允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
-import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey } from './_data.js';
+import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
@@ -175,12 +175,49 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
 
   const todayKey = scopedKey(userId, route, `today:${date}`);
   const today = await redisGet(env, todayKey);
-  const commands = [['SET', key, JSON.stringify(remaining)]];
-  if (today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId) {
-    commands.push(['DEL', todayKey]);
+  const deleteToday = Boolean(today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId);
+  await atomicDeleteHistory(env, {
+    historyKey: key,
+    expectedHistory: current,
+    remaining,
+    todayKey,
+    deleteToday,
+    expectedToday: today
+  });
+  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: deleteToday });
+}
+
+
+async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining, todayKey, deleteToday, expectedToday }) {
+  const script = `
+local currentHistory = redis.call('GET', KEYS[1])
+if currentHistory ~= ARGV[1] then return 'CONFLICT' end
+redis.call('SET', KEYS[1], ARGV[2])
+if ARGV[3] == '1' then
+  local currentToday = redis.call('GET', KEYS[2])
+  if currentToday ~= ARGV[4] then return 'CONFLICT_TODAY' end
+  redis.call('DEL', KEYS[2])
+end
+return 'OK'
+`;
+  const expectedHistoryJson = JSON.stringify(expectedHistory);
+  const remainingJson = JSON.stringify(remaining);
+  const expectedTodayJson = expectedToday === null || expectedToday === undefined ? '' : JSON.stringify(expectedToday);
+  const result = await redisCommand(env, [
+    'EVAL',
+    script,
+    '2',
+    historyKey,
+    todayKey,
+    expectedHistoryJson,
+    remainingJson,
+    deleteToday ? '1' : '0',
+    expectedTodayJson
+  ]);
+  if (result === 'CONFLICT' || result === 'CONFLICT_TODAY') {
+    throw new Error('历史记录刚刚发生变化，请刷新后重试');
   }
-  await redisPipeline(env, commands);
-  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: commands.length > 1 });
+  if (result !== 'OK') throw new Error('历史记录原子删除未确认');
 }
 
 async function purgeExpiredHistory(env, userId, route) {
