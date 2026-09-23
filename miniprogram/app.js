@@ -12,6 +12,6 @@ App({
     const savedRoute = wx.getStorageSync('zhipei_dispatch_route') || '';
     this.globalData.token = token;
     this.globalData.user = user;
-    this.globalData.dispatchRoute = savedRoute || String(user?.boundRouteId || user?.route || '').trim();
+    this.globalData.dispatchRoute = savedRoute || String(user?.boundRouteId || '').trim();
   }
 });
