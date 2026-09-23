@@ -135,35 +135,50 @@ async function readOrder(request, env, session) {
   // 未指定日期时只读取业务日，避免明日预上传通过 latest 提前进入首页“今日任务”。
   // 需要读取历史或明日数据的页面必须显式传 date。
   const date = requestedDate || businessDate();
+  // 今日任务的主数据与历史汇总解耦：今日 key 可用时，历史迁移/汇总异常不能把首页或详情页整体变成 503。
+  // 这尤其重要于旧用户数据迁移期间：history 缺失会触发 SCAN user:*，不应阻断已有的线路级 today 数据。
   let today = await redisGet(env, routeOrderKey(route, `today:${date}`));
-  let historyData = await redisGet(env, routeOrderKey(route, `history:${date}`));
+  let historyData = null;
+  try {
+    historyData = await redisGet(env, routeOrderKey(route, `history:${date}`));
+  } catch (error) {
+    console.warn('读取线路历史数据失败，继续使用当日订单', route, date, error?.message || error);
+  }
   if (isBoundRoute(session, route)) {
     // 线路级数据是唯一权威来源；只有线路级 key 不存在时才读取 legacy。
     // legacy 可能分散在司机/送货员多个用户下，因此必须合并全部当前绑定用户。
     if (!today) {
-      const users = await listUsersByRoute(env, route);
-      const legacyToday = await Promise.all(users.map(async user => {
-        const value = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
-        return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-      }));
-      const candidates = legacyToday.filter(Boolean);
-      candidates.sort((a, b) => {
-        const at = Date.parse(String(a.updatedAt || a.createdAt || '')) || 0;
-        const bt = Date.parse(String(b.updatedAt || b.createdAt || '')) || 0;
-        return bt - at;
-      });
-      today = candidates[0] || null;
-      if (today) await redisSet(env, routeOrderKey(route, `today:${date}`), today);
+      try {
+        const users = await listUsersByRoute(env, route);
+        const legacyToday = await Promise.all(users.map(async user => {
+          const value = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
+          return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+        }));
+        const candidates = legacyToday.filter(Boolean);
+        candidates.sort((a, b) => {
+          const at = Date.parse(String(a.updatedAt || a.createdAt || '')) || 0;
+          const bt = Date.parse(String(b.updatedAt || b.createdAt || '')) || 0;
+          return bt - at;
+        });
+        today = candidates[0] || null;
+        if (today) await redisSet(env, routeOrderKey(route, `today:${date}`), today);
+      } catch (error) {
+        console.warn('读取旧版当日订单失败', route, date, error?.message || error);
+      }
     }
     if (!historyData) {
-      const users = await listUsersByRoute(env, route);
-      const legacyLists = await Promise.all(users.map(async user => {
-        const value = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
-        return Array.isArray(value) ? value : [];
-      }));
-      const merged = dedupeHistoryRecords(legacyLists.flat());
-      historyData = merged.length ? merged : null;
-      if (historyData) await redisSet(env, routeOrderKey(route, `history:${date}`), historyData);
+      try {
+        const users = await listUsersByRoute(env, route);
+        const legacyLists = await Promise.all(users.map(async user => {
+          const value = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
+          return Array.isArray(value) ? value : [];
+        }));
+        const merged = dedupeHistoryRecords(legacyLists.flat());
+        historyData = merged.length ? merged : null;
+        if (historyData) await redisSet(env, routeOrderKey(route, `history:${date}`), historyData);
+      } catch (error) {
+        console.warn('读取旧版历史订单失败，继续使用当日订单', route, date, error?.message || error);
+      }
     }
   }
   const history = Array.isArray(historyData) ? historyData : [];
@@ -174,9 +189,10 @@ async function readOrder(request, env, session) {
   // 首页保持原有“今日任务”结构，但当天可以存在多笔独立运单。
   // today 仍返回当前最新一笔，新增汇总字段仅供首页显示多运单汇总，不改变既有详情接口语义。
   const dailyRecords = history.filter(item => normalizeDate(item?.date) === date);
-  const todayWaybillCount = dailyRecords.length;
-  const summaryStores = dailyRecords.reduce((sum, item) => sum + (Number(item?.uniqueStoreCount) || Number(item?.count) || (Array.isArray(item?.orders) ? item.orders.length : 0)), 0);
-  const summaryWeight = dailyRecords.reduce((sum, item) => sum + parseWeightToTons(item?.totalWeight ?? item?.weight), 0);
+  const summaryRecords = dailyRecords.length ? dailyRecords : (today && normalizeDate(today.date) === date ? [today] : []);
+  const todayWaybillCount = summaryRecords.length;
+  const summaryStores = summaryRecords.reduce((sum, item) => sum + (Number(item?.uniqueStoreCount) || Number(item?.count) || (Array.isArray(item?.orders) ? item.orders.length : 0)), 0);
+  const summaryWeight = summaryRecords.reduce((sum, item) => sum + parseWeightToTons(item?.totalWeight ?? item?.weight), 0);
   const todaySummary = {
     storeCount: summaryStores,
     totalWeight: summaryWeight > 0 ? (Math.round((summaryWeight + Number.EPSILON) * 1000000) / 1000000) + 't' : ''
