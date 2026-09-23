@@ -33,7 +33,7 @@ export async function onRequest({ request, env }) {
       validated.push({ ...item, target });
     }
 
-    const key = learningKey(userId, route);
+    const key = routeLearningKey(route);
     const lockKey = `lock:learning:${encodeKey(route)}`;
     const lockToken = createLockToken();
     if (!(await acquireLock(env, lockKey, lockToken, LOCK_SECONDS))) return json({ success: false, error: '当前用户学习库正在更新，请稍后再试' }, 409);
@@ -172,10 +172,6 @@ function mergeLegacyLearning(values, route) {
   }
   pruneAliases(aliases, MAX_ALIASES);
   return { version: 4, route, aliases, updatedAt: latestUpdatedAt };
-}
-
-function learningKey(userId, route) {
-  return routeLearningKey(route);
 }
 
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
