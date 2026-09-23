@@ -111,7 +111,7 @@ function openModal(id){const modal=$(id);if(!modal)return;document.querySelector
 function closeModal(id){const modal=$(id);if(!modal)return;modal.classList.remove('show');document.body.style.overflow='';hideMessage(messageId(id))}
 function backdropClose(event,id){if(event.target===event.currentTarget)closeModal(id)}
 function togglePassword(id,button){const input=$(id);if(!input)return;const visible=input.type==='text';input.type=visible?'password':'text';button.style.opacity=visible?'1':'.65'}
-function updateHero(user){currentUser=user;const name=String(user?.name||'用户').trim()||'用户';$('profileName').textContent=name;$('profileMeta').textContent=[user?.route,user?.vehicle].filter(Boolean).join('  ·  ')||'尚未设置配送资料';$('avatar').textContent=name.charAt(0)||'智';$('currentUsername').value=user?.username||'';$('deliverySummary').textContent=[user?.route,user?.vehicle].filter(Boolean).join('  ·  ')||'线路与默认车辆'}
+function updateHero(user){currentUser=user;const name=String(user?.name||'用户').trim()||'用户';const boundRoute=String(user?.boundRouteId||'').trim();$('profileName').textContent=name;$('profileMeta').textContent=[boundRoute,user?.vehicle].filter(Boolean).join('  ·  ')||'尚未设置配送资料';$('avatar').textContent=name.charAt(0)||'智';$('currentUsername').value=user?.username||'';$('deliverySummary').textContent=user?.vehicle?'默认车辆 · '+user.vehicle:'尚未设置默认车辆'}
 async function init(){
   try{
     const user=await Auth.getProfile();
