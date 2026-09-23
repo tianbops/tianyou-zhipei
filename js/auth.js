@@ -108,16 +108,23 @@ window.Auth = {
 
   async checkAuth() {
     const page = location.pathname.split('/').pop();
-    if (['index.html', 'login.html', ''].includes(page)) return true;
+    if (['index.html', 'login.html', ''].includes(page)) {
+      const user = await this.getCurrentServerUser().catch(() => null);
+      if (user) {
+        const target = 'home.html';
+        if (location.pathname.endsWith('/index.html') || location.pathname.endsWith('/')) location.replace(target);
+      }
+      return !user;
+    }
     if (this.authPromise) return this.authPromise;
     this.authPromise = this.getCurrentServerUser().then(user => {
       if (!user) {
-        location.href = location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
+        location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
         return false;
       }
       return true;
     }).catch(() => {
-      location.href = location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
+      location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
       return false;
     }).finally(() => {
       this.authPromise = null;
@@ -144,7 +151,7 @@ window.Auth = {
     this.serverUser = null;
     this.authPromise = null;
     await fetch('/api/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
-    location.href = location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
+    location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
   },
 
   formatRouteCode(input) {
@@ -176,6 +183,8 @@ window.Auth = {
     return location.pathname.includes('/pages/') ? '../home.html' : 'home.html';
   }
 
+  // 浏览器/手机系统的侧滑返回无法由网页可靠取消，因此核心策略是：认证页永不留在业务历史栈。
+  // 页面内返回仍优先遵循真实业务历史；没有合法业务来源时回到首页。
   document.addEventListener('click', event => {
     const button = event.target.closest?.('.back-btn');
     if (!button) return;
