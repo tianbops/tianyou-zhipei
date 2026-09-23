@@ -26,7 +26,7 @@ export async function onRequest({ request, env }) {
 }
 
 async function getStatus(env, user) {
-  const boundRoute = normalizeRoute(user.boundRouteId || user.route);
+  const boundRoute = normalizeRoute(user.boundRouteId);
   const pending = await findPendingForUser(env, user.id);
   return json({
     success: true,
@@ -47,7 +47,7 @@ async function createRequest(env, user, request) {
   if (!['driver', 'delivery'].includes(duty)) return json({ success: false, error: '请选择驾驶员或配送员身份' }, 400);
   if (!canUseRoute(user, route)) return json({ success: false, error: '当前账号不可使用该线路' }, 403);
 
-  const boundRoute = normalizeRoute(user.boundRouteId || user.route);
+  const boundRoute = normalizeRoute(user.boundRouteId);
   if (boundRoute) return json({ success: false, error: '当前账号已绑定线路，请先解除绑定后再申请' }, 409);
 
   const existing = await findPendingForUser(env, user.id);
@@ -69,7 +69,7 @@ async function createRequest(env, user, request) {
 }
 
 async function unbindSelf(env, user) {
-  const route = normalizeRoute(user.boundRouteId || user.route);
+  const route = normalizeRoute(user.boundRouteId);
   if (!route) return json({ success: false, error: '当前账号未绑定线路' }, 409);
   const current = await getRoute(env, route);
   if (!current) return json({ success: false, error: '绑定线路不存在，请联系管理员' }, 404);
