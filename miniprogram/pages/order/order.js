@@ -5,7 +5,7 @@ Page({
   onShow() { this.load(); },
   async load() {
     const user = app.globalData.user || wx.getStorageSync('zhipei_user') || {};
-    const route = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || user.boundRouteId || user.route || '').trim();
+    const route = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || user.boundRouteId || '').trim();
     this.setData({ user, dispatchRoute: route });
     try {
       const data = await request(route ? `/api/orders?route=${encodeURIComponent(route)}` : '/api/orders');
