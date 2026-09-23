@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   $('#refreshRoutes').onclick=loadRoutes;
   $('#refreshLogs').onclick=loadLogs;
   $('#resetDataBtn').onclick=resetData;
+  $('#toggleResetKey').onclick=()=>toggleResetKey();
   $('#saveRoute').onclick=saveRoute;
   $('#backBtn').onclick=()=>history.back();
   await boot();
@@ -66,6 +67,13 @@ function switchTab(tab){
   $('#routesTab').classList.toggle('hidden',tab!=='routes');
   $('#logsTab').classList.toggle('hidden',tab!=='logs');
   $('#resetTab').classList.toggle('hidden',tab!=='reset');
+}
+function toggleResetKey(){
+  const input=$('#resetKey');
+  const btn=$('#toggleResetKey');
+  const visible=input.type==='text';
+  input.type=visible?'password':'text';
+  btn.textContent=visible?'显示':'隐藏';
 }
 async function resetData(){
   const key=$('#resetKey').value;
