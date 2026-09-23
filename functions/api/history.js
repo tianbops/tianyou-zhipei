@@ -1,7 +1,7 @@
 // Zhipei One - 路线历史查询 API
 // 今日订单/历史记录按线路+日期统一存储；userId 保留在记录内用于审计与兼容。允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
-import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand } from './_data.js';
+import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand, listUsersByRoute } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
@@ -45,16 +45,13 @@ export async function onRequest({ request, env }) {
 
 async function readHistoryOrRecover(env, userId, route, date, key, session) {
   let result = await redisGet(env, key);
-  let fromLegacy = false;
-  if ((!Array.isArray(result) || !result.length) && isBoundRoute(session, route)) {
-    result = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
-    fromLegacy = Array.isArray(result) && result.length > 0;
-  }
-  let records = Array.isArray(result) ? result : [];
-  if (records.length) {
-    // 旧用户级历史首次被绑定用户访问时，提升为路线级数据；旧键保留作只读恢复备份。
-    if (fromLegacy) await redisSet(env, key, records);
-    return records;
+  if (Array.isArray(result) && result.length) return result;
+
+  // 路线历史已统一为共享数据。旧版本仍可能把同一条线路的历史分散在多个绑定用户键下，
+  // 因此迁移必须合并全部绑定用户，而不是只读取当前登录用户，避免第二个用户覆盖第一个用户的数据。
+  if (isBoundRoute(session, route)) {
+    const migrated = await migrateLegacyHistory(env, route, date, key);
+    if (migrated.length) return migrated;
   }
 
   // 兼容旧版本半成功数据：历史没有记录，但同日期 today 数据仍存在。
@@ -75,6 +72,49 @@ async function readHistoryOrRecover(env, userId, route, date, key, session) {
   }
   return [];
 }
+
+async function migrateLegacyHistory(env, route, date, key) {
+  const lockKey = `lock:history-migration:${encodeKey(route)}:${date}`;
+  const token = createLockToken();
+  if (!(await acquireMigrationLock(env, lockKey, token, 10))) {
+    const current = await redisGet(env, key);
+    return Array.isArray(current) ? current : [];
+  }
+
+  try {
+    const current = await redisGet(env, key);
+    if (Array.isArray(current) && current.length) return current;
+
+    const users = await listUsersByRoute(env, route);
+    const legacyLists = await Promise.all(users.map(async user => {
+      const legacyKey = legacyUserOrderKey(user.id, route, `history:${date}`);
+      const value = await redisGet(env, legacyKey);
+      return Array.isArray(value) ? value : [];
+    }));
+    const merged = dedupeHistory(legacyLists.flat()).records;
+    if (!merged.length) return [];
+
+    const expected = JSON.stringify(current ?? null);
+    const next = JSON.stringify(merged);
+    const result = await redisCommand(env, [
+      'EVAL',
+      `local current = redis.call('GET', KEYS[1])
+if (current ~= ARGV[1]) then return 'CONFLICT' end
+redis.call('SET', KEYS[1], ARGV[2])
+return 'OK'`,
+      '1',
+      key,
+      expected,
+      next
+    ]);
+    if (result === 'OK') return merged;
+    const after = await redisGet(env, key);
+    return Array.isArray(after) ? after : merged;
+  } finally {
+    await releaseMigrationLock(env, lockKey, token).catch(() => {});
+  }
+}
+
 
 function recoverFromToday(today, userId, route, date) {
   return {
@@ -220,6 +260,20 @@ return 'OK'
     throw new Error('历史记录刚刚发生变化，请刷新后重试');
   }
   if (result !== 'OK') throw new Error('历史记录原子删除未确认');
+}
+
+async function acquireMigrationLock(env, key, token, seconds) {
+  const result = await redisCommand(env, ['SET', key, token, 'NX', 'EX', String(seconds)]);
+  return result === 'OK';
+}
+
+async function releaseMigrationLock(env, key, token) {
+  const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+  await redisCommand(env, ['EVAL', script, '1', key, token]);
+}
+
+function createLockToken() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 async function purgeExpiredHistory(env, userId, route) {
