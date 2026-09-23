@@ -22,7 +22,7 @@ export async function onRequest({ request, env }) {
 
     const startedAt = Date.now();
     const deadline = startedAt + 120000;
-    if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该路线' }, 403);
+    if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该线路' }, 403);
     const [baseRecord, learning] = await Promise.all([
       getBaseStores(env, route, deadline, userId, session.boundRouteId),
       getLearning(env, route, userId, deadline, session.boundRouteId)
