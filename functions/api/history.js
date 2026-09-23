@@ -452,8 +452,7 @@ function encodeKey(value) { return encodeURIComponent(String(value || '').trim()
 
 async function redisPipeline(env, commands) {
   if (!Array.isArray(commands) || !commands.length) return [];
-  const result = await redisCommand(env, ['PIPELINE', ...commands.flat()]);
-  return Array.isArray(result) ? result : [];
+  return Promise.all(commands.map(command => redisCommand(env, command)));
 }
 
 async function redisPipelineGet(env, keys) {
