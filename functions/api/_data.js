@@ -67,7 +67,7 @@ export function normalizeRole(value) {
 }
 
 export function isRouteMaintainer(user, route) {
-  return Boolean(user && normalizeRoute(user.boundRouteId || user.route) === normalizeRoute(route));
+  return Boolean(user && normalizeRoute(user.boundRouteId) === normalizeRoute(route));
 }
 
 export function canUseRoute(user, route) {
@@ -202,7 +202,7 @@ export function normalizeStores(stores) {
 export async function listUsersByRoute(env, route) {
   const users = await scanUsers(env);
   const normalized = normalizeRoute(route);
-  return users.filter(user => normalizeRoute(user?.boundRouteId || user?.route) === normalized);
+  return users.filter(user => normalizeRoute(user?.boundRouteId) === normalized);
 }
 
 
