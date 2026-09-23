@@ -32,7 +32,7 @@ export async function onRequest({ request, env }) {
     // 不传日期时返回该用户/线路全部历史日期。
     if (!date) return await listAllHistory(env, userId, route, session);
 
-    const key = routeOrderKey(userId, route, `history:${date}`);
+    const key = routeOrderKey(route, `history:${date}`);
     let records = await readHistoryOrRecover(env, userId, route, date, key, session);
     const { records: cleaned, changed } = dedupeHistory(records);
     if (changed || cleaned.length !== records.length) await redisSet(env, key, cleaned);
@@ -55,7 +55,7 @@ async function readHistoryOrRecover(env, userId, route, date, key, session) {
   }
 
   // 兼容旧版本半成功数据：历史没有记录，但同日期 today 数据仍存在。
-  const todayKey = routeOrderKey(userId, route, `today:${date}`);
+  const todayKey = routeOrderKey(route, `today:${date}`);
   let today = await redisGet(env, todayKey);
   let todayFromLegacy = false;
   if (!today && isBoundRoute(session, route)) {
@@ -141,8 +141,8 @@ function recoverFromToday(today, userId, route, date) {
 }
 
 async function listAllHistory(env, userId, route, session) {
-  const historyPattern = routeOrderKey(userId, route, 'history:*');
-  const todayPattern = routeOrderKey(userId, route, 'today:*');
+  const historyPattern = routeOrderKey(route, 'history:*');
+  const todayPattern = routeOrderKey(route, 'today:*');
   let [historyKeys, todayKeys] = await Promise.all([
     scanKeys(env, historyPattern),
     scanKeys(env, todayPattern)
@@ -201,7 +201,7 @@ async function listAllHistory(env, userId, route, session) {
 }
 
 async function deleteHistoryRecord(env, userId, route, date, batchId) {
-  const key = routeOrderKey(userId, route, `history:${date}`);
+  const key = routeOrderKey(route, `history:${date}`);
   let records = await redisGet(env, key);
   if ((!Array.isArray(records) || !records.length)) {
     records = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
@@ -219,8 +219,8 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
     : current.filter(item => historySignature(item) !== historySignature(target));
   const deleted = current.length - remaining.length;
 
-  const todayKey = routeOrderKey(userId, route, `today:${date}`);
-  const latestKey = routeOrderKey(userId, route, 'latest');
+  const todayKey = routeOrderKey(route, `today:${date}`);
+  const latestKey = routeOrderKey(route, 'latest');
   const [today, latest] = await Promise.all([
     redisGet(env, todayKey),
     redisGet(env, latestKey)
@@ -305,7 +305,7 @@ async function purgeExpiredHistory(env, userId, route) {
   const today = businessDate();
   const cutoff = addDays(today, -(HISTORY_DAYS - 1));
   const futureCutoff = addDays(today, FUTURE_DAYS);
-  const keys = await scanKeys(env, routeOrderKey(userId, route, 'history:*'));
+  const keys = await scanKeys(env, routeOrderKey(route, 'history:*'));
   if (!keys.length) return;
 
   const commands = [];
@@ -339,7 +339,7 @@ function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.c
 function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId || session?.route) === normalizeRoute(route); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
-function routeOrderKey(userId, route, suffix) { return routeOrderKey(route, suffix); }
+function routeOrderKey(route, suffix) { return routeOrderKey(route, suffix); }
 
 async function redisPipelineGet(env, keys) {
   return redisPipeline(env, keys.map(key => ['GET', key])).then(results => results.map(item => {
