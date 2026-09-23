@@ -59,7 +59,14 @@ async function readHistoryOrRecover(env, userId, route, date, key, session) {
   let today = await redisGet(env, todayKey);
   let todayFromLegacy = false;
   if (!today && isBoundRoute(session, route)) {
-    today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+    const users = await listUsersByRoute(env, route);
+    const legacyToday = await Promise.all(users.map(async user => {
+      const value = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
+      return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    }));
+    today = legacyToday
+      .filter(Boolean)
+      .sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')))[0] || null;
     todayFromLegacy = Boolean(today);
   }
   if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
