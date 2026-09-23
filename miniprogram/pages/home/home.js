@@ -56,7 +56,7 @@ Page({
       const value = match ? Number(match[0]) : NaN;
       const tons = Number.isFinite(value) ? (/kg|千克|公斤/i.test(source) ? value / 1000 : /吨|\bt\b/i.test(source) ? value : value >= 1000 ? value / 1000 : value) : NaN;
       const weight = Number.isFinite(tons) ? ((Math.round((tons + Number.EPSILON) * 100) / 100).toFixed(2) + 't') : '0.00t';
-      this.setData({ order: { count: Number(order.uniqueStoreCount ?? order.count ?? stores.length), weight, stores } });
+      this.setData({ order: { count: Number(order.uniqueStoreCount ?? order.count ?? stores.length), weight, stores }, user: { ...this.data.user, vehicle: String(order.vehicle || this.data.user.vehicle || '') } });
     } catch (e) {
       if (/401|403|未登录|登录/.test(String(e.message))) wx.reLaunch({ url: '/pages/login/login' });
     }
