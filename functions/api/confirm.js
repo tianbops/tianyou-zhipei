@@ -31,7 +31,7 @@ export async function onRequest({ request, env }) {
     const date = normalizeDate(body.date) || businessDate();
     const noBase = body.baseDatabaseAvailable === false;
     stage = noBase ? 'prepare-without-base' : 'load-base';
-    const base = noBase ? [] : await loadBase(env, route, userId);
+    const base = noBase ? [] : await loadBase(env, route, userId, session.boundRouteId);
     const inputCount = body.orders.length;
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
     const duplicateCount = countDuplicates(canonical);
@@ -71,7 +71,7 @@ export async function onRequest({ request, env }) {
       // 重复运单必须在日期锁内判断，避免两个相同确认请求并发穿透。
       // 命中后直接复用第一笔已有批次，不覆盖今日数据、不新增历史记录。
       stage = 'duplicate-check';
-      const duplicate = await findDuplicateOrder(env, userId, route, date, todayData);
+      const duplicate = await findDuplicateOrder(env, userId, route, date, todayData, session.boundRouteId);
       if (duplicate) {
         stage = 'duplicate-history';
         await saveHistory(env, userId, route, date, duplicate);
@@ -136,8 +136,8 @@ export async function onRequest({ request, env }) {
   }
 }
 
-async function loadBase(env, route, userId) {
-  const raw = await loadRouteBase(env, route, { allowLegacyUserId: session.boundRouteId === route ? userId : undefined });
+async function loadBase(env, route, userId, boundRouteId) {
+  const raw = await loadRouteBase(env, route, { allowLegacyUserId: normalizeRoute(boundRouteId) === normalizeRoute(route) ? userId : undefined });
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${route}路线基准数据库`);
   return stores.map((store, index) => ({
@@ -271,12 +271,14 @@ async function learnConfirmedVariants(env, userId, route, inputOrders, base) {
   }
 }
 
-async function findDuplicateOrder(env, userId, route, date, candidate) {
+async function findDuplicateOrder(env, userId, route, date, candidate, boundRouteId) {
   const todayKey = scopedKey(userId, route, `today:${date}`);
   const historyKey = scopedKey(userId, route, `history:${date}`);
   let [today, history] = await redisPipelineGet(env, [todayKey, historyKey]);
-  if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
-  if (!Array.isArray(history) || !history.length) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+  if (normalizeRoute(boundRouteId) === normalizeRoute(route)) {
+    if (!today) today = await redisGet(env, legacyUserOrderKey(userId, route, `today:${date}`));
+    if (!Array.isArray(history) || !history.length) history = await redisGet(env, legacyUserOrderKey(userId, route, `history:${date}`));
+  }
   if (businessOrderSignature(today) && businessOrderSignature(today) === businessOrderSignature(candidate)) return today;
   if (Array.isArray(history)) {
     const signature = businessOrderSignature(candidate);
