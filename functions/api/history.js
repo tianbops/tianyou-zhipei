@@ -220,21 +220,29 @@ async function deleteHistoryRecord(env, userId, route, date, batchId) {
   const deleted = current.length - remaining.length;
 
   const todayKey = scopedKey(userId, route, `today:${date}`);
-  const today = await redisGet(env, todayKey);
+  const latestKey = scopedKey(userId, route, 'latest');
+  const [today, latest] = await Promise.all([
+    redisGet(env, todayKey),
+    redisGet(env, latestKey)
+  ]);
   const deleteToday = Boolean(today && targetBatchId && String(today?.orderBatchId || '').trim() === targetBatchId);
+  const clearLatest = Boolean(latest && targetBatchId && String(latest?.orderBatchId || '').trim() === targetBatchId && normalizeDate(latest?.date) === date);
   await atomicDeleteHistory(env, {
     historyKey: key,
     expectedHistory: current,
     remaining,
     todayKey,
     deleteToday,
-    expectedToday: today
+    expectedToday: today,
+    latestKey,
+    clearLatest,
+    expectedLatest: latest
   });
-  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: deleteToday });
+  return json({ success: true, deleted, date, orderBatchId: batchId, removedSameData: 0, todayDeleted: deleteToday, latestCleared: clearLatest });
 }
 
 
-async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining, todayKey, deleteToday, expectedToday }) {
+async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining, todayKey, deleteToday, expectedToday, latestKey, clearLatest, expectedLatest }) {
   const script = `
 local currentHistory = redis.call('GET', KEYS[1])
 if currentHistory ~= ARGV[1] then return 'CONFLICT' end
@@ -242,27 +250,38 @@ if ARGV[3] == '1' then
   local currentToday = redis.call('GET', KEYS[2])
   if currentToday ~= ARGV[4] then return 'CONFLICT_TODAY' end
 end
+if ARGV[5] == '1' then
+  local currentLatest = redis.call('GET', KEYS[3])
+  if currentLatest ~= ARGV[6] then return 'CONFLICT_LATEST' end
+end
 redis.call('SET', KEYS[1], ARGV[2])
 if ARGV[3] == '1' then
   redis.call('DEL', KEYS[2])
+end
+if ARGV[5] == '1' then
+  redis.call('DEL', KEYS[3])
 end
 return 'OK'
 `;
   const expectedHistoryJson = JSON.stringify(expectedHistory);
   const remainingJson = JSON.stringify(remaining);
   const expectedTodayJson = expectedToday === null || expectedToday === undefined ? '' : JSON.stringify(expectedToday);
+  const expectedLatestJson = expectedLatest === null || expectedLatest === undefined ? '' : JSON.stringify(expectedLatest);
   const result = await redisCommand(env, [
     'EVAL',
     script,
-    '2',
+    '3',
     historyKey,
     todayKey,
+    latestKey,
     expectedHistoryJson,
     remainingJson,
     deleteToday ? '1' : '0',
-    expectedTodayJson
+    expectedTodayJson,
+    clearLatest ? '1' : '0',
+    expectedLatestJson
   ]);
-  if (result === 'CONFLICT' || result === 'CONFLICT_TODAY') {
+  if (result === 'CONFLICT' || result === 'CONFLICT_TODAY' || result === 'CONFLICT_LATEST') {
     throw new Error('历史记录刚刚发生变化，请刷新后重试');
   }
   if (result !== 'OK') throw new Error('历史记录原子删除未确认');
