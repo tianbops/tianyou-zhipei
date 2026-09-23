@@ -30,9 +30,21 @@ export async function onRequest({ request, env }) {
     }, 409);
 
     const date = normalizeDate(body.date) || businessDate();
-    const noBase = body.baseDatabaseAvailable === false;
-    stage = noBase ? 'prepare-without-base' : 'load-base';
-    const base = noBase ? [] : await loadBase(env, route, userId, session.boundRouteId);
+    // 基准库是否存在必须由服务器判定，不能信任客户端传入的 baseDatabaseAvailable。
+    // 否则客户端可以伪造“无基准库”，跳过当前线路基准匹配直接写入原始门店。
+    let noBase = false;
+    let base = [];
+    stage = 'load-base';
+    try {
+      base = await loadBase(env, route, userId, session.boundRouteId);
+    } catch (error) {
+      if (/未找到.*线路基准数据库/.test(String(error?.message || ''))) {
+        noBase = true;
+        stage = 'prepare-without-base';
+      } else {
+        throw error;
+      }
+    }
     const inputCount = body.orders.length;
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
     const duplicateCount = countDuplicates(canonical);
