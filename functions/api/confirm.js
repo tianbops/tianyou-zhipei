@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeLearningKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeLearningKey, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -397,7 +397,6 @@ async function getLearning(env, keyName) {
   return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
 }
 
-function scopedBaseKey(userId, route) { return routeBaseKey(route); }
 function scopedLearningKey(userId, route, suffix = '') { return `${routeLearningKey(route)}${suffix ? `:${suffix}` : ''}`; }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
