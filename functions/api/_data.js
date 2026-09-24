@@ -127,7 +127,9 @@ export async function loadRouteBase(env, route, options = {}) {
 
   const lockKey = `lock:route-base:${encodeURIComponent(normalized)}`;
   const lockToken = createLockToken();
-  if (await acquireMigrationLock(env, lockKey, lockToken, 20)) {
+  const lockAlreadyHeld = options.lockAlreadyHeld === true;
+  const migrationLockAcquired = lockAlreadyHeld || await acquireMigrationLock(env, lockKey, lockToken, 20);
+  if (migrationLockAcquired) {
     try {
       current = await redisGet(env, routeBaseKey(normalized));
       if (current && Array.isArray(current.stores)) {
@@ -164,7 +166,7 @@ export async function loadRouteBase(env, route, options = {}) {
         }
       }
     } finally {
-      await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
+      if (!lockAlreadyHeld) await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
     }
   }
 
