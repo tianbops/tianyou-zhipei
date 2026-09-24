@@ -145,6 +145,12 @@ function normalizeInput(item) {
 }
 
 function resolveTarget(base, item) {
+  if (item.storeId) {
+    const byId = base.find(store => String(store.storeId || '') === item.storeId);
+    if (!byId) return null;
+    if (item.baseName && matchKey(byId.name) !== matchKey(item.baseName)) return null;
+    return byId;
+  }
   if (item.baseCode) {
     const byCode = base.find(store => String(store.code || '') === item.baseCode);
     if (!byCode) return null;
@@ -275,7 +281,14 @@ function normalizeBase(store, index) {
   if (typeof store === 'string') return { name: clean(store), code: String(index + 1).padStart(2, '0') };
   if (!store) return null;
   const name = clean(store.name || store.storeName || store.title || store.customerName || store['门店名称'] || '');
-  return name ? { name, code: cleanCode(store.code || index + 1) } : null;
+  return name ? {
+    ...store,
+    name,
+    storeId: clean(store.storeId || store.baseCode),
+    baseCode: cleanCode(store.baseCode),
+    code: cleanCode(store.code || index + 1),
+    routeOrder: Number(store.routeOrder) || index + 1
+  } : null;
 }
 
 function clean(value) { return String(value || '').replace(/^\s*[\d０-９]+[、.．)）-]+/, '').replace(/\s+/g, ' ').trim(); }
