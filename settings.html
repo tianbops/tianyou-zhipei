@@ -85,7 +85,7 @@
 
 <div class="modal" id="deleteAccountModal" onclick="backdropClose(event,'deleteAccountModal')"><section class="sheet danger-sheet" role="dialog" aria-modal="true" aria-labelledby="deleteAccountTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title danger-title" id="deleteAccountTitle">注销账号</div><button class="close-btn" type="button" onclick="closeModal('deleteAccountModal')" aria-label="关闭">×</button></div><div class="danger-warning"><strong>此操作不可恢复</strong><span>账号、订单、历史记录和个人学习数据将被永久删除。线路公共基准库不会被删除。</span></div><div class="field"><label class="field-label" for="deletePassword">当前密码</label><div class="input-wrap"><input id="deletePassword" type="password" autocomplete="current-password" placeholder="请输入当前密码"><button class="eye" type="button" onclick="togglePassword('deletePassword',this)" aria-label="显示或隐藏密码">◉</button></div></div><div class="field"><label class="field-label" for="deleteConfirmation">确认注销</label><div class="input-wrap"><input id="deleteConfirmation" type="text" autocomplete="off" placeholder="请输入：注销账号" maxlength="4"></div></div><div id="deleteMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('deleteAccountModal')">取消</button><button class="danger-btn" id="deleteButton" type="button" onclick="deleteAccount()">永久注销</button></div></section></div>
 
-<script src="js/auth.js?v=20260917"></script>
+<script src="js/auth.js?v=20260924-6"></script>
 <script>
 'use strict';
 let currentUser=null;
