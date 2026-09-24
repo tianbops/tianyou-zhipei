@@ -84,6 +84,14 @@ async function createRequest(env, user, request) {
 }
 
 async function unbindSelf(env, user) {
+  // 未通过审核时，DELETE 表示“取消当前申请”；只有已正式绑定时才执行解除绑定。
+  const pending = await findPendingForUser(env, user.id);
+  if (pending) {
+    await redisCommand(env, ['DEL', REQUEST_PREFIX + encodeKey(pending.id)]);
+    await redisCommand(env, ['DEL', USER_REQUEST_PREFIX + encodeKey(user.id)]);
+    return json({ success: true, cancelled: true, requestId: pending.id, route: pending.route, message: '线路申请已取消' });
+  }
+
   const route = normalizeRoute(user.boundRouteId);
   if (!route) return json({ success: false, error: '当前账号未绑定线路' }, 409);
   const current = await getRoute(env, route);
