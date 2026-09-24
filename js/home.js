@@ -19,7 +19,9 @@ async function loadDispatchRoutes(){
     const response=await fetch('/api/routes',{cache:'no-store',credentials:'same-origin'});
     const data=await response.json().catch(()=>({}));
     if(response.ok&&data.success){
+      // 业务调度只允许使用启用中的真实线路；停用线路保留给系统管理端查看。
       available=(Array.isArray(data.routes)?data.routes:[])
+        .filter(x=>x?.status!=='disabled')
         .map(x=>{const name=String(x?.name||'').trim();const id=String(x?.id||'').trim();const candidate=/^\d+(?:号线)?$/.test(name)?name:(/^\d+(?:号线)?$/.test(id)?id:'');return Auth.formatRouteCode?Auth.formatRouteCode(candidate):candidate;})
         .filter(Boolean);
       available=[...new Set(available)];
