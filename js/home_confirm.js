@@ -138,7 +138,7 @@
       if(fallback&&!rawNames.includes(fallback))rawNames.push(fallback);
       for(const rawName of rawNames){
         if(!rawName||rawName===baseName)continue;
-        items.push({rawName,baseName,baseCode:String(item.baseCode||'').trim()});
+        items.push({rawName,baseName,baseCode:String(item.baseCode||'').trim(),storeId:String(item.storeId||'').trim()});
       }
     }
     const unique=new Map();
