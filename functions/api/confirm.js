@@ -58,7 +58,7 @@ export async function onRequest({ request, env }) {
     const confirmRequestId = String(body.confirmRequestId || '').trim().slice(0, 160);
     const idempotencyKey = confirmRequestId ? routeOrderKey(route, `confirm:${date}:${confirmRequestId}`) : '';
     const normalized = uniqueCanonical.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route));
-    const orders = noBase ? normalizeRawOrderList(normalized) : sortOrders(normalized, base);
+    let orders = noBase ? normalizeRawOrderList(normalized) : sortOrders(normalized, base);
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
     if (!totalWeight) return json({ success: false, code: 'WEIGHT_MISSING', error: '未识别到商品总量，请重新解析后再确认' }, 422);
 
@@ -113,6 +113,22 @@ export async function onRequest({ request, env }) {
         return json({ success: true, duplicate: true, data: duplicate });
       }
 
+      // 真正新增门店：确认后由线路维护用户写入线路基准库，并生成永久 storeId。
+      // 非维护用户只能使用该线路，不能越权修改基准库；订单仍可确认，待线路维护用户后续补入。
+      if (!noBase && canManageRoute(session.user || session, route)) {
+        stage = 'learn-new-stores';
+        const learned = await learnNewStoresIntoBase(env, route, normalized, userId);
+        if (learned.changed) {
+          base = learned.stores;
+          orders = sortOrders(normalized, base);
+          todayData.orders = orders;
+          todayData.count = orders.length;
+          todayData.uniqueStoreCount = orders.length;
+          todayData.matchedCount = orders.filter(item => item.matched).length;
+          todayData.newStoreCount = orders.filter(item => item.isNew).length;
+        }
+      }
+
       // Redis SET 成功响应即表示命令已执行，不再额外 GET 三次验证，避免确认录入长时间等待。
       const saved = todayData;
       const historyKey = routeOrderKey(route, `history:${date}`);
@@ -165,6 +181,114 @@ export async function onRequest({ request, env }) {
     console.error('confirm api error', { stage, error });
     return json({ success: false, error: error?.message || '确认入库失败', stage }, 503);
   }
+}
+
+async function learnNewStoresIntoBase(env, route, orders, userId) {
+  const lockKey = `lock:route-base:${encodeURIComponent(route)}`;
+  const lockToken = createLockToken();
+  if (!(await acquireLock(env, lockKey, lockToken, 20))) {
+    throw new Error('该线路基准库正在被修改，请稍后重试');
+  }
+  try {
+    const raw = await loadRouteBase(env, route, { allowLegacyUserId: userId });
+    const stores = Array.isArray(raw?.stores) ? raw.stores.map((store, index) => ({
+      ...store,
+      code: String(store?.code || index + 1).padStart(2, '0'),
+      routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1,
+      name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim()
+    })).filter(store => store.name) : [];
+    const byName = new Map(stores.map(store => [storeMatchKey(store.name), store]));
+    let changed = false;
+
+    for (const order of orders) {
+      if (!order?.isNew || !String(order?.name || '').trim()) continue;
+      const name = String(order.name).trim();
+      const key = storeMatchKey(name);
+      if (!key) continue;
+
+      let target = byName.get(key);
+      if (!target) {
+        target = {
+          storeId: String(order.storeId || '').trim() || `store-${crypto.randomUUID()}`,
+          baseCode: String(order.baseCode || '').trim(),
+          code: String(stores.length + 1).padStart(2, '0'),
+          name,
+          nav: String(order.nav || '').trim(),
+          note: String(order.note || '').trim(),
+          routeOrder: stores.length + 1,
+          aliases: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        stores.push(target);
+        byName.set(key, target);
+        changed = true;
+      } else if (!target.storeId) {
+        target.storeId = String(order.storeId || '').trim() || `store-${crypto.randomUUID()}`;
+        changed = true;
+      }
+
+      order.storeId = String(target.storeId || '').trim();
+      order.baseCode = String(target.baseCode || '').trim();
+      order.baseName = target.name;
+      order.name = target.name;
+      order.matched = true;
+      order.isNew = false;
+      order.matchType = 'confirmed-new';
+      order.matchScore = 1;
+    }
+
+    if (!changed) return { changed: false, stores: normalizeBaseForConfirm(stores) };
+
+    const now = new Date().toISOString();
+    const value = {
+      ...(raw && typeof raw === 'object' ? raw : {}),
+      schemaVersion: Number(raw?.schemaVersion) || 1,
+      route: normalizeRoute(route),
+      stores,
+      dataVersion: (Number(raw?.dataVersion) || 0) + 1 || 1,
+      updatedAt: now,
+      updatedBy: userId,
+      source: 'confirm-learning'
+    };
+    await redisSetBase(env, route, value);
+    return { changed: true, stores: normalizeBaseForConfirm(stores) };
+  } finally {
+    await releaseLock(env, lockKey, lockToken).catch(() => {});
+  }
+}
+
+function normalizeBaseForConfirm(stores) {
+  return stores.map((store, index) => ({
+    ...store,
+    storeId: String(store?.storeId || '').trim(),
+    baseCode: String(store?.baseCode || '').trim(),
+    code: String(store?.code || index + 1).padStart(2, '0'),
+    routeOrder: Number(store?.routeOrder || index + 1) || index + 1,
+    name: String(store?.name || '').trim(),
+    nav: String(store?.nav || '').trim(),
+    note: String(store?.note || '').trim(),
+    index
+  })).filter(store => store.name);
+}
+
+function storeMatchKey(value) {
+  return String(value || '').trim()
+    .replace(/[\\s\\u3000]+/g, '')
+    .replace(/[【】\\[\\]（）()<>《》“”"''·,，。；;：:\\-_/]/g, '')
+    .toLowerCase();
+}
+
+async function redisSetBase(env, route, value) {
+  const response = await redisFetch(env, `/set/${encodeURIComponent(routeBaseKey(route))}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(value)
+  });
+  if (!response.ok) throw new Error(`线路基准库保存失败（HTTP ${response.status}）`);
+  const data = await response.json().catch(() => ({}));
+  if (data.result !== undefined && data.result !== 'OK') throw new Error('线路基准库保存未确认');
+  return true;
 }
 
 async function loadBase(env, route, userId, boundRouteId) {
