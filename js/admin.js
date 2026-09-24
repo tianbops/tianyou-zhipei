@@ -124,7 +124,6 @@ async function saveRoute(){
 }
 async function resetPassword(id){const password=prompt('输入新的6-72位密码');if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
-async function setRole(id,role){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,role}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
 async function deleteUser(id){
   const user=users.find(x=>x.id===id);
   if(!user)return;
