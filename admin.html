@@ -14,7 +14,7 @@
         <h1>系统管理</h1>
         <p id="adminUser">正在验证管理员身份…</p>
       </div>
-      <button id="backBtn" class="ghost">退出管理</button>
+      <button id="backBtn" class="ghost">退出登录</button>
     </header>
 
     <section id="notice" class="notice hidden"></section>
@@ -63,7 +63,7 @@
       <div class="reset-card">
         <div class="reset-title">清空智配One业务数据</div>
         <p class="reset-warning">此操作不可恢复。将清除当前 Redis 中的业务运行数据及账号数据。</p>
-        <p class="reset-note">不会修改 GitHub 代码、Cloudflare 环境变量或 Upstash 服务本身。执行后仅保留最初建立的“主系统管理员”账号；其他账号与业务数据不再保留，线路和基准库需要重新建立。</p>
+        <p class="reset-note">不会修改 GitHub 代码、Cloudflare 环境变量或 Upstash 服务本身。执行后仅保留唯一的“主系统管理员”账号；其他账号与业务数据全部清除，线路和基准库需要重新建立。</p>
         <label class="confirm-label">数据重置密钥
           <div class="reset-key-row"><input id="resetKey" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="输入或粘贴 Cloudflare 中配置的 DATA_RESET_KEY"><button id="toggleResetKey" type="button" class="key-toggle">隐藏</button></div>
         </label>
