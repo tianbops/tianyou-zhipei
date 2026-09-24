@@ -146,12 +146,6 @@ function normalizeInput(item) {
 
 function resolveTarget(base, item) {
   if (item.storeId) {
-    const byId = base.find(store => String(store.storeId || '') === item.storeId);
-    if (!byId) return null;
-    if (item.baseName && matchKey(byId.name) !== matchKey(item.baseName)) return null;
-    return byId;
-  }
-  if (item.storeId) {
     const byId = base.find(store => String(store.storeId || '').trim() === item.storeId);
     if (!byId) return null;
     if (item.baseName && matchKey(byId.name) !== matchKey(item.baseName)) return null;
@@ -164,12 +158,6 @@ function resolveTarget(base, item) {
     return byCode;
   }
   return base.find(store => matchKey(store.name) === matchKey(item.baseName)) || null;
-}
-
-async function getBaseStores(env, route, userId) {
-  const data = await loadRouteBase(env, route);
-  if (!Array.isArray(data?.stores) || !data.stores.length) throw new Error(`未找到${route}独立基准数据库`);
-  return data.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
 }
 
 async function getLearning(env, key, userId, route, boundRouteId) {
