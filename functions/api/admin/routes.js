@@ -31,18 +31,12 @@ async function repairCreatedRoutesFromAdminLogs(env, records) {
       updatedAt: now
     };
     if (!await getRoute(env, route)) {
-      await redisSet(env, routeRecordKey(route), record);
+      // 仅修复“线路记录丢失、基准库仍存在”的旧数据。
+      // 如果线路记录和基准库都不存在，说明该线路已无实际实体，
+      // 不能仅凭历史 create_route 日志重新生成，避免已删除/清理线路被 GET 自动复活。
       const base = await redisCommand(env, ['GET', routeBaseKey(route)]).catch(() => null);
-      if (!base) {
-        await redisSet(env, routeBaseKey(route), {
-          schemaVersion: 1,
-          route,
-          stores: [],
-          dataVersion: 1,
-          updatedAt: now,
-          source: 'route-repair'
-        });
-      }
+      if (!base) continue;
+      await redisSet(env, routeRecordKey(route), record);
     }
     const repaired = await getRoute(env, route);
     if (repaired) {
