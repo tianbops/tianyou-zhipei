@@ -125,9 +125,9 @@ export async function loadRouteBase(env, route, options = {}) {
     return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
   }
 
-  const lockKey = `lock:route-base-migration:${encodeKey(normalized)}`;
+  const lockKey = `lock:route-base:${encodeURIComponent(normalized)}`;
   const lockToken = createLockToken();
-  if (await acquireMigrationLock(env, lockKey, lockToken, 10)) {
+  if (await acquireMigrationLock(env, lockKey, lockToken, 20)) {
     try {
       current = await redisGet(env, routeBaseKey(normalized));
       if (current && Array.isArray(current.stores)) {
