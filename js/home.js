@@ -171,14 +171,14 @@ async function parseOrderText(text,taskId=0){
     if(String(currentRoute()||'').trim()!==parseRoute)throw Object.assign(new Error(`调度线路已从 ${parseRoute||'未选择'} 切换，当前运单已失效，请重新上传`),{code:'ROUTE_CHANGED'});
     if(!response.ok||!data.success){
       const message=String(data?.error||'');
-      if(/未找到.*独立基准数据库/.test(message)){if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});const fallback=fallbackParse(text);if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});return fallback;}
-      throw Error(message||`规划接口错误（${response.status}）`);
+      if(/未找到.*独立基准数据库/.test(message)){if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});const fallback=fallbackParse(text);if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});return fallback;}
+      throw Error(message||`运单处理接口错误（${response.status}）`);
     }
     return data.data;
   }catch(e){
     if(e?.name==='AbortError'){
-      if(parseCancelled)throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});
-      throw Error('规划超过2分钟，请检查网络后重试');
+      if(parseCancelled)throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
+      throw Error('运单处理超过2分钟，请检查网络后重试');
     }
     throw e;
   }finally{
