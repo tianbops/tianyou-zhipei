@@ -227,7 +227,7 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
     .filter(item => item?.isNew === true && !item?.needsReview && String(item?.name || '').trim());
   if (!newItems.length) return { changed: false, learnedCount: 0, stores: [] };
 
-  const lockKey = routeBaseKey(route) + ':learn-lock';
+  const lockKey = `lock:route-base:${encodeURIComponent(normalizeRoute(route))}`;
   const token = createLockToken();
   if (!(await acquireLock(env, lockKey, token, 20))) {
     throw new Error('线路基准库正在更新，请稍后重试');
