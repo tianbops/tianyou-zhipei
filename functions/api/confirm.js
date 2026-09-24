@@ -245,6 +245,8 @@ function normalizeRawOrderList(orders) {
 function normalizeOrder(item, index, batchId, date, route) {
   return {
     id: String(item.id || `${batchId}-${index + 1}`),
+    storeId: String(item.storeId || item.baseCode || item.id || '').trim(),
+    baseCode: String(item.baseCode || '').trim(),
     orderBatchId: batchId,
     code: String(item.code || index + 1).padStart(2, '0'),
     name: String(item.name || '').trim(),
