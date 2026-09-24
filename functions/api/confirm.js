@@ -98,7 +98,14 @@ export async function onRequest({ request, env }) {
         const prior = await redisGet(env, idempotencyKey);
         if (prior?.orderBatchId) {
           const priorData = await findHistoryBatch(env, userId, route, date, prior.orderBatchId, session.boundRouteId);
-          if (priorData) return json({ success: true, duplicate: true, idempotent: true, data: priorData });
+          if (priorData) {
+            const currentFingerprint = businessOrderSignature(todayData);
+            const priorFingerprint = String(prior?.fingerprint || '').trim() || businessOrderSignature(priorData);
+            if (priorFingerprint && currentFingerprint && priorFingerprint !== currentFingerprint) {
+              return json({ success: false, code: 'IDEMPOTENCY_CONFLICT', error: '确认请求编号已对应其他运单，请重新生成确认请求编号' }, 409);
+            }
+            return json({ success: true, duplicate: true, idempotent: true, data: priorData });
+          }
         }
       }
       // 重复运单必须在日期锁内判断，避免两个相同确认请求并发穿透。
@@ -114,7 +121,7 @@ export async function onRequest({ request, env }) {
         };
         // 重复确认也必须修复 today key：旧数据迁移/清理后可能出现“历史有数据、today 缺失/为空”。
         await saveHistoryAndLatest(env, userId, route, date, duplicate, duplicateLatest, lockKey, token);
-        if (idempotencyKey) await saveIdempotency(env, idempotencyKey, duplicate.orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
+        if (idempotencyKey) await saveIdempotency(env, idempotencyKey, duplicate.orderBatchId, businessOrderSignature(duplicate)).catch(error => console.warn('确认幂等索引写入失败', error));
         return json({ success: true, duplicate: true, data: duplicate });
       }
 
@@ -179,7 +186,7 @@ export async function onRequest({ request, env }) {
       if (savedToday?.orderBatchId !== orderBatchId || !Array.isArray(savedToday?.orders) || !historyExists) {
         throw new Error('订单已写入但今日/历史数据核验未通过，请重试');
       }
-      if (idempotencyKey) await saveIdempotency(env, idempotencyKey, orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
+      if (idempotencyKey) await saveIdempotency(env, idempotencyKey, orderBatchId, businessOrderSignature(saved)).catch(error => console.warn('确认幂等索引写入失败', error));
 
       // 新增门店的基准库学习已在本次确认事务前完成；OCR别名学习仍由确认后的独立学习接口处理，失败不阻断核心入库。
       return json({ success: true, data: saved });
@@ -586,7 +593,7 @@ async function redisPipelineGet(env, keys) {
   });
 }
 async function redisGet(env, keyName) { const response = await redisFetch(env, `/get/${encodeURIComponent(keyName)}`); if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
-async function saveIdempotency(env, keyName, orderBatchId) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(JSON.stringify({ orderBatchId }))}/EX/86400`, { method: 'POST' }); if (!response.ok) throw new Error(`幂等索引保存失败（HTTP ${response.status}）`); }
+async function saveIdempotency(env, keyName, orderBatchId, fingerprint) { const payload = { orderBatchId: String(orderBatchId || '').trim(), fingerprint: String(fingerprint || '').trim() }; const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(JSON.stringify(payload))}/EX/86400`, { method: 'POST' }); if (!response.ok) throw new Error(`幂等索引保存失败（HTTP ${response.status}）`); }
 async function findHistoryBatch(env, userId, route, date, orderBatchId, boundRouteId) {
   const historyKey = routeOrderKey(route, `history:${date}`);
   let history = await redisGet(env, historyKey);
