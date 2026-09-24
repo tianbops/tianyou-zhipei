@@ -116,6 +116,10 @@ export async function loadRouteBase(env, route, options = {}) {
   const normalized = normalizeRoute(route);
   if (!normalized) return null;
 
+  // 基准库属于正式线路实体；不存在的线路不得通过历史用户基准数据被隐式“复活”。
+  const routeRecord = await getRoute(env, normalized);
+  if (!routeRecord || routeRecord.status === 'disabled') return null;
+
   let current = await redisGet(env, routeBaseKey(normalized));
   if (current && Array.isArray(current.stores)) {
     return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
