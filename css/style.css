@@ -1758,6 +1758,19 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 .toast{line-height:20px!important}
 @media(max-width:380px){.upload-sheet.processing .parse-status{min-height:42px!important;max-height:42px!important;height:42px!important}}
 
+/* 2026-09-24 上传流程：确认录入只允许在自动规划完成后出现 */
+/* 默认及等待/OCR/解析阶段彻底隐藏主操作按钮，避免任何中间状态闪现“确认录入”。 */
+#primaryActionBtn[hidden],
+.upload-sheet:not(.success):not(.error) #primaryActionBtn{
+  display:none!important;
+  visibility:hidden!important;
+}
+/* 成功态是否显示由 home.js 根据“自动规划已完成且存在解析结果”统一决定。 */
+.upload-sheet.success #primaryActionBtn[hidden]{
+  display:none!important;
+  visibility:hidden!important;
+}
+
 /* 2026-09-22 状态框统计：仅显示实际发生项目，新增→更正→合并 */
 .parse-status.success{min-height:0!important;height:auto!important;max-height:none!important;overflow:visible!important}
 .parse-status.success .status-detail.active{display:flex!important;flex-direction:column!important;gap:3px!important;margin-top:5px!important;padding-top:5px!important;max-height:none!important;overflow:visible!important}
