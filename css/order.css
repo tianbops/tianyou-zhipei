@@ -145,3 +145,11 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .dialog-box{margin:0 auto!important}
 .dialog-btn{align-items:center!important}
 .dialog-btn button{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+/* UI 2.6 · 弹窗视觉基线统一 2026-09-25 */
+.order-detail-page .dialog{padding:14px!important;background:rgba(0,0,0,.70)!important;backdrop-filter:blur(5px)!important}
+.order-detail-page .dialog-box{width:min(100%,390px)!important;max-height:88vh!important;background:#151D26!important;border:1px solid rgba(255,255,255,.075)!important;border-radius:18px!important;padding:20px!important;box-shadow:0 18px 50px rgba(0,0,0,.50)!important}
+.order-detail-page .dialog-box h3{font-size:16px!important;line-height:24px!important;margin-bottom:16px!important;color:#F2F5F7!important}
+.order-detail-page .dialog-btn{gap:8px!important;margin-top:16px!important}
+.order-detail-page .dialog-btn button{height:46px!important;border-radius:12px!important;font-size:14px!important;font-weight:600!important}
+.order-detail-page .dialog-btn button:first-child{background:#202A34!important;color:#E3E8ED!important;border:1px solid rgba(255,255,255,.075)!important}
+.order-detail-page .dialog-btn button:last-child{background:#B8C1C8!important;color:#0B1015!important}
