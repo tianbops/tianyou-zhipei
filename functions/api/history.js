@@ -1,7 +1,7 @@
 // Zhipei One - 路线历史查询 API
 // 今日订单/历史记录按线路+日期统一存储；userId 保留在记录内用于审计与兼容。允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
-import { canManageRoute, canUseRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand, redisGet, redisSet, listUsersByRoute } from './_data.js';
+import { canManageRoute, canUseRoute, getRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand, redisGet, redisSet, listUsersByRoute } from './_data.js';
 
 const HISTORY_DAYS = 100;
 const FUTURE_DAYS = 1;
@@ -14,6 +14,8 @@ export async function onRequest({ request, env }) {
   const date = normalizeDate(url.searchParams.get('date'));
   const route = normalizeRoute(url.searchParams.get('route') || session.boundRouteId), userId = normalizeUserId(session.id);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该线路' }, 403);
+  const routeRecord = await getRoute(env, route);
+  if (!routeRecord || routeRecord.status === 'disabled') return json({ error: '当前线路不存在或已停用' }, 404);
 
   try {
     if (request.method === 'DELETE') {
