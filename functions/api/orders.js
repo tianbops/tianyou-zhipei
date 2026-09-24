@@ -1,7 +1,7 @@
 // Zhipei One - 用户独立订单 API
 // 订单按线路+日期统一存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, listUsersByRoute, normalizeRoute, routeOrderKey } from './_data.js';
+import { canUseRoute, getRoute, legacyUserOrderKey, listUsersByRoute, normalizeRoute, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 8000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -24,6 +24,8 @@ async function saveOrder(request, env, session) {
   const body = await request.json().catch(() => ({}));
   const route = normalizeRoute(body.route || session.boundRouteId), userId = normalizeUserId(session.id);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该线路' }, 403);
+  const routeRecord = await getRoute(env, route);
+  if (!routeRecord || routeRecord.status === 'disabled') return json({ error: '当前线路不存在或已停用' }, 404);
   // /api/orders POST 仅保留“订单详情页更换车辆”这一增量写操作。
   // 正式运单录入必须经过 /api/confirm，避免出现“今日订单已写入、历史记录未生成”的半确认状态。
   const source = String(body.source || '').trim();
