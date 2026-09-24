@@ -184,7 +184,7 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 #routeBindingModal.state-bound .sheet-actions{flex-wrap:nowrap;margin-top:18px}
 #routeBindingModal.state-pending #bindingRouteField,
 #routeBindingModal.state-pending #bindingDutyField{display:none!important}
-#routeBindingModal.state-pending #unbindRouteButton{flex:1.15;height:44px;margin-top:0;background:transparent!important;border-color:rgba(255,255,255,.09);color:#D5DCE2}
+#routeBindingModal.state-pending #unbindRouteButton{display:flex!important;flex:1.15;height:44px;margin-top:0;background:transparent!important;border-color:rgba(255,255,255,.09);color:#D5DCE2}
 #routeBindingModal.state-pending #routeBindingButton{display:flex;flex:1;height:44px;background:#202A34!important;color:#E3E8ED!important}
 #routeBindingModal.state-pending .sheet-actions{flex-wrap:nowrap;margin-top:18px}
 #routeBindingModal.state-available .sheet-actions{margin-top:18px}
@@ -198,12 +198,3 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 }
 
 
-/* UI 2.4 · 线路绑定按钮状态严格收口 2026-09-24 */
-#routeBindingModal.state-available #unbindRouteButton,
-#routeBindingModal.state-pending #unbindRouteButton,
-#routeBindingModal:not(.state-bound) #unbindRouteButton{
-  display:none!important;
-}
-#routeBindingModal.state-bound #unbindRouteButton{
-  display:flex!important;
-}
