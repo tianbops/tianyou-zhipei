@@ -44,7 +44,7 @@ export async function onRequest({ request, env }) {
       if (!(await acquireLock(env, lockKey, lockValue, LOCK_TTL_SECONDS))) return json({ error: '该线路基准库正在被修改，请稍后重试' }, 409);
 
       try {
-        const current = await loadRouteBase(env, route, { ...legacyBaseOptions(session, route), lockAlreadyHeld: true });
+        const current = await loadRouteBase(env, route, { ...legacyBaseOptions(session, route), lockAlreadyHeld: true, lockToken: lockValue });
         const currentVersion = Number(current?.dataVersion) || 0;
         const expectedVersion = body.expectedDataVersion === undefined || body.expectedDataVersion === null ? null : Number(body.expectedDataVersion);
         if (expectedVersion !== null && expectedVersion !== currentVersion) {
