@@ -167,6 +167,8 @@ async function loadBase(env, route, userId, boundRouteId) {
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${route}线路基准数据库`);
   return stores.map((store, index) => ({
+    storeId: String(store?.storeId || store?.baseCode || store?.code || '').trim(),
+    baseCode: String(store?.baseCode || '').trim(),
     name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
     code: String(store?.code || index + 1).padStart(2, '0'),
     nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(),
@@ -185,26 +187,37 @@ function canonicalizeRawOrders(input) {
 }
 
 function canonicalizeOrders(input, base) {
+  const byStoreId = new Map(base.filter(store => store.storeId).map(store => [store.storeId, store]));
   const byName = new Map(base.map(store => [key(store.name), store]));
   const byCode = new Map(base.map(store => [String(store.code), store]));
   return input.map(item => {
     const raw = typeof item === 'string' ? { name: item } : (item || {});
     const name = String(raw.name || raw.storeName || raw.shopName || raw['门店名称'] || '').trim();
+    const rawStoreId = String(raw.storeId || '').trim();
     const parserMatched = raw.matched === true && raw.isNew !== true && raw.needsReview !== true;
     const parserNew = raw.isNew === true || raw.newStore === true;
-    const hit = byName.get(key(name)) || byCode.get(String(raw.baseCode || raw.code || ''));
-    if (parserMatched) return { ...raw, name: hit?.name || name, code: hit?.code || raw.code || '', nav: hit?.nav || raw.nav || '', note: hit?.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: raw.matchType || 'confirmed', matchScore: Number(raw.matchScore) || 1, _baseIndex: hit?.index };
-    if (parserNew) return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
-    if (hit) return { ...raw, name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
-    return { ...raw, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
+    const hit = byStoreId.get(rawStoreId) || byName.get(key(name)) || byCode.get(String(raw.baseCode || raw.code || ''));
+    if (parserMatched) return { ...raw, storeId: hit?.storeId || rawStoreId, baseCode: hit?.baseCode || String(raw.baseCode || '').trim(), name: hit?.name || name, code: hit?.code || raw.code || '', nav: hit?.nav || raw.nav || '', note: hit?.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: raw.matchType || 'confirmed', matchScore: Number(raw.matchScore) || 1, _baseIndex: hit?.index };
+    if (parserNew) return { ...raw, storeId: rawStoreId, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
+    if (hit) return { ...raw, storeId: hit.storeId || rawStoreId, baseCode: hit.baseCode || String(raw.baseCode || '').trim(), name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
+    return { ...raw, storeId: rawStoreId, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
   }).filter(item => item.name);
+}
+
+function canonicalOrderIdentity(item) {
+  const storeId = String(item?.storeId || '').trim();
+  return item?._baseIndex != null
+    ? 'b:' + item._baseIndex
+    : storeId
+      ? 'id:' + storeId
+      : 'n:' + key(item?.name);
 }
 
 function dedupeCanonical(items) {
   const seen = new Set();
   const output = [];
   for (const item of items) {
-    const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`;
+    const identity = canonicalOrderIdentity(item);
     if (!key(item.name) || seen.has(identity)) continue;
     seen.add(identity);
     output.push(item);
@@ -216,7 +229,7 @@ function countDuplicates(items) {
   const seen = new Set();
   let count = 0;
   for (const item of items) {
-    const identity = item._baseIndex != null ? `b:${item._baseIndex}` : `n:${key(item.name)}`;
+    const identity = canonicalOrderIdentity(item);
     if (seen.has(identity)) count++;
     else seen.add(identity);
   }
@@ -419,8 +432,13 @@ function historySignature(record) {
   const business = businessOrderSignature(record);
   if (business) return business;
   const batch = String(record?.orderBatchId || '').trim();
-  if (batch) return `batch:${batch}`;
-  const stores = Array.isArray(record?.orders) ? record.orders.map(item => key(item?.name)).filter(Boolean).sort() : [];
+  if (batch) return 'batch:' + batch;
+  const stores = Array.isArray(record?.orders) ? record.orders.map(item => {
+    const storeId = String(item?.storeId || '').trim();
+    const baseCode = String(item?.baseCode || item?.businessCode || '').trim().toUpperCase();
+    const name = key(item?.name);
+    return storeId ? 'id:' + storeId : baseCode ? 'code:' + baseCode : name ? 'name:' + name : '';
+  }).filter(Boolean).sort() : [];
   return JSON.stringify({
     route: String(record?.route || ''),
     date: String(record?.date || ''),
