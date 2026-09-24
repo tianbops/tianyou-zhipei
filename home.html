@@ -50,17 +50,17 @@
     <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon" aria-hidden="true"></span><span id="statusText" data-text="等待处理...">等待处理...</span></div><div id="statusDetail" class="status-detail" aria-live="polite"></div></div>
     <div class="upload-detail-view" id="uploadDetailView" hidden aria-hidden="true">
       <div class="upload-detail-header">
-        <div class="upload-detail-title" id="uploadDetailTitle">规划详情</div>
+        <div class="upload-detail-title" id="uploadDetailTitle">识别详情</div>
         <button class="upload-detail-close" type="button" onclick="closeUploadDetail()" aria-label="关闭详情">×</button>
       </div>
       <div class="upload-detail-body" id="uploadDetailBody"></div>
     </div>
-    <div class="detail-entry-row" id="detailEntryRow" aria-label="规划与修正详情">
-      <div class="input-area"><div class="detail-toggle" id="ocrTextToggle" role="button" tabindex="0" aria-expanded="false" onclick="toggleOCRText()">规划详情 <span>›</span></div><textarea id="manualOrderInput" rows="10" placeholder="上传运单后，这里显示识别文字，请核对后规划线路。" autocomplete="off"></textarea></div>
+    <div class="detail-entry-row" id="detailEntryRow" aria-label="识别与修正详情">
+      <div class="input-area"><div class="detail-toggle" id="ocrTextToggle" role="button" tabindex="0" aria-expanded="false" onclick="toggleOCRText()">识别详情 <span>›</span></div><textarea id="manualOrderInput" rows="10" placeholder="上传运单后，这里显示识别文字，请核对识别结果。" autocomplete="off"></textarea></div>
       <div class="review-summary" id="reviewSummary" hidden role="button" tabindex="0" aria-expanded="false" onclick="openCorrectionDetails()">修正详情 <span>›</span></div>
     </div>
     <div class="sheet-footer">
-      <button class="btn-primary-action" id="primaryActionBtn" type="button" onclick="handlePrimaryAction()">规划线路</button>
+      <button class="btn-primary-action" id="primaryActionBtn" type="button" onclick="handlePrimaryAction()" hidden aria-hidden="true">确认录入</button>
       <button class="btn-cancel" type="button" onclick="cancelUpload()">取消</button>
     </div>
   </div>
@@ -82,16 +82,15 @@
     const uploadBtn=buttons.find(x=>String(x.textContent||'').includes('上传运单'));
     const orderBtn=buttons.find(x=>String(x.textContent||'').includes('当日线路'));
     const historyBtn=buttons.find(x=>String(x.textContent||'').includes('历史查询'));
-    if(menuBtn)menuBtn.addEventListener('click',function(){
-      if(typeof window.openHomeMenu==='function')window.openHomeMenu();
-      else{const menu=byId('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block';}
+    if(menuBtn && typeof window.openHomeMenu!=='function')menuBtn.addEventListener('click',function(){
+      const menu=byId('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block';
     });
-    if(uploadBtn)uploadBtn.addEventListener('click',function(){
-      if(typeof window.toggleUpload==='function')window.toggleUpload();
-      else{const overlay=byId('uploadOverlay');if(overlay)overlay.classList.add('active');const source=byId('uploadSourceMenu');if(source)source.classList.add('active');}
+    if(uploadBtn && typeof window.toggleUpload!=='function')uploadBtn.addEventListener('click',function(){
+      const overlay=byId('uploadOverlay');if(overlay)overlay.classList.add('active');
+      const source=byId('uploadSourceMenu');if(source)source.classList.add('active');
     });
-    if(orderBtn)orderBtn.addEventListener('click',function(){if(typeof window.goToOrderDetail==='function')window.goToOrderDetail();else go('pages/order_detail.html');});
-    if(historyBtn)historyBtn.addEventListener('click',function(){if(typeof window.goToHistory==='function')window.goToHistory();else go('pages/history.html');});
+    if(orderBtn && typeof window.goToOrderDetail!=='function')orderBtn.addEventListener('click',function(){go('pages/order_detail.html');});
+    if(historyBtn && typeof window.goToHistory!=='function')historyBtn.addEventListener('click',function(){go('pages/history.html');});
   });
 })();
 </script>
