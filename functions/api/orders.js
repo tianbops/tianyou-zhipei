@@ -1,7 +1,7 @@
 // Zhipei One - 用户独立订单 API
 // 订单按线路+日期统一存储，服务器为唯一真实数据源。
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey } from './_data.js';
+import { canUseRoute, legacyUserOrderKey, listUsersByRoute, normalizeRoute, routeOrderKey } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 8000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -59,32 +59,20 @@ async function saveOrder(request, env, session) {
       && existing.orders.length > 0;
     if (!isVehicleOnlyUpdate) return json({ error: '原订单不存在或批次已变化，不能修改车辆' }, 409);
 
-    let orders;
-    let rawOrderCount;
-    let duplicateCount;
-    if (isVehicleOnlyUpdate) {
-      orders = existing.orders;
-      rawOrderCount = positiveInt(existing.rawOrderCount) || orders.length;
-      duplicateCount = Number(existing.duplicateCount) || 0;
-    } else {
-      const base = await loadBaseData(env, route, userId);
-      const normalized = body.orders.map((item, index) => normalizeOrder(item, index, orderBatchId, date, route)).filter(item => item.name);
-      rawOrderCount = positiveInt(body.rawOrderCount) || positiveInt(body.recognizedCount) || normalized.length;
-      const uniqueOrders = dedupeOrders(normalized, base);
-      duplicateCount = Math.max(0, normalized.length - uniqueOrders.length);
-      orders = sortByRouteBase(uniqueOrders, base);
-    }
+    const orders = existing.orders;
+    const rawOrderCount = positiveInt(existing.rawOrderCount) || orders.length;
+    const duplicateCount = Number(existing.duplicateCount) || 0;
     const incomingWeight = normalizeWeight(body.totalWeight ?? body.weight);
-    const totalWeight = incomingWeight && !isZeroWeight(incomingWeight) ? incomingWeight : normalizeWeight(existing?.totalWeight);
+    const totalWeight = incomingWeight || normalizeWeight(existing?.totalWeight);
     const todayData = {
-      orderBatchId, date, route, userId,
+      orderBatchId, date, route, userId: String(existing.userId || userId).trim(),
       vehicle: String(body.vehicle || '').trim() || session.vehicle || String(existing?.vehicle || ''),
       orders, totalWeight, count: orders.length, uniqueStoreCount: orders.length,
       matchedCount: orders.filter(x => x.matched).length,
       newStoreCount: orders.filter(x => x.isNew).length,
-      duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
-      recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount, rawOrderCount,
-      source, updatedAt: new Date().toISOString()
+      duplicateCount: Math.max(Number(existing.duplicateCount) || 0, duplicateCount),
+      recognizedCount: positiveInt(existing.recognizedCount) || rawOrderCount, rawOrderCount,
+      source: String(existing.source || source).trim(), updatedAt: new Date().toISOString()
     };
     const historyKey = routeOrderKey(route, `history:${date}`);
     let updatedHistory = null;
@@ -99,44 +87,28 @@ async function saveOrder(request, env, session) {
         const merged = dedupeHistoryRecords(legacyLists.flat());
         historyData = merged.length ? merged : null;
       }
-      if (Array.isArray(historyData)) {
-        let found = false;
-        updatedHistory = historyData.map(item => {
-          if (String(item?.orderBatchId || '').trim() !== orderBatchId) return item;
-          found = true;
-          return { ...item, vehicle: todayData.vehicle, updatedAt: todayData.updatedAt };
+      const sourceHistory = Array.isArray(historyData) ? historyData : [existing];
+      let found = false;
+      updatedHistory = sourceHistory.map(item => {
+        if (String(item?.orderBatchId || '').trim() !== orderBatchId) return item;
+        found = true;
+        return { ...item, vehicle: todayData.vehicle, updatedAt: todayData.updatedAt };
+      });
+      if (!found) {
+        updatedHistory.push({
+          ...existing,
+          userId: todayData.userId,
+          vehicle: todayData.vehicle,
+          totalWeight: todayData.totalWeight,
+          weight: todayData.totalWeight,
+          updatedAt: todayData.updatedAt
         });
-        // 今日订单存在而历史索引缺失时，车辆更新不能制造“今日有、历史无”的新半状态。
-        // 用同一批次的已确认数据补回历史，再统一限制为最近100笔。
-        if (!found) {
-          updatedHistory.push({
-            orderBatchId: todayData.orderBatchId,
-            date: todayData.date,
-            route: todayData.route,
-            userId: todayData.userId,
-            vehicle: todayData.vehicle,
-            count: todayData.count,
-            uniqueStoreCount: todayData.uniqueStoreCount ?? todayData.count,
-            weight: todayData.totalWeight,
-            totalWeight: todayData.totalWeight,
-            orders: todayData.orders,
-            matchedCount: todayData.matchedCount,
-            newStoreCount: todayData.newStoreCount,
-            reviewCount: 0,
-            duplicateCount: todayData.duplicateCount || 0,
-            recognizedCount: todayData.recognizedCount,
-            rawOrderCount: todayData.rawOrderCount,
-            baseDatabaseAvailable: todayData.baseDatabaseAvailable !== false,
-            source: todayData.source,
-            updatedAt: todayData.updatedAt
-          });
-        }
-        updatedHistory.sort((a, b) =>
-          (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0)
-          - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0)
-        );
-        updatedHistory = updatedHistory.slice(0, 100);
       }
+      updatedHistory.sort((a, b) =>
+        (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0)
+        - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0)
+      );
+      updatedHistory = updatedHistory.slice(0, 100);
     }
 
     // 正常保存：今日订单与 latest 一起原子提交。
@@ -147,8 +119,8 @@ async function saveOrder(request, env, session) {
       todayData,
       latestKey,
       latestData: { date, orderBatchId, updatedAt: todayData.updatedAt },
-      historyKey: isVehicleOnlyUpdate && Array.isArray(updatedHistory) ? historyKey : '',
-      historyData: isVehicleOnlyUpdate && Array.isArray(updatedHistory) ? updatedHistory : null
+      historyKey,
+      historyData: updatedHistory
     });
 
     const saved = await readAfterWrite(env, key, orderBatchId, orders.length);
@@ -332,62 +304,6 @@ function sortByRouteBase(orders, base) {
   return matched.concat(news).map(({ routeOrder, ...item }) => item);
 }
 
-function normalizeOrder(item, index, batchId, date, route) {
-  const value = typeof item === 'string' ? { name: item } : (item || {}), name = String(value.name || value.storeName || value.shopName || value['门店名称'] || '').trim();
-  const storeId = String(value.storeId || '').trim();
-  const baseCode = String(value.baseCode || '').trim();
-  return { id: String(value.id || (batchId + '-' + (index + 1))), storeId, baseCode, orderBatchId: batchId, code: String(value.code || index + 1).padStart(2, '0'), businessCode: String(value.businessCode || extractBusinessCode(name)).trim().toUpperCase(), name, nav: String(value.nav || value.navigation || value.url || value['导航'] || '').trim(), weight: Number(value.weight ?? value['重量'] ?? 0) || 0, note: String(value.note || value['备注'] || '').trim(), matched: value.matched === true, isNew: value.isNew === true || value.newStore === true, status: String(value.status || '待配送'), route, date };
-}
-
-function extractBusinessCode(value) { const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])((?:JM\d{4,6}|Q\d{3,5}|A\d{4,6}))(?:[^A-Z0-9]|$)/); return match ? match[1] : ''; }
-function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000]+/g, '').replace(/[【】\[\]]/g, '').toLowerCase().replace(/[（(]\s*(?:临时|20\d{2})\s*[）)]/g, '').replace(/谊品鲜/g, '谊品生鲜'); }
-function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId) === normalizeRoute(route); }
-function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
-function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
-function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n <= 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; const precise = Math.round((tons + Number.EPSILON) * 1000000) / 1000000; return `${precise.toFixed(6).replace(/0+$/,'').replace(/\.$/,'') || '0'}t`; }
-function isZeroWeight(value) { const m = String(value || '').match(/[\d]+(?:\.\d+)?/); return !m || Number(m[0]) === 0; }
-function parseWeightToTons(value) { const s = String(value ?? '').trim().replace(/,/g, ''); const m = s.match(/[\\d]+(?:\\.\\d+)?/); if (!m) return 0; const n = Number(m[0]); if (!Number.isFinite(n)) return 0; if (/吨|\\bt\\b/i.test(s)) return n; if (/kg|千克|公斤/i.test(s)) return n / 1000; return n >= 1000 ? n / 1000 : n; }
-function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
-function dedupeHistoryRecords(input) {
-  const byBatch = new Map();
-  const fallback = new Map();
-  for (const item of Array.isArray(input) ? input : []) {
-    if (!item || typeof item !== 'object') continue;
-    const batchId = String(item.orderBatchId || '').trim();
-    const updated = Date.parse(String(item.updatedAt || item.createdAt || '')) || 0;
-    if (batchId) {
-      const old = byBatch.get(batchId);
-      const oldUpdated = Date.parse(String(old?.updatedAt || old?.createdAt || '')) || 0;
-      if (!old || updated >= oldUpdated) byBatch.set(batchId, item);
-      continue;
-    }
-    const signature = historyRecordSignature(item);
-    if (!signature) continue;
-    const old = fallback.get(signature);
-    const oldUpdated = Date.parse(String(old?.updatedAt || old?.createdAt || '')) || 0;
-    if (!old || updated >= oldUpdated) fallback.set(signature, item);
-  }
-  return [...byBatch.values(), ...fallback.values()].sort((a, b) => {
-    const at = Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0;
-    const bt = Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0;
-    return bt - at;
-  });
-}
-function historyRecordSignature(record) {
-  const stores = Array.isArray(record?.orders) ? record.orders.map(item => {
-    const storeId = String(item?.storeId || '').trim();
-    const baseCode = String(item?.baseCode || item?.businessCode || '').trim().toUpperCase();
-    const name = normalizeStoreName(item?.name);
-    return storeId ? 'id:' + storeId : baseCode ? 'code:' + baseCode : name ? 'name:' + name : '';
-  }).filter(Boolean).sort() : [];
-  return JSON.stringify({
-    route: String(record?.route || ''),
-    date: String(record?.date || ''),
-    vehicle: String(record?.vehicle || ''),
-    weight: normalizeWeight(record?.totalWeight ?? record?.weight),
-    stores
-  });
-}
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 
 async function acquireLock(env, key, token, seconds) {
