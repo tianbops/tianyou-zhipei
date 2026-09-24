@@ -337,7 +337,17 @@ window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=men
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
 window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度线路不是你的绑定线路，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
-window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
+window.goToOrderDetail=async()=>{
+  const route=String(currentRoute()||'').trim();
+  if(!route){toast('请先选择调度线路','error');return}
+  try{
+    const response=await fetch('/api/routes',{cache:'no-store',credentials:'same-origin'});
+    const data=await response.json().catch(()=>({}));
+    const current=(Array.isArray(data.routes)?data.routes:[]).find(x=>Auth.formatRouteCode?.(x?.id||x?.name)===Auth.formatRouteCode?.(route));
+    if(current?.status==='disabled'){toast('当前线路已停用，无法查看当日线路','error');return}
+  }catch(error){console.warn('线路状态校验失败',error)}
+  navigateApp('pages/order_detail.html');
+};
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
 window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('idle');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.();};
