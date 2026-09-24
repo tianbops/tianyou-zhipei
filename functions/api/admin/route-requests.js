@@ -51,7 +51,8 @@ async function reviewRequest(env, admin, request) {
   if (action === 'reject') {
     const updated = { ...pending, status: 'rejected', reviewedBy: admin.id, reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     await redisSet(env, key, updated);
-    await redisSet(env, USER_REQUEST_PREFIX + encodeKey(pending.userId), requestId);
+    // 审核结束后清理用户的“待审核申请”索引，避免后续申请被旧索引阻断。
+    await redisCommand(env, ['DEL', USER_REQUEST_PREFIX + encodeKey(pending.userId)]);
     await recordAdminLog(env, admin, 'reject_route_request', 'route_request', requestId, { userId: pending.userId, route: pending.route });
     return json({ success: true, request: updated });
   }
