@@ -23,6 +23,9 @@ export async function onRequest({ request, env }) {
       if (id) target = await redisGet(env, `user:${String(id).trim()}`);
     }
     if (!target) return json({ success: false, error: '找不到目标用户' }, 404);
+    if (String(target.adminLevel || '') === 'primary') return json({ success: false, error: '主系统管理员已经初始化，无需重复设置' }, 409);
+    const existingAdmins = [target].filter(user => String(user.role || '').trim().toLowerCase() === 'system_admin' && String(user.adminLevel || '') !== 'primary');
+    if (existingAdmins.length) return json({ success: false, error: '系统不设其它管理员，请先清理非主系统管理员账号' }, 409);
 
     const updated = {
       ...target,
