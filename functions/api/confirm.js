@@ -240,7 +240,7 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
     throw new Error('线路基准库正在更新，请稍后重试');
   }
   try {
-    const latest = await loadRouteBase(env, route, { lockAlreadyHeld: true });
+    const latest = await loadRouteBase(env, route, { lockAlreadyHeld: true, lockToken: token });
     if (!latest || !Array.isArray(latest.stores)) throw new Error('未找到线路基准数据库');
 
     const stores = latest.stores.map((store, index) => ({
