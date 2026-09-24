@@ -31,6 +31,12 @@ export async function onRequest({ request, env }) {
     const username = String(user.username || '').trim().toLowerCase();
     if (username) keys.push(`user:username:${encodeURIComponent(username)}`);
 
+    // 线路申请与微信绑定索引不在 user:<id>: 前缀下，注销时必须同步清理，
+    // 否则账号删除后可能残留“待审核申请”或失效的微信身份映射。
+    keys.push(`route:binding-request:user:${session.id}`);
+    const wxKeys = await scanKeysByValue(env, ['wx:openid:*', 'wx:unionid:*'], String(session.id));
+    keys.push(...wxKeys);
+
     const uniqueKeys = [...new Set(keys)].filter(Boolean);
     for (let i = 0; i < uniqueKeys.length; i += 50) {
       const batch = uniqueKeys.slice(i, i + 50);
@@ -65,6 +71,29 @@ async function scanUserKeys(env, userId) {
     if (cursor === '0') break;
   }
   if (cursor !== '0') throw new Error('用户数据量过大，注销未完成');
+  return keys;
+}
+
+async function scanKeysByValue(env, patterns, expectedValue) {
+  const keys = [];
+  for (const pattern of patterns) {
+    let cursor = '0';
+    for (let round = 0; round < MAX_SCAN_ROUNDS; round++) {
+      const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', pattern, 'COUNT', SCAN_COUNT]);
+      cursor = String(result?.[0] ?? '0');
+      const batch = Array.isArray(result?.[1]) ? result[1] : [];
+      if (batch.length) {
+        const values = await redisCommand(env, ['MGET', ...batch]);
+        if (Array.isArray(values)) {
+          for (let i = 0; i < batch.length; i++) {
+            if (String(values[i] ?? '') === expectedValue) keys.push(batch[i]);
+          }
+        }
+      }
+      if (cursor === '0') break;
+    }
+    if (cursor !== '0') throw new Error('微信绑定数据量过大，注销未完成');
+  }
   return keys;
 }
 
