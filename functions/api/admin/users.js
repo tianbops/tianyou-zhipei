@@ -33,13 +33,7 @@ export async function onRequest({ request, env }) {
     const updated = { ...user };
     if (body.name !== undefined) updated.name = String(body.name || '').trim().slice(0, 40);
     if (body.phone !== undefined) updated.phone = String(body.phone || '').trim().slice(0, 30);
-    if (body.role !== undefined) {
-      if (String(user.adminLevel || '') === 'primary' && normalizeRole(body.role) !== 'system_admin') {
-        return json({ success: false, error: '主系统管理员账号不可取消管理员身份' }, 409);
-      }
-      const role = normalizeRole(body.role);
-      updated.role = role;
-    }
+    if (body.role !== undefined) return json({ success: false, error: '系统不支持设置或更改管理员身份；系统仅保留主系统管理员' }, 403);
     if (body.status !== undefined) {
       if (String(user.adminLevel || '') === 'primary' && String(body.status || '').trim() !== 'active') {
         return json({ success: false, error: '主系统管理员账号不可停用' }, 409);
@@ -66,8 +60,8 @@ async function deleteUser(env, admin, userId) {
   const user = await redisGet(env, `user:${encodeKey(userId)}`);
   if (!user) return json({ success: false, error: '用户不存在' }, 404);
 
-  if (normalizeRole(user.role) === 'system_admin') {
-    return json({ success: false, error: String(user.adminLevel || '') === 'primary' ? '主系统管理员账号不可删除' : '不能直接删除系统管理员账号，请先取消管理员身份' }, 400);
+  if (normalizeRole(user.role) === 'system_admin' || String(user.adminLevel || '') === 'primary') {
+    return json({ success: false, error: '主系统管理员账号不可删除；系统不设其它管理员' }, 400);
   }
 
   const boundRoute = String(user.boundRouteId || '').trim();
