@@ -258,7 +258,7 @@ function normalizeRawOrderList(orders) {
 function normalizeOrder(item, index, batchId, date, route) {
   return {
     id: String(item.id || `${batchId}-${index + 1}`),
-    storeId: String(item.storeId || item.baseCode || item.id || '').trim(),
+    storeId: String(item.storeId || item.baseCode || '').trim(),
     baseCode: String(item.baseCode || '').trim(),
     orderBatchId: batchId,
     code: String(item.code || index + 1).padStart(2, '0'),
@@ -415,6 +415,7 @@ function businessOrderSignature(record) {
   if (!record || typeof record !== 'object') return '';
   const route = normalizeRoute(record.route);
   const date = normalizeDate(record.date);
+  const vehicle = String(record.vehicle || '').trim().toUpperCase();
   const weight = normalizeWeight(record.totalWeight ?? record.weight);
   const orders = Array.isArray(record.orders) ? record.orders : [];
   const stores = orders.map(item => {
@@ -423,7 +424,7 @@ function businessOrderSignature(record) {
     return storeId ? 'id:' + storeId : name ? 'name:' + name : '';
   }).filter(Boolean).sort();
   if (!route || !date || !weight || !stores.length) return '';
-  return JSON.stringify({ route, date, weight, stores });
+  return JSON.stringify({ route, date, vehicle, weight, stores });
 }
 function cleanCode(value) { const text = String(value || '').trim(), match = text.match(/\d+/); return match ? String(Number(match[0])).padStart(2, '0') : text; }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
