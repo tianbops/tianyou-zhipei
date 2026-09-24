@@ -7,6 +7,7 @@ import {
 
 const REQUEST_PREFIX = 'route:binding-request:';
 const USER_REQUEST_PREFIX = 'route:binding-request:user:';
+const REVIEW_LOCK_TTL_SECONDS = 30;
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -45,19 +46,27 @@ async function reviewRequest(env, admin, request) {
   if (!['approve', 'reject'].includes(action)) return json({ success: false, error: '非法审核操作' }, 400);
 
   const key = REQUEST_PREFIX + encodeKey(requestId);
-  const pending = await redisGet(env, key);
-  if (!pending || pending.status !== 'pending') return json({ success: false, error: '申请不存在或已处理' }, 404);
+  const reviewLockKey = `lock:route-binding-review:${encodeKey(requestId)}`;
+  const reviewLockValue = crypto.randomUUID();
+  if (!(await acquireReviewLock(env, reviewLockKey, reviewLockValue))) {
+    return json({ success: false, error: '该线路申请正在审核，请稍后刷新重试' }, 409);
+  }
 
-  if (action === 'reject') {
+  try {
+    // 锁内重新读取申请，避免两个管理员同时审核时都基于同一份 pending 数据执行。
+    const pending = await redisGet(env, key);
+    if (!pending || pending.status !== 'pending') return json({ success: false, error: '申请不存在或已处理' }, 404);
+
+    if (action === 'reject') {
     const updated = { ...pending, status: 'rejected', reviewedBy: admin.id, reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     await redisSet(env, key, updated);
     // 审核结束后清理用户的“待审核申请”索引，避免后续申请被旧索引阻断。
     await redisCommand(env, ['DEL', USER_REQUEST_PREFIX + encodeKey(pending.userId)]);
     await recordAdminLog(env, admin, 'reject_route_request', 'route_request', requestId, { userId: pending.userId, route: pending.route });
-    return json({ success: true, request: updated });
-  }
+      return json({ success: true, request: updated });
+    }
 
-  const user = await getUser(env, pending.userId);
+    const user = await getUser(env, pending.userId);
   if (!user || user.status === 'disabled') return json({ success: false, error: '申请用户不存在或已停用' }, 409);
   const route = normalizeRoute(pending.route);
   const current = await getRoute(env, route);
@@ -159,8 +168,12 @@ async function reviewRequest(env, admin, request) {
   await recordAdminLog(env, admin, 'approve_route_request', 'route_request', requestId, {
     userId: user.id, fromRoute: currentBound || '', route, duty
   });
-  return json({ success: true, request: approved, user: publicUser(updatedUser), route: updatedTargetRoute });
+    return json({ success: true, request: approved, user: publicUser(updatedUser), route: updatedTargetRoute });
+  } finally {
+    await releaseReviewLock(env, reviewLockKey, reviewLockValue).catch(() => {});
+  }
 }
+
 async function finishApprovedWithoutRewrite(env, admin, pending, key) {
   const now = new Date().toISOString();
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
@@ -182,6 +195,16 @@ async function persistApprovedRequest(env, key, approved) {
     }
   }
   throw new Error('线路绑定已完成，但审核状态同步未确认，请刷新申请列表后重试');
+}
+
+async function acquireReviewLock(env, key, value) {
+  const result = await redisCommand(env, ['SET', key, value, 'NX', 'EX', String(REVIEW_LOCK_TTL_SECONDS)]).catch(() => null);
+  return result === 'OK';
+}
+
+async function releaseReviewLock(env, key, value) {
+  const script = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+  await redisCommand(env, ['EVAL', script, '1', key, value]).catch(() => null);
 }
 
 function json(payload, status = 200) {
