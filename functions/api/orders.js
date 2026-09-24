@@ -100,11 +100,42 @@ async function saveOrder(request, env, session) {
         historyData = merged.length ? merged : null;
       }
       if (Array.isArray(historyData)) {
-        updatedHistory = historyData.map(item =>
-          item?.orderBatchId === orderBatchId
-            ? { ...item, vehicle: todayData.vehicle, updatedAt: todayData.updatedAt }
-            : item
+        let found = false;
+        updatedHistory = historyData.map(item => {
+          if (String(item?.orderBatchId || '').trim() !== orderBatchId) return item;
+          found = true;
+          return { ...item, vehicle: todayData.vehicle, updatedAt: todayData.updatedAt };
+        });
+        // 今日订单存在而历史索引缺失时，车辆更新不能制造“今日有、历史无”的新半状态。
+        // 用同一批次的已确认数据补回历史，再统一限制为最近100笔。
+        if (!found) {
+          updatedHistory.push({
+            orderBatchId: todayData.orderBatchId,
+            date: todayData.date,
+            route: todayData.route,
+            userId: todayData.userId,
+            vehicle: todayData.vehicle,
+            count: todayData.count,
+            uniqueStoreCount: todayData.uniqueStoreCount ?? todayData.count,
+            weight: todayData.totalWeight,
+            totalWeight: todayData.totalWeight,
+            orders: todayData.orders,
+            matchedCount: todayData.matchedCount,
+            newStoreCount: todayData.newStoreCount,
+            reviewCount: 0,
+            duplicateCount: todayData.duplicateCount || 0,
+            recognizedCount: todayData.recognizedCount,
+            rawOrderCount: todayData.rawOrderCount,
+            baseDatabaseAvailable: todayData.baseDatabaseAvailable !== false,
+            source: todayData.source,
+            updatedAt: todayData.updatedAt
+          });
+        }
+        updatedHistory.sort((a, b) =>
+          (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0)
+          - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0)
         );
+        updatedHistory = updatedHistory.slice(0, 100);
       }
     }
 
