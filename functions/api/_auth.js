@@ -104,6 +104,7 @@ export async function verifySession(request, env) {
     route: normalizeRoute(user.boundRouteId),
     boundRouteId: normalizeRoute(user.boundRouteId),
     role: normalizeRole(user.role),
+    adminLevel: String(user.adminLevel || ''),
     vehicle: String(user.vehicle || ''),
     status: String(user.status || 'active'),
     user
@@ -130,6 +131,7 @@ async function verifyToken(token, env, expectedClient) {
       route: normalizeRoute(payload.boundRouteId || payload.route),
       boundRouteId: normalizeRoute(payload.boundRouteId || payload.route),
       role: normalizeRole(payload.role),
+      adminLevel: String(payload.adminLevel || ''),
       sessionVersion: Number(payload.sessionVersion || 1),
       client: String(payload.client || '')
     };
@@ -141,6 +143,7 @@ async function verifyToken(token, env, expectedClient) {
 export async function authRequired(request, env, options = {}) {
   const session = await verifySession(request, env);
   if (!session) return null;
+  if (session.adminLevel === 'primary' && !options.allowSystemAdmin) return null;
   if (options.client && session.client !== options.client) return null;
   if (options.route && normalizeRoute(options.route) !== session.boundRouteId) {
     if (!options.allowAnyRoute) return null;
@@ -150,7 +153,7 @@ export async function authRequired(request, env, options = {}) {
 }
 
 export async function requireSystemAdmin(request, env) {
-  return authRequired(request, env, { roles: ['system_admin'] });
+  return authRequired(request, env, { roles: ['system_admin'], allowSystemAdmin: true });
 }
 
 export async function requireRouteMaintainer(request, env, route) {
