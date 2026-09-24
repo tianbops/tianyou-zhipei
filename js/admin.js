@@ -59,7 +59,7 @@ async function loadRequests(){
 }
 async function reviewRouteRequest(id,action){
   const label=action==='approve'?'通过':'拒绝';
-  if(!confirm(`确定${label}该线路绑定申请吗？`))return;
+  if(!await OneModal.confirm(`确定${label}该线路绑定申请吗？`,{title:'线路绑定申请',confirmText:label,danger:action==='reject'}))return;
   try{
     const r=await api('/api/admin/route-requests',{method:'PATCH',body:{requestId:id,action}});
     if(!r.success)throw new Error(r.error||'审核失败');
@@ -122,14 +122,14 @@ async function saveRoute(){
   if(!route){notice('请选择线路');return}
   try{const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});if(!r.success)throw new Error(r.error||'线路绑定失败');notice('线路人员配置已保存');closeRouteEditor();await Promise.all([loadUsers(),loadRoutes()])}catch(e){notice(e.message,true)}
 }
-async function resetPassword(id){const password=prompt('输入新的6-72位密码');if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
+async function resetPassword(id){const password=await OneModal.prompt('输入新的6-72位密码',{title:'重置密码',placeholder:'6-72位密码',password:true,confirmText:'重置'});if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
 async function deleteUser(id){
   const user=users.find(x=>x.id===id);
   if(!user)return;
   if(user.role==='system_admin'){notice('不能删除系统管理员账号',true);return}
   if(user.boundRouteId){notice('该用户已绑定线路，请先解除绑定',true);return}
-  if(!confirm('确定删除账号“'+user.username+'”吗？删除后账号及登录索引将永久移除。'))return;
+  if(!await OneModal.confirm('确定删除账号“'+user.username+'”吗？删除后账号及登录索引将永久移除。',{title:'删除账号',confirmText:'删除',danger:true}))return;
   try{
     const r=await api('/api/admin/users',{method:'DELETE',body:{userId:id}});
     if(!r.success)throw new Error(r.error||'账号删除失败');
@@ -157,7 +157,7 @@ async function resetData(){
   const confirmation=$('#resetConfirmation').value.trim();
   if(!key){notice('请输入数据重置密钥',true);return}
   if(confirmation!=='确认清空智配One数据'){notice('确认文字不正确',true);return}
-  if(!confirm('最后确认：这将清除全部智配One业务数据，仅保留原始主系统管理员账号。确定继续？')) return;
+  if(!await OneModal.confirm('最后确认：这将清除全部智配One业务数据，仅保留原始主系统管理员账号。确定继续？',{title:'清空业务数据',confirmText:'继续清空',danger:true})) return;
   const btn=$('#resetDataBtn');
   btn.disabled=true;
   btn.textContent='正在清空…';
