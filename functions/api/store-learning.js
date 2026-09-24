@@ -151,6 +151,12 @@ function resolveTarget(base, item) {
     if (item.baseName && matchKey(byId.name) !== matchKey(item.baseName)) return null;
     return byId;
   }
+  if (item.storeId) {
+    const byId = base.find(store => String(store.storeId || '').trim() === item.storeId);
+    if (!byId) return null;
+    if (item.baseName && matchKey(byId.name) !== matchKey(item.baseName)) return null;
+    return byId;
+  }
   if (item.baseCode) {
     const byCode = base.find(store => String(store.code || '') === item.baseCode);
     if (!byCode) return null;
