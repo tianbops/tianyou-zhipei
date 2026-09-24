@@ -109,8 +109,8 @@ window.Auth = {
   },
 
   async checkAuth() {
-    const page = location.pathname.split('/').pop();
-    if (['index.html', 'login.html', ''].includes(page)) {
+    const page = location.pathname.split('/').pop() || 'index.html';
+    if (['index.html', 'login.html'].includes(page)) {
       const user = await this.getCurrentServerUser().catch(() => null);
       if (user) {
         const target = user.adminLevel === 'primary' ? 'admin.html' : 'home.html';
