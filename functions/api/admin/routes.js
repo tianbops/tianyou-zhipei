@@ -1,6 +1,56 @@
 // 天友智配One V1.0 - 系统管理：路线绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, scanUsers } from '../_data.js';
+import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, redisSet, scanUsers } from '../_data.js';
+
+async function repairCreatedRoutesFromAdminLogs(env, records) {
+  const logs = await redisCommand(env, ['GET', 'system:admin:logs']).catch(() => null);
+  const list = Array.isArray(logs) ? logs : [];
+  const known = new Set(records.map(record => normalizeRoute(record?.id)).filter(Boolean));
+  const created = new Set(list
+    .filter(item => item?.action === 'create_route' && item?.targetType === 'route')
+    .map(item => normalizeRoute(item?.targetId))
+    .filter(Boolean));
+
+  for (const route of created) {
+    if (known.has(route)) continue;
+    const now = new Date().toISOString();
+    const createLog = list.find(item =>
+      item?.action === 'create_route' &&
+      item?.targetType === 'route' &&
+      normalizeRoute(item?.targetId) === route
+    );
+    const record = {
+      schemaVersion: 1,
+      id: route,
+      name: route,
+      driverUserId: '',
+      deliveryUserId: '',
+      boundUserIds: [],
+      status: 'active',
+      createdAt: String(createLog?.createdAt || now),
+      updatedAt: now
+    };
+    if (!await getRoute(env, route)) {
+      await redisSet(env, routeRecordKey(route), record);
+      const base = await redisCommand(env, ['GET', routeBaseKey(route)]).catch(() => null);
+      if (!base) {
+        await redisSet(env, routeBaseKey(route), {
+          schemaVersion: 1,
+          route,
+          stores: [],
+          dataVersion: 1,
+          updatedAt: now,
+          source: 'route-repair'
+        });
+      }
+    }
+    const repaired = await getRoute(env, route);
+    if (repaired) {
+      records.push(repaired);
+      known.add(route);
+    }
+  }
+}
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -28,6 +78,8 @@ export async function onRequest({ request, env }) {
         }
       } while (cursor !== '0');
 
+      // 管理员创建日志是线路实体的审计依据。若历史线路记录异常缺失，读取管理列表时自动修复实体。
+      await repairCreatedRoutesFromAdminLogs(env, records);
       const users = await scanUsers(env);
       const byId = new Map(records.map(record => [String(record.id), record]));
       for (const user of users) {
