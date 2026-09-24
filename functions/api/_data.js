@@ -54,6 +54,7 @@ export function publicUser(user) {
     name: String(user?.name || user?.username || ''),
     phone: String(user?.phone || ''),
     role: normalizeRole(user?.role),
+    adminLevel: String(user?.adminLevel || ''),
     boundRouteId: normalizeRoute(user?.boundRouteId),
     route: normalizeRoute(user?.boundRouteId || user?.route),
     vehicle: String(user?.vehicle || ''),
