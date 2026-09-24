@@ -440,15 +440,21 @@ async function purgeExpiredHistory(env, route) {
 
 async function scanKeys(env, pattern) {
   let cursor = '0', keys = [];
-  for (let page = 0; page < 100; page += 1) {
-    const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/scan/${cursor}/match/${encodeURIComponent(pattern)}/count/100`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
-    if (!response.ok) break;
-    const data = await response.json().catch(() => ({}));
-    keys.push(...(Array.isArray(data.result?.[1]) ? data.result[1] : []));
-    cursor = String(data.result?.[0] || '0');
-    if (cursor === '0') break;
+  const MAX_PAGES = 1000;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/scan/${cursor}/match/${encodeURIComponent(pattern)}/count/100`, {
+      headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` },
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error(`Redis SCAN 失败（HTTP ${response.status}）`);
+    const data = await response.json().catch(() => null);
+    const result = data?.result;
+    if (!Array.isArray(result) || result.length < 2) throw new Error('Redis SCAN 返回格式异常');
+    keys.push(...(Array.isArray(result[1]) ? result[1] : []));
+    cursor = String(result[0] || '0');
+    if (cursor === '0') return keys;
   }
-  return keys;
+  throw new Error('Redis SCAN 超过安全分页上限，拒绝返回不完整索引');
 }
 
 function dedupeHistory(input) { const map = new Map(); let changed = false; for (const item of input) { if (!item || typeof item !== 'object') { changed = true; continue; } const batchId = String(item?.orderBatchId || '').trim(); const route = String(item?.route || '').trim(); const date = normalizeDate(item?.date); const signature = batchId && date ? `batch:${route}:${date}:${batchId}` : historySignature(item); if (!signature) { changed = true; continue; } const old = map.get(signature); if (!old) map.set(signature, item); else { changed = true; if (compareUpdatedAt(item, old) > 0) map.set(signature, item); } } const records = Array.from(map.values()).sort((a, b) => compareUpdatedAt(b, a)); if (records.length !== input.length) changed = true; return { records, changed }; }
