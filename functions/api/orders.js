@@ -119,12 +119,16 @@ async function saveOrder(request, env, session) {
     // 更换车辆：今日订单、对应历史记录、latest 三者一起原子提交，
     // 避免网络/Redis故障造成“今日车辆已变、历史车辆未变”的半成功状态。
     await atomicSaveOrder(env, {
+      lockKey,
+      lockToken,
       todayKey: key,
       todayData,
       latestKey,
       latestData: { date, orderBatchId, updatedAt: todayData.updatedAt },
       historyKey,
-      historyData: updatedHistory
+      historyData: updatedHistory,
+      expectedToday: existing,
+      expectedHistory: Array.isArray(historyData) ? historyData : null
     });
 
     const saved = await readAfterWrite(env, key, orderBatchId, orders.length);
