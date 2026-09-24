@@ -1,7 +1,7 @@
 // Zhipei One - 多用户登录
 // Web 与微信小程序共用同一用户资料和密码体系。
 import { createAndroidToken, createMiniToken, createSession, sessionCookie } from './_auth.js';
-import { normalizeRoute, normalizeRole, publicUser, redisGet, redisSet } from './_data.js';
+import { normalizeRoute, normalizeRole, publicUser, redisGet } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -31,9 +31,10 @@ export async function onRequest({ request, env }) {
       return json({ success: false, error: '主系统管理员仅可使用系统管理端登录' }, 403);
     }
 
+    // 登录只读取用户资料并签发当前版本 Token，不回写整份用户对象。
+    // 避免登录与管理员绑定/停用等并发更新时发生“整对象覆盖”而丢失最新业务状态。
     const normalizedBoundRoute = normalizeRoute(user.boundRouteId);
-    const updatedUser = { ...user, role: normalizeRole(user.role), boundRouteId: normalizedBoundRoute, route: normalizedBoundRoute, lastLoginAt: new Date().toISOString() };
-    await redisSet(env, `user:${userId}`, updatedUser);
+    const updatedUser = { ...user, role: normalizeRole(user.role), boundRouteId: normalizedBoundRoute, route: normalizedBoundRoute };
     const safeUser = publicUser(updatedUser);
     if (client === 'miniprogram') {
       const token = await createMiniToken(env, updatedUser);
