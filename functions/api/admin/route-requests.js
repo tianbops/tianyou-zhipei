@@ -58,11 +58,15 @@ async function reviewRequest(env, admin, request) {
     if (!pending || pending.status !== 'pending') return json({ success: false, error: '申请不存在或已处理' }, 404);
 
     if (action === 'reject') {
-    const updated = { ...pending, status: 'rejected', reviewedBy: admin.id, reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    await redisSet(env, key, updated);
-    // 审核结束后清理用户的“待审核申请”索引，避免后续申请被旧索引阻断。
-    await redisCommand(env, ['DEL', USER_REQUEST_PREFIX + encodeKey(pending.userId)]);
-    await recordAdminLog(env, admin, 'reject_route_request', 'route_request', requestId, { userId: pending.userId, route: pending.route });
+      const updated = { ...pending, status: 'rejected', reviewedBy: admin.id, reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      await finalizeRequestStatus(env, {
+        requestKey: key,
+        userRequestKey: USER_REQUEST_PREFIX + encodeKey(pending.userId),
+        requestId,
+        updated,
+        deleteUserIndex: true
+      });
+      await recordAdminLog(env, admin, 'reject_route_request', 'route_request', requestId, { userId: pending.userId, route: pending.route });
       return json({ success: true, request: updated });
     }
 
@@ -164,7 +168,13 @@ async function reviewRequest(env, admin, request) {
   }
 
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
-  await persistApprovedRequest(env, key, approved);
+  await finalizeRequestStatus(env, {
+    requestKey: key,
+    userRequestKey: USER_REQUEST_PREFIX + encodeKey(pending.userId),
+    requestId,
+    updated: approved,
+    deleteUserIndex: true
+  });
   await recordAdminLog(env, admin, 'approve_route_request', 'route_request', requestId, {
     userId: user.id, fromRoute: currentBound || '', route, duty
   });
@@ -177,24 +187,27 @@ async function reviewRequest(env, admin, request) {
 async function finishApprovedWithoutRewrite(env, admin, pending, key) {
   const now = new Date().toISOString();
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
-  await persistApprovedRequest(env, key, approved);
+  await finalizeRequestStatus(env, {
+    requestKey: key,
+    userRequestKey: USER_REQUEST_PREFIX + encodeKey(pending.userId),
+    requestId: pending.id,
+    updated: approved,
+    deleteUserIndex: true
+  });
   await recordAdminLog(env, admin, 'approve_route_request', 'route_request', pending.id, { userId: pending.userId, route: pending.route, duty: pending.duty });
   return json({ success: true, request: approved });
 }
 
-async function persistApprovedRequest(env, key, approved) {
-  let lastError = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      await redisSet(env, key, approved);
-      const saved = await redisGet(env, key);
-      if (saved && saved.status === 'approved' && saved.id === approved.id) return true;
-      lastError = new Error('审核状态写入后未确认');
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw new Error('线路绑定已完成，但审核状态同步未确认，请刷新申请列表后重试');
+async function finalizeRequestStatus(env, { requestKey, userRequestKey, requestId, updated, deleteUserIndex = false }) {
+  const script = "local current = redis.call('GET', KEYS[1]) if not current then return 'MISSING' end local ok, obj = pcall(cjson.decode, current) if not ok or tostring(obj.id or '') ~= ARGV[1] or tostring(obj.status or '') ~= 'pending' then return 'CHANGED' end redis.call('SET', KEYS[1], ARGV[2]) if ARGV[3] == '1' and redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end return 'OK'";
+  const result = await redisCommand(env, [
+    'EVAL', script, '2', requestKey, userRequestKey,
+    requestId, JSON.stringify(updated), deleteUserIndex ? '1' : '0'
+  ]);
+  if (result === 'MISSING') throw new Error('申请不存在或已处理');
+  if (result === 'CHANGED') throw new Error('申请状态已发生变化，请刷新申请列表后重试');
+  if (result !== 'OK') throw new Error('线路申请状态提交未确认');
+  return true;
 }
 
 async function acquireReviewLock(env, key, value) {
