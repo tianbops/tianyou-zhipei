@@ -407,10 +407,6 @@ if(parsedOrders.length){
   window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();correctionDetails=[];correctionStats={raw:0,corrected:0,merged:0};statusBaseDetails=[];pendingReviewCount=0;setCorrectionSummary(0);}
 if(parsedOrders.length){setPrimaryActionMode('confirm');if(pendingReviewCount>0){const reviewButton=$('primaryActionBtn');if(reviewButton){reviewButton.hidden=false;reviewButton.setAttribute('aria-hidden','false');reviewButton.textContent=`确认待定门店（${pendingReviewCount}）`;reviewButton.classList.add('ready');reviewButton.onclick=()=>window.openPendingReview?.();}}}return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
-const HOME_ORDER_CACHE_PREFIX='zsp_home_order_v1';
-function homeCacheScope(){const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};const identity=String(user.id||user.username||user.account||user.route||'').trim();const route=String(currentRoute()||'').trim();return identity&&route?HOME_ORDER_CACHE_PREFIX+':'+encodeURIComponent(identity)+':'+encodeURIComponent(route):''}
-function readCachedHomeOrder(){try{const cacheKey=homeCacheScope();if(!cacheKey)return null;const raw=sessionStorage.getItem(cacheKey);if(!raw)return null;const item=JSON.parse(raw);if(item?.date!==currentDate()||item?.route!==String(currentRoute()||'')||!item?.order)return null;return item.order}catch(_){return null}}
-function writeCachedHomeOrder(order){try{const cacheKey=homeCacheScope();if(!cacheKey)return;sessionStorage.setItem(cacheKey,JSON.stringify({date:currentDate(),route:String(currentRoute()||''),order}))}catch(_){}}
 async function refreshHomeOrder(){
   const seq=++homeOrderLoadSeq;
   const route=String(currentRoute()||'').trim();
@@ -418,7 +414,6 @@ async function refreshHomeOrder(){
     const order=await loadServerOrder(currentDate(),route);
     if(seq!==homeOrderLoadSeq||String(currentRoute()||'').trim()!==route)return;
     serverOrder=order;
-    writeCachedHomeOrder(serverOrder);
     updateSummary();
   }catch(e){
     if(seq!==homeOrderLoadSeq||String(currentRoute()||'').trim()!==route)return;
@@ -426,6 +421,6 @@ async function refreshHomeOrder(){
   }
 }
 document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');
-if(!(await Auth.checkAuth()))return;const me=await Auth.getCurrentServerUser();if(me?.adminLevel==='primary'){location.replace('admin.html');return;}await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const cached=readCachedHomeOrder();if(cached&&String(cached.route||'')===String(currentRoute()||'')){serverOrder=cached;updateSummary()}const initialSeq=++homeOrderLoadSeq;const initialRoute=String(currentRoute()||'').trim();const loaded=await loadServerOrder(currentDate(),initialRoute);if(initialSeq===homeOrderLoadSeq&&String(currentRoute()||'').trim()===initialRoute){serverOrder=loaded;writeCachedHomeOrder(serverOrder);updateSummary()}$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];statusBaseDetails=[];pendingReviewCount=0;setPrimaryActionMode('idle');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
+if(!(await Auth.checkAuth()))return;const me=await Auth.getCurrentServerUser();if(me?.adminLevel==='primary'){location.replace('admin.html');return;}await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const initialSeq=++homeOrderLoadSeq;const initialRoute=String(currentRoute()||'').trim();const loaded=await loadServerOrder(currentDate(),initialRoute);if(initialSeq===homeOrderLoadSeq&&String(currentRoute()||'').trim()===initialRoute){serverOrder=loaded;updateSummary()}$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];statusBaseDetails=[];pendingReviewCount=0;setPrimaryActionMode('idle');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
 window.addEventListener('pageshow',event=>{document.body.classList.remove('is-leaving');const menu=$('homeMenu');if(menu)menu.style.display='none';const overlay=$('uploadOverlay');if(event.persisted)window.clearManualInput?.();if(overlay)overlay.classList.remove('active');closeUploadSource();if(event.persisted&&typeof Auth!=='undefined')refreshHomeOrder()});
 })();
