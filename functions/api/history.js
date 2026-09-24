@@ -1,4 +1,4 @@
-// Zhipei One - 路线历史查询 API
+// Zhipei One - 线路历史查询 API
 // 今日订单/历史记录按线路+日期统一存储；userId 保留在记录内用于审计与兼容。允许提前一天上传并查询明日运单。
 import { authRequired } from './_auth.js';
 import { canManageRoute, canUseRoute, getRoute, legacyUserOrderKey, normalizeRoute, routeOrderKey, redisCommand, redisGet, redisSet, listUsersByRoute } from './_data.js';
@@ -29,7 +29,7 @@ export async function onRequest({ request, env }) {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
     // 历史数据保留100天；每次进入历史查询时执行一次清理。
-    await purgeExpiredHistory(env, userId, route).catch(error => console.warn('历史清理失败，继续读取历史数据', error?.message || error));
+    await purgeExpiredHistory(env, route).catch(error => console.warn('历史清理失败，继续读取历史数据', error?.message || error));
 
     // 不传日期时返回该用户/线路全部历史日期。
     if (!date) return await listAllHistory(env, userId, route, session);
