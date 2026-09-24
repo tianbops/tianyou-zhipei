@@ -209,7 +209,7 @@ async function unbindRoute(){
     ? '确定解除当前线路绑定吗？解除无需管理员审核，之后可以重新申请其他线路。'
     : '确定取消当前线路申请吗？取消后可以重新申请其他线路。';
   if(!confirm(message))return;
-  const button=$('routeBindingButton');button.disabled=true;button.textContent='解除中…';
+  const button=$('unbindRouteButton');button.disabled=true;button.textContent='处理中…';
   try{const r=await fetch('/api/route-binding',{method:'DELETE',credentials:'same-origin',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'解除绑定失败');showMessage('routeBindingMessage',d.cancelled?'申请已取消，可重新申请':'线路已解除，可重新申请','success');setTimeout(()=>openRouteBinding(),600)}catch(e){showMessage('routeBindingMessage',e.message||'操作失败')}finally{button.disabled=false;button.textContent=currentUser?.boundRouteId?'解除当前绑定':'取消当前申请'}
 }
 async function saveProfile(){const vehicle=$('vehicle').value.trim();const name=String(currentUser?.name||'').trim();const button=$('saveButton');hideMessage('profileMessage');if(!name)return showMessage('profileMessage','账户资料读取失败，请刷新后重试');button.disabled=true;button.textContent='保存中…';try{const user=await Auth.updateProfile({name,vehicle});updateHero(user);showMessage('profileMessage','配送资料已保存','success');setTimeout(()=>{closeModal('deliveryModal');location.replace('home.html')},500)}catch(error){showMessage('profileMessage',error.message||'保存失败，请稍后重试')}finally{button.disabled=false;button.textContent='保存'}}
