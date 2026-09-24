@@ -838,7 +838,7 @@ function normalizeBase(store, index) {
   if (typeof store === 'string') return { name: cleanStoreName(store), code: String(index + 1).padStart(2, '0'), index };
   if (!store) return null;
   const name = cleanStoreName(store.name || store.storeName || store.title || store.customerName || store['门店名称'] || store.originalName || store.displayName || '');
-  return name ? { ...store, name, code: String(store.code || index + 1).trim(), index } : null;
+  return name ? { ...store, name, storeId: String(store.storeId || store.baseCode || '').trim(), baseCode: String(store.baseCode || '').trim(), code: String(store.code || index + 1).trim(), index } : null;
 }
 
 function toMatched(item, mode, score, rawName) {
