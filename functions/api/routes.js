@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 唯一路线与基准数据库 API
+// 天友智配One V1.0 - 线路与基准数据库 API
 import { authRequired } from './_auth.js';
 import {
   canManageRoute, getRoute, loadRouteBase, normalizeRoute,
@@ -33,7 +33,7 @@ export async function onRequest({ request, env }) {
 
     if (request.method === 'PUT') {
       if (!route) return json({ error: 'Missing route parameter' }, 400);
-      if (!canManageRoute(session.user || session, route)) return json({ error: '当前账号可以调度该路线，但无权修改该路线基准数据库' }, 403);
+      if (!canManageRoute(session.user || session, route)) return json({ error: '当前账号可以调度该线路，但无权修改该线路基准数据库' }, 403);
       const body = await request.json().catch(() => ({}));
       if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
       const routeRecord = await getRoute(env, route);
