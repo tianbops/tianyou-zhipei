@@ -103,7 +103,8 @@ export async function onRequest({ request, env }) {
         if (!rawExamples.includes(item.rawName)) rawExamples.push(item.rawName);
         learning.aliases[aliasKey] = {
           baseKey,
-          baseCode: String(item.target.code || ''),
+          baseCode: String(item.target.baseCode || item.target.code || '').trim(),
+          storeId: String(item.target.storeId || '').trim(),
           baseName: item.target.name,
           count: Math.max(1, Number(previous?.count) || 0) + 1,
           firstSeenAt: previous?.firstSeenAt || now,
@@ -140,7 +141,7 @@ function normalizeNewStore(item) {
 
 function normalizeInput(item) {
   const value = item && typeof item === 'object' ? item : {};
-  return { rawName: clean(value.rawName), baseName: clean(value.baseName), baseCode: cleanCode(value.baseCode) };
+  return { rawName: clean(value.rawName), baseName: clean(value.baseName), baseCode: cleanCode(value.baseCode), storeId: clean(value.storeId) };
 }
 
 function resolveTarget(base, item) {
