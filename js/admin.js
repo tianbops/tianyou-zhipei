@@ -76,7 +76,8 @@ async function loadLogs(){
   catch(e){notice(e.message,true); throw e}}
 function renderUsers(){
   $('#userCount').textContent=users.length;
-  $('#userList').innerHTML=users.map(u=>`<article class="user-card">
+  const orderedUsers=[...users].sort((a,b)=>(a?.role==='system_admin'?0:1)-(b?.role==='system_admin'?0:1));
+  $('#userList').innerHTML=orderedUsers.map(u=>`<article class="user-card">
     <div class="user-main"><div><div class="name">${esc(u.name||u.username)}</div><div class="meta">${esc(u.username)} · ${esc(u.id)}</div></div><span class="badge">${esc(u.status==='active'?'正常':'停用')}</span></div>
     <div class="meta">角色：${esc(u.role)} · 绑定：${esc(u.boundRouteId||'未绑定')} ${u.routeDuty?'· '+esc(u.routeDuty):''}</div>
     <div class="actions">
@@ -88,7 +89,7 @@ function renderUsers(){
   </article>`).join('')||'<div class="meta">暂无用户</div>';
 }
 function renderRoutes(){
-  $('#routeList').innerHTML=routes.map(r=>`<article class="route-card"><div class="route-main"><div><div class="name">${esc(r.name||r.id)}</div><div class="meta">驾驶员：${esc(findUser(r.driverUserId)?.name||'未绑定')} · 配送员：${esc(findUser(r.deliveryUserId)?.name||'未绑定')}</div></div><span class="badge">${esc(r.status||'active')}</span></div></article>`).join('')||'<div class="meta">暂无已登记线路</div>';
+  $('#routeList').innerHTML=routes.map(r=>`<article class="route-card"><div class="route-main"><div><div class="name">${esc(r.name||r.id)}</div><div class="meta">驾驶员：${esc(findUser(r.driverUserId)?.name||'未绑定')} · 配送员：${esc(findUser(r.deliveryUserId)?.name||'未绑定')}</div></div> </div></article>`).join('')||'<div class="meta">暂无已登记线路</div>';
 }
 function fillSelects(){
   const options='<option value="">未绑定</option>'+users.filter(u=>u.status==='active'&&u.role!=='system_admin').map(u=>`<option value="${escAttr(u.id)}">${esc(u.name||u.username)} · ${esc(u.boundRouteId||'未绑定')}</option>`).join('');
