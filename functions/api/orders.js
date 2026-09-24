@@ -263,50 +263,6 @@ async function readOrder(request, env, session) {
   return json({ success: true, today: responseToday, history: dailyRecords, todayWaybillCount, todaySummary });
 }
 
-async function loadBaseData(env, route, userId) {
-  const raw = await redisGet(env, routeBaseKey(route)), stores = Array.isArray(raw?.stores) ? raw.stores : [];
-  return stores.map((store, index) => ({ ...store, routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1, nameKey: normalizeStoreName(store?.name || store?.storeName || store?.shopName || store?.['门店名称']), businessCode: extractBusinessCode(store?.name || store?.storeName || store?.shopName || store?.['门店名称']) })).filter(store => store.nameKey);
-}
-
-function dedupeOrders(orders, base) {
-  // 门店唯一身份以 storeId 为最高优先级；baseCode/名称仅作为兼容旧数据的回退。
-  const baseByStoreId = new Map(base.filter(store => store.storeId).map((store, index) => [store.storeId, 'b:' + index]));
-  const baseByName = new Map(base.map((store, index) => [store.nameKey, 'b:' + index]));
-  const baseByBusinessCode = new Map(base.filter(store => store.businessCode).map((store, index) => [store.businessCode, 'b:' + index]));
-  const seen = new Set(), result = [];
-  for (const order of orders) {
-    const nameKey = normalizeStoreName(order.name), businessCode = order.businessCode || extractBusinessCode(order.name);
-    const storeId = String(order.storeId || '').trim();
-    if (!nameKey && !storeId) continue;
-    const identity = (storeId && baseByStoreId.get(storeId))
-      || baseByName.get(nameKey)
-      || (businessCode ? baseByBusinessCode.get(businessCode) : '')
-      || (storeId ? 'id:' + storeId : 'n:' + nameKey);
-    if (seen.has(identity)) continue;
-    seen.add(identity); result.push(order);
-  }
-  return result;
-}
-
-function sortByRouteBase(orders, base) {
-  if (!base.length) return orders.map((item, index) => ({ ...item, code: String(index + 1).padStart(2, '0') }));
-  const orderMap = new Map(base.map((store, index) => [store.nameKey, Number(store.routeOrder) || index + 1]));
-  const storeIdMap = new Map(base.filter(store => String(store?.storeId || '').trim()).map((store, index) => [String(store.storeId).trim(), Number(store.routeOrder) || index + 1]));
-  const codeMap = new Map(base.filter(store => store.businessCode).map((store, index) => [store.businessCode, Number(store.routeOrder) || index + 1]));
-  const matched = [], news = [];
-  for (const order of orders) {
-    const routeOrder = storeIdMap.get(String(order.storeId || '').trim())
-      ?? orderMap.get(normalizeStoreName(order.name))
-      ?? codeMap.get(order.businessCode || extractBusinessCode(order.name));
-    if (routeOrder != null && !order.isNew) matched.push({ ...order, routeOrder, matched: true, isNew: false });
-    else news.push({ ...order, routeOrder: null, matched: false, isNew: true });
-  }
-  matched.sort((a, b) => a.routeOrder - b.routeOrder);
-  matched.forEach((item, index) => { item.code = String(index + 1).padStart(2, '0'); });
-  news.forEach((item, index) => { item.code = `N${String(index + 1).padStart(2, '0')}`; });
-  return matched.concat(news).map(({ routeOrder, ...item }) => item);
-}
-
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 
 async function acquireLock(env, key, token, seconds) {
@@ -324,12 +280,9 @@ async function redisGet(env, key) {
   try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
 }
 async function atomicSaveOrder(env, { todayKey, todayData, latestKey, latestData, historyKey, historyData }) {
-  const keys = [todayKey, latestKey];
-  const values = [JSON.stringify(todayData), JSON.stringify(latestData)];
-  if (historyKey && Array.isArray(historyData)) {
-    keys.push(historyKey);
-    values.push(JSON.stringify(historyData));
-  }
+  if (!historyKey || !Array.isArray(historyData)) throw new Error('订单历史数据不完整，拒绝保存');
+  const keys = [todayKey, latestKey, historyKey];
+  const values = [JSON.stringify(todayData), JSON.stringify(latestData), JSON.stringify(historyData)];
   const script = [
     'for i=1,#KEYS do',
     '  redis.call("SET", KEYS[i], ARGV[i])',
