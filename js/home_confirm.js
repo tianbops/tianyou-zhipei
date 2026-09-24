@@ -113,7 +113,60 @@
   function currentUserId(){const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};return String(user.id||user.username||user.account||'').trim();}
   function assertParseContext(){const route=routeContext();const userId=currentUserId();const lockedRoute=String(metaState.route||'').trim();const lockedUserId=String(metaState.userId||'').trim();if(!lockedRoute)throw Error('解析上下文缺少线路，请重新处理运单');if(route!==lockedRoute)throw Error(`调度线路已从 ${lockedRoute} 切换为 ${route||'未选择'}，当前结果已失效，请重新处理运单`);if(lockedUserId&&userId&&lockedUserId!==userId)throw Error('登录账号已发生变化，当前解析结果已失效，请重新处理运单');if(!metaState.parseContextId)throw Error('当前解析批次已失效，请重新处理运单');}
   async function reparseEditedText(){const text=String($('manualOrderInput')?.value||'').trim();if(!text)throw Error('请先输入或识别运单文字');const route=routeContext();if(!route)throw Error('未指定配送线路');if(metaState.route&&route!==metaState.route)throw Error(`调度线路已从 ${metaState.route} 切换为 ${route}，请重新处理运单当前运单`);if(typeof window.parseManualInput==='function'){const stores=await window.parseManualInput();if(!Array.isArray(stores)||!stores.length)throw Error('没有识别到有效门店');return{route:metaState.route||route,date:metaState.date||'',vehicle:metaState.vehicle||'',totalWeight:metaState.totalWeight||'',baseDatabaseAvailable:metaState.baseDatabaseAvailable,stores:parsedState};}const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({text,route})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)throw Error(data.error||`重新解析失败（${response.status}）`);syncParsed(data.data||{});return data.data||{};}
-  async function saveConfirmedLearning(){const route=routeContext();if(!route||metaState.baseDatabaseAvailable===false)return;const items=[];for(const item of parsedState){if(!item||item.isNew===true||item.matched!==true||item.needsReview===true)continue;const baseName=String(item.baseName||item.name||'').trim();const rawNames=Array.isArray(item.rawNames)?item.rawNames.map(v=>String(v||'').trim()).filter(Boolean):[];const fallback=String(item.rawName||'').trim();if(fallback&&!rawNames.includes(fallback))rawNames.push(fallback);for(const rawName of rawNames){if(!rawName||rawName===baseName)continue;items.push({rawName,baseName,baseCode:String(item.baseCode||'').trim()});}}if(!items.length)return;const unique=new Map();for(const item of items){const key=`${item.rawName}\u0000${item.baseCode}\u0000${item.baseName}`;unique.set(key,item);}try{const response=await fetch('/api/store-learning',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({items:[...unique.values()]})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)console.warn('门店学习库保存失败',data.error||response.status);}catch(error){console.warn('门店学习库请求失败',error);}}
+  async function saveConfirmedLearning(){
+    const route=routeContext();
+    if(!route||metaState.baseDatabaseAvailable===false)return {success:false,skipped:true};
+    const items=[];
+    const newStores=[];
+    for(const item of parsedState){
+      if(!item)continue;
+      if(item.isNew===true){
+        const name=String(item.name||item.baseName||'').trim();
+        if(name)newStores.push({
+          name,
+          storeId:String(item.storeId||'').trim(),
+          baseCode:String(item.baseCode||'').trim(),
+          nav:String(item.nav||'').trim(),
+          note:String(item.note||'').trim()
+        });
+        continue;
+      }
+      if(item.matched!==true||item.needsReview===true)continue;
+      const baseName=String(item.baseName||item.name||'').trim();
+      const rawNames=Array.isArray(item.rawNames)?item.rawNames.map(v=>String(v||'').trim()).filter(Boolean):[];
+      const fallback=String(item.rawName||'').trim();
+      if(fallback&&!rawNames.includes(fallback))rawNames.push(fallback);
+      for(const rawName of rawNames){
+        if(!rawName||rawName===baseName)continue;
+        items.push({rawName,baseName,baseCode:String(item.baseCode||'').trim()});
+      }
+    }
+    const unique=new Map();
+    for(const item of items){
+      const key=`${item.rawName}\u0000${item.baseCode}\u0000${item.baseName}`;
+      unique.set(key,item);
+    }
+    const uniqueNewStores=[...new Map(newStores.map(item=>[String(item.name).trim(),item])).values()];
+    if(!unique.size&&!uniqueNewStores.length)return {success:true,skipped:true};
+    try{
+      const response=await fetch('/api/store-learning',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        cache:'no-store',
+        body:JSON.stringify({route,items:[...unique.values()],newStores:uniqueNewStores})
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||!data.success){
+        console.warn('门店学习库保存失败',data.error||response.status);
+        return {success:false,error:data.error||`HTTP ${response.status}`};
+      }
+      return data;
+    }catch(error){
+      console.warn('门店学习库请求失败',error);
+      return {success:false,error:error?.message||'学习库请求失败'};
+    }
+  }
   function createClientRequestId(){return `confirm-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;}
   let confirmAbortController=null;
   let confirmInFlight=false;
@@ -203,7 +256,10 @@
 
       const isDuplicate=data.duplicate===true;
       if(!isDuplicate){
-        saveConfirmedLearning().catch(error=>console.warn('门店学习库更新失败，不影响确认录入',error));
+        const learningResult=await saveConfirmedLearning();
+        if(learningResult&&!learningResult.success&&!learningResult.skipped){
+          console.warn('门店学习库更新失败，不影响确认录入',learningResult.error||'unknown');
+        }
       }
 
       const savedDate=data.data?.date||date;
