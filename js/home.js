@@ -77,7 +77,7 @@ async function parseOrderText(text,taskId=0){
 }
 window.cancelParse=async()=>{invalidateUploadTask();if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')await cancelOCR().catch(()=>{});};
 
-function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'plan';const button=$('primaryActionBtn');if(!button)return;button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'规划路线';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false}
+function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'plan';const button=$('primaryActionBtn');if(!button)return;const visible=primaryActionMode!=='plan';button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false;button.hidden=!visible;button.setAttribute('aria-hidden',visible?'false':'true')}
 function ensureConfirmModule(){
   if(typeof window.submitManualOrder==='function')return Promise.resolve(true);
   return new Promise(resolve=>{
