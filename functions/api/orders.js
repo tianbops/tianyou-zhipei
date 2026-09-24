@@ -283,24 +283,39 @@ async function redisGet(env, key) {
   if (data.result === null || data.result === undefined || data.result === '') return null;
   try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; }
 }
-async function atomicSaveOrder(env, { todayKey, todayData, latestKey, latestData, historyKey, historyData }) {
+async function atomicSaveOrder(env, { lockKey, lockToken, todayKey, todayData, latestKey, latestData, historyKey, historyData, expectedToday, expectedHistory }) {
+  if (!lockKey || !lockToken) throw new Error('订单保存锁信息缺失，拒绝写入');
   if (!historyKey || !Array.isArray(historyData)) throw new Error('订单历史数据不完整，拒绝保存');
-  const keys = [todayKey, latestKey, historyKey];
-  const values = [JSON.stringify(todayData), JSON.stringify(latestData), JSON.stringify(historyData)];
+  const expectedTodayJson = expectedToday === null || expectedToday === undefined ? '' : JSON.stringify(expectedToday);
+  const expectedHistoryJson = expectedHistory === null || expectedHistory === undefined ? '' : JSON.stringify(expectedHistory);
   const script = [
-    'for i=1,#KEYS do',
-    '  redis.call("SET", KEYS[i], ARGV[i])',
-    'end',
+    'local lock = redis.call("GET", KEYS[1])',
+    'if lock ~= ARGV[1] then return "LOCK_LOST" end',
+    'local currentToday = redis.call("GET", KEYS[2])',
+    'if currentToday ~= ARGV[2] then return "CONFLICT_TODAY" end',
+    'local currentHistory = redis.call("GET", KEYS[3])',
+    'if currentHistory ~= ARGV[3] then return "CONFLICT_HISTORY" end',
+    'redis.call("SET", KEYS[2], ARGV[4])',
+    'redis.call("SET", KEYS[3], ARGV[5])',
+    'redis.call("SET", KEYS[4], ARGV[6])',
     'return "OK"'
-  ].join('\n');
+  ].join('\\n');
   const response = await redisFetch(env, '/eval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify([script, keys.length, ...keys, ...values])
+    body: JSON.stringify([
+      script, '4',
+      lockKey, todayKey, historyKey, latestKey,
+      lockToken, expectedTodayJson, expectedHistoryJson,
+      JSON.stringify(todayData), JSON.stringify(historyData), JSON.stringify(latestData)
+    ])
   });
   if (!response.ok) throw new Error(`订单原子保存失败（HTTP ${response.status}）`);
   const data = await response.json().catch(() => ({}));
-  if (data.result !== 'OK') throw new Error('订单原子保存未确认');
+  const result = String(data.result || '');
+  if (result === 'LOCK_LOST') throw new Error('订单保存锁已失效，请刷新后重试');
+  if (result === 'CONFLICT_TODAY' || result === 'CONFLICT_HISTORY') throw new Error('订单数据刚刚发生变化，请刷新后重试');
+  if (result !== 'OK') throw new Error('订单原子保存未确认');
 }
 
 async function redisSet(env, key, value) {
