@@ -365,7 +365,7 @@ function matchTodayStores(recognized, baseMatchIndex, learning) {
       matched.push(item); canonicalByBaseIndex.set(hit.item.index, item);
       matchStats[hit.mode] = Number(matchStats[hit.mode] || 0) + 1;
     } else if (hit.type === 'review') {
-      review.push({ code: '', name: raw, nav: '', note: '', isNew: false, matched: false, needsReview: true, matchType: 'review', candidate: hit.item.name, candidates: hit.alternatives.map(item => item.name), candidateCode: hit.item.code, matchScore: Number(hit.score.toFixed(3)), rawName: raw, rawNames: [raw] });
+      review.push({ code: '', name: raw, nav: '', note: '', isNew: false, matched: false, needsReview: true, matchType: 'review', candidate: hit.item.name, candidates: hit.alternatives.map(item => item.name), candidateCode: hit.item.code, candidateStoreId: String(hit.item.storeId || hit.item.baseCode || hit.item.code || '').trim(), candidateCodes: hit.alternatives.map(item => String(item.code || '').trim()), candidateStoreIds: hit.alternatives.map(item => String(item.storeId || item.baseCode || item.code || '').trim()), matchScore: Number(hit.score.toFixed(3)), rawName: raw, rawNames: [raw] });
       matchStats.review++;
     } else {
       news.push({ code: '', name: raw, nav: '', note: '', isNew: true, matched: false, matchType: 'new', matchScore: Number(hit.score || 0), rawName: raw, rawNames: [raw] });
