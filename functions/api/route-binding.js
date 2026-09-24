@@ -79,8 +79,12 @@ async function createRequest(env, user, request) {
       name: user.name || user.username, route, duty, status: 'pending',
       createdAt: now, updatedAt: now
     };
-    await redisSet(env, REQUEST_PREFIX + encodeKey(id), record);
-    await redisSet(env, USER_REQUEST_PREFIX + encodeKey(user.id), id);
+    const saved = await atomicCreateRequest(env, {
+      requestKey: REQUEST_PREFIX + encodeKey(id),
+      userRequestKey: USER_REQUEST_PREFIX + encodeKey(user.id),
+      record
+    });
+    if (!saved) return json({ success: false, error: '线路申请保存失败，请稍后重试' }, 503);
     return json({ success: true, request: record }, 201);
   } finally {
     await releaseRequestLock(env, requestLockKey, requestLockToken);
@@ -100,8 +104,12 @@ async function unbindSelf(env, user) {
     try {
       const pending = await findPendingForUser(env, user.id);
       if (pending) {
-        await redisCommand(env, ['DEL', REQUEST_PREFIX + encodeKey(pending.id)]);
-        await redisCommand(env, ['DEL', USER_REQUEST_PREFIX + encodeKey(user.id)]);
+        const cancelled = await atomicCancelRequest(env, {
+          requestKey: REQUEST_PREFIX + encodeKey(pending.id),
+          userRequestKey: USER_REQUEST_PREFIX + encodeKey(user.id),
+          requestId: pending.id
+        });
+        if (!cancelled) return json({ success: false, error: '线路申请状态已发生变化，请刷新后重试' }, 409);
         return json({ success: true, cancelled: true, requestId: pending.id, route: pending.route, message: '线路申请已取消' });
       }
     } finally {
@@ -166,6 +174,18 @@ async function findPendingForUser(env, userId) {
   if (!record) return null;
   if (record.status !== 'pending') return null;
   return record;
+}
+
+async function atomicCreateRequest(env, { requestKey, userRequestKey, record }) {
+  const script = "if redis.call('EXISTS', KEYS[1]) == 1 then return 'EXISTS' end if redis.call('EXISTS', KEYS[2]) == 1 then return 'USER_PENDING' end redis.call('SET', KEYS[1], ARGV[1]) redis.call('SET', KEYS[2], ARGV[2]) return 'OK'";
+  const result = await redisCommand(env, ['EVAL', script, '2', requestKey, userRequestKey, JSON.stringify(record), record.id]).catch(() => null);
+  return result === 'OK';
+}
+
+async function atomicCancelRequest(env, { requestKey, userRequestKey, requestId }) {
+  const script = "local current = redis.call('GET', KEYS[1]) if not current then return 'MISSING' end local ok, obj = pcall(cjson.decode, current) if not ok or tostring(obj.id or '') ~= ARGV[1] or tostring(obj.status or '') ~= 'pending' then return 'CHANGED' end redis.call('DEL', KEYS[1]) if redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end return 'OK'";
+  const result = await redisCommand(env, ['EVAL', script, '2', requestKey, userRequestKey, requestId]).catch(() => null);
+  return result === 'OK';
 }
 
 async function acquireReviewLock(env, key, value) {
