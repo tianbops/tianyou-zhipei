@@ -22,7 +22,7 @@ export async function onRequest({ request, env }) {
         return json({ success: false, error: '只有绑定该线路的用户可以删除历史记录' }, 403);
       }
       if (!date) return json({ success: false, error: 'Missing date parameter' }, 400);
-      return await deleteHistoryRecord(env, userId, route, date, String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim());
+      return await deleteHistoryRecord(env, route, date, String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim());
     }
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
@@ -258,7 +258,7 @@ async function listAllHistory(env, userId, route, session) {
   return json(entries);
 }
 
-async function deleteHistoryRecord(env, userId, route, date, batchId) {
+async function deleteHistoryRecord(env, route, date, batchId) {
   const key = routeOrderKey(route, `history:${date}`);
   const lockKey = routeOrderKey(route, `lock:${date}`);
   const lockToken = createLockToken();
