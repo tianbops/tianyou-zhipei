@@ -7,6 +7,8 @@ const SCAN_COUNT = 200;
 const MAX_SCAN_ROUNDS = 1000;
 const DELETE_BATCH = 50;
 
+const PRIMARY_ADMIN_KEY = 'system:admin:primary';
+
 const APP_PATTERNS = Object.freeze([
   'user:*',
   'route:*',
@@ -34,21 +36,45 @@ export async function onRequest({ request, env }) {
   }
 
   try {
+    const primaryAdmin = await findPrimaryAdmin(env);
+    if (!primaryAdmin) return json({ success: false, error: '未找到可保留的原始系统管理员；为安全起见未执行清空' }, 409);
+
     const keys = await scanAppKeys(env);
+    const preserveKeys = new Set([
+      `user:${encodeKey(primaryAdmin.id)}`,
+      `user:username:${encodeURIComponent(String(primaryAdmin.username || '').trim().toLowerCase())}`,
+      PRIMARY_ADMIN_KEY
+    ]);
+    const deleteKeys = keys.filter(key => !preserveKeys.has(key));
     let deleted = 0;
 
-    for (let i = 0; i < keys.length; i += DELETE_BATCH) {
-      const batch = keys.slice(i, i + DELETE_BATCH);
+    for (let i = 0; i < deleteKeys.length; i += DELETE_BATCH) {
+      const batch = deleteKeys.slice(i, i + DELETE_BATCH);
       const result = await redisCommand(env, ['DEL', ...batch]);
       deleted += Number(result || 0);
     }
+
+    const preserved = {
+      ...primaryAdmin,
+      role: 'system_admin',
+      adminLevel: 'primary',
+      boundRouteId: '',
+      route: '',
+      vehicle: '',
+      sessionVersion: Number(primaryAdmin.sessionVersion || 1) + 1,
+      updatedAt: new Date().toISOString()
+    };
+    await redisCommand(env, ['SET', `user:${encodeKey(preserved.id)}`, JSON.stringify(preserved)]);
+    await redisCommand(env, ['SET', `user:username:${encodeURIComponent(String(preserved.username || '').trim().toLowerCase())}`, preserved.id]);
+    await redisCommand(env, ['SET', PRIMARY_ADMIN_KEY, JSON.stringify({ userId: preserved.id, username: preserved.username, createdAt: primaryAdmin.createdAt || '', markedAt: new Date().toISOString() })]);
 
     return json({
       success: true,
       scanned: keys.length,
       deleted,
+      preservedAdmin: { id: preserved.id, username: preserved.username, name: preserved.name, adminLevel: preserved.adminLevel },
       namespaces: APP_PATTERNS,
-      message: '智配One业务数据已清空；Cloudflare环境变量及代码未修改。请重新建立管理员、用户、路线和基准库。'
+      message: '智配One业务数据已清空；原始主系统管理员账号已保留，其余业务账号、线路、基准库、运单、历史、学习数据及管理日志已清除。'
     });
   } catch (error) {
     console.error('admin data reset error', error);
@@ -82,6 +108,51 @@ async function scanAppKeys(env) {
   }
 
   return [...found];
+}
+
+async function findPrimaryAdmin(env) {
+  const marker = await redisGetSafe(env, PRIMARY_ADMIN_KEY);
+  if (marker?.userId) {
+    const markedUser = await redisGetSafe(env, `user:${encodeKey(marker.userId)}`);
+    if (markedUser?.id && markedUser?.username) return markedUser;
+  }
+
+  const bootstrap = await redisGetSafe(env, 'system:admin:bootstrap:used');
+  if (bootstrap?.userId) {
+    const bootstrapUser = await redisGetSafe(env, `user:${encodeKey(bootstrap.userId)}`);
+    if (bootstrapUser?.id && bootstrapUser?.username) return bootstrapUser;
+  }
+
+  const users = await scanUsersForReset(env);
+  const admins = users.filter(user => String(user?.role || '').trim().toLowerCase() === 'system_admin');
+  admins.sort((a, b) => String(a?.createdAt || '').localeCompare(String(b?.createdAt || '')));
+  return admins[0] || null;
+}
+
+async function redisGetSafe(env, key) {
+  const result = await redisCommand(env, ['GET', key]);
+  if (result === null || result === undefined || result === '') return null;
+  try { return typeof result === 'string' ? JSON.parse(result) : result; } catch { return null; }
+}
+
+async function scanUsersForReset(env) {
+  const users = [];
+  let cursor = '0';
+  do {
+    const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', 'user:*', 'COUNT', String(SCAN_COUNT)]);
+    cursor = String(result?.[0] ?? '0');
+    const batch = Array.isArray(result?.[1]) ? result[1] : [];
+    for (const key of batch) {
+      if (key.includes(':route:') || key.includes(':username:')) continue;
+      const value = await redisGetSafe(env, key);
+      if (value && typeof value === 'object' && value.id && value.username) users.push(value);
+    }
+  } while (cursor !== '0');
+  return users;
+}
+
+function encodeKey(value) {
+  return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_');
 }
 
 function isAppKey(key) {
