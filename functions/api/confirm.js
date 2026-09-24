@@ -209,6 +209,14 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
     let changed = false;
     let learnedCount = 0;
 
+    // 兼容历史基准库：首次经过确认链路时，为仍缺失 storeId 的旧门店补齐永久身份。
+    for (const store of stores) {
+      if (!String(store?.storeId || '').trim()) {
+        store.storeId = `store-${crypto.randomUUID()}`;
+        changed = true;
+      }
+    }
+
     for (const order of orders) {
       if (!order?.isNew || !String(order?.name || '').trim()) continue;
       const name = String(order.name).trim();
