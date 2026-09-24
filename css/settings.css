@@ -198,3 +198,9 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 }
 
 
+
+
+/* UI 2.4 · 线路绑定按钮状态严格收口 2026-09-24 */
+#routeBindingModal.state-available #unbindRouteButton{display:none!important}
+#routeBindingModal.state-pending #unbindRouteButton,
+#routeBindingModal.state-bound #unbindRouteButton{display:flex!important}
