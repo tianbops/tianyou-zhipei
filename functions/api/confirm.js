@@ -174,7 +174,7 @@ export async function onRequest({ request, env }) {
       }
       if (idempotencyKey) await saveIdempotency(env, idempotencyKey, orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
 
-      // 门店学习由前端 /api/store-learning 独立执行，不能阻断核心入库链路。
+      // 新增门店的基准库学习已在本次确认事务前完成；OCR别名学习仍由确认后的独立学习接口处理，失败不阻断核心入库。
       return json({ success: true, data: saved });
         } finally {
       // 锁只用于并发保护；释放失败不应让已经成功写入的订单变成“确认失败”。
