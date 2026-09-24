@@ -96,8 +96,8 @@ window.Auth = {
     return this.serverUser;
   },
 
-  async getCurrentServerUser() {
-    if (this.serverUser) return this.serverUser;
+  async getCurrentServerUser(force = false) {
+    if (this.serverUser && !force) return this.serverUser;
     const response = await fetch('/api/me', { cache: 'no-store', credentials: 'same-origin' });
     if (!response.ok) {
       this.serverUser = null;
@@ -108,18 +108,18 @@ window.Auth = {
     return this.serverUser;
   },
 
-  async checkAuth() {
+  async checkAuth(force = false) {
     const page = location.pathname.split('/').pop() || 'index.html';
     if (['index.html', 'login.html'].includes(page)) {
-      const user = await this.getCurrentServerUser().catch(() => null);
+      const user = await this.getCurrentServerUser(true).catch(() => null);
       if (user) {
-        const target = user.adminLevel === 'primary' ? 'admin.html' : 'home.html';
+        const target = user.role === 'system_admin' && user.adminLevel === 'primary' ? 'admin.html' : 'home.html';
         if (location.pathname.endsWith('/index.html') || location.pathname.endsWith('/')) location.replace(target);
       }
       return !user;
     }
     if (this.authPromise) return this.authPromise;
-    this.authPromise = this.getCurrentServerUser().then(user => {
+    this.authPromise = this.getCurrentServerUser(force).then(user => {
       if (!user) {
         location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
         return false;
@@ -185,13 +185,13 @@ window.Auth = {
  * - 不依赖页面自身是否主动调用 checkAuth()
  */
 (function setupGlobalAuthGuard() {
-  const guard = () => window.Auth?.checkAuth?.();
+  const guard = (force = false) => window.Auth?.checkAuth?.(force);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', guard, { once: true });
   } else {
     guard();
   }
-  window.addEventListener('pageshow', guard);
+  window.addEventListener('pageshow', () => guard(true));
 })();
 
 // 全站统一返回。这里使用简单的 URL 解析，不使用容易造成语法错误的复杂正则。
