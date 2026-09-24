@@ -393,7 +393,10 @@ function canonicalizeOrders(input, base) {
     const parserNew = raw.isNew === true || raw.newStore === true;
     const hit = byStoreId.get(rawStoreId) || byName.get(key(name)) || byCode.get(String(raw.baseCode || raw.code || ''));
     if (parserMatched) return { ...raw, storeId: hit?.storeId || rawStoreId, baseCode: hit?.baseCode || String(raw.baseCode || '').trim(), name: hit?.name || name, code: hit?.code || raw.code || '', nav: hit?.nav || raw.nav || '', note: hit?.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: raw.matchType || 'confirmed', matchScore: Number(raw.matchScore) || 1, _baseIndex: hit?.index };
-    if (parserNew) return { ...raw, storeId: rawStoreId, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
+    if (parserNew) {
+      if (hit) return { ...raw, storeId: hit.storeId || rawStoreId, baseCode: hit.baseCode || String(raw.baseCode || '').trim(), name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
+      return { ...raw, storeId: rawStoreId, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
+    }
     if (hit) return { ...raw, storeId: hit.storeId || rawStoreId, baseCode: hit.baseCode || String(raw.baseCode || '').trim(), name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
     return { ...raw, storeId: rawStoreId, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
   }).filter(item => item.name);
