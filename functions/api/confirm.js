@@ -36,7 +36,16 @@ export async function onRequest({ request, env }) {
     let base = [];
     stage = 'load-base';
     try {
-      base = await loadRouteBase(env, route, userId, session.boundRouteId);
+      // loadRouteBase 返回的是完整基准对象 { stores: [...] }，业务层后续匹配/排序统一只使用 stores 数组。
+      const baseData = await loadRouteBase(env, route, {
+        allowLegacyUserId: session.boundRouteId || userId
+      });
+      if (baseData && Array.isArray(baseData.stores)) {
+        base = baseData.stores;
+      } else {
+        noBase = true;
+        stage = 'prepare-without-base';
+      }
     } catch (error) {
       if (/未找到.*线路基准数据库/.test(String(error?.message || ''))) {
         noBase = true;
