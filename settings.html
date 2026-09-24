@@ -161,7 +161,10 @@ async function openRouteBinding(){
   try{
     const status=await fetch('/api/route-binding',{cache:'no-store',credentials:'same-origin'}).then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'线路绑定状态读取失败');return d});
     const summary=$('routeBindingSummary');
+    const modal=$('routeBindingModal');
+    modal.classList.remove('state-bound','state-pending','state-available');
     if(status.boundRoute){
+      modal.classList.add('state-bound');
       summary.textContent='已绑定 '+status.boundRoute+' · 需先解除绑定';
       $('bindingRouteField').style.display='none'; $('bindingDutyField').style.display='none';
       $('routeBindingNote').textContent='当前已绑定 '+status.boundRoute+'。如需绑定其他线路，请先解除当前绑定，再重新提交申请。';
@@ -174,6 +177,7 @@ async function openRouteBinding(){
       $('bindingRoute').innerHTML=active.map(x=>'<option value="'+escAttr(x.id)+'">'+esc(x.name||x.id)+'</option>').join('');
       if(!active.length){$('routeBindingMessage').textContent='当前暂无可申请的其他线路';$('routeBindingButton').disabled=true;}
     }else if(status.pending){
+      modal.classList.add('state-pending');
       $('unbindRouteButton').style.display='';
       $('unbindRouteButton').textContent='取消当前申请';
       $('unbindRouteButton').onclick=unbindRoute;
@@ -182,6 +186,7 @@ async function openRouteBinding(){
       $('routeBindingNote').textContent='已提交 '+status.pending.route+'（'+(status.pending.duty==='driver'?'驾驶员':'配送员')+'）申请，请等待管理员审核。';
       $('routeBindingButton').textContent='关闭'; $('routeBindingButton').onclick=()=>closeModal('routeBindingModal');
     }else{
+      modal.classList.add('state-available');
       $('unbindRouteButton').style.display='none';
       summary.textContent='可申请绑定线路'; $('bindingRouteField').style.display=''; $('bindingDutyField').style.display='';
       $('routeBindingNote').textContent='未绑定用户可以申请已有线路；管理员通过后才会正式绑定。';
