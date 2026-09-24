@@ -70,6 +70,7 @@ async function createToken(env, user, { client, ttl }) {
     username: String(user.username || ''),
     boundRouteId: normalizeRoute(user.boundRouteId),
     role: normalizeRole(user.role),
+    adminLevel: String(user.adminLevel || ''),
     sessionVersion: Number(user.sessionVersion || 1),
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + ttl
