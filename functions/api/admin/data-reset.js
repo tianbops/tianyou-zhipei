@@ -40,6 +40,7 @@ export async function onRequest({ request, env }) {
     if (!primaryAdmin) return json({ success: false, error: '未找到可保留的原始系统管理员；为安全起见未执行清空' }, 409);
 
     const keys = await scanAppKeys(env);
+    // 数据重置的账号规则：仅保留主系统管理员，其余用户账号、登录索引及微信身份映射一并清除。
     const preserveKeys = new Set([
       `user:${encodeKey(primaryAdmin.id)}`,
       `user:username:${encodeURIComponent(String(primaryAdmin.username || '').trim().toLowerCase())}`,
@@ -61,6 +62,7 @@ export async function onRequest({ request, env }) {
       boundRouteId: '',
       route: '',
       vehicle: '',
+      routeDuty: '',
       sessionVersion: Number(primaryAdmin.sessionVersion || 1) + 1,
       updatedAt: new Date().toISOString()
     };
@@ -74,7 +76,7 @@ export async function onRequest({ request, env }) {
       deleted,
       preservedAdmin: { id: preserved.id, username: preserved.username, name: preserved.name, adminLevel: preserved.adminLevel },
       namespaces: APP_PATTERNS,
-      message: '智配One业务数据已清空；原始主系统管理员账号已保留，其余业务账号、线路、基准库、运单、历史、学习数据及管理日志已清除。'
+      message: '智配One数据重置完成；仅保留原始主系统管理员账号，其余用户账号、线路、基准库、运单、历史、学习数据、绑定关系及管理日志已清除。'
     });
   } catch (error) {
     console.error('admin data reset error', error);
