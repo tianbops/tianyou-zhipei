@@ -138,6 +138,7 @@ export async function onRequest({ request, env }) {
 
     const current = await getRoute(env, route);
     if (!current) return json({ success: false, error: '线路不存在，请先创建线路后再绑定人员', code: 'ROUTE_NOT_FOUND' }, 404);
+    if (current.status === 'disabled') return json({ success: false, error: '该线路已停用，不能配置绑定人员', code: 'ROUTE_DISABLED' }, 409);
     const now = new Date().toISOString();
 
     const currentDriver = String(current.driverUserId || '');
@@ -188,7 +189,7 @@ export async function onRequest({ request, env }) {
       driverUserId,
       deliveryUserId,
       boundUserIds: [...new Set([driverUserId, deliveryUserId].filter(Boolean))],
-      status: current.status === 'disabled' ? 'disabled' : 'active',
+      status: 'active',
       createdAt: current.createdAt || now,
       updatedAt: now
     };
