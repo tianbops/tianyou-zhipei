@@ -106,7 +106,7 @@
     ordered.forEach((store,index)=>{const mark=store?.isNew?'⚠️ 新增：':store?.needsReview?'⚠️ 待定：':'';lines.push(`${String(index+1).padStart(2,'0')}. ${mark}${String(store?.name||'').trim()}`);});
     input.value=lines.join('\n');
   }
-  function syncParsed(data){const d=data||{};parsedState=Array.isArray(d.stores)?d.stores.map(item=>({...item})):[];const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};const bridge=window.__zspParseContext&&typeof window.__zspParseContext==='object'?window.__zspParseContext:{};const bridgeStores=Array.isArray(bridge.stores)?bridge.stores:[];const incomingStores=Array.isArray(d.stores)&&d.stores.length?d.stores:bridgeStores;parsedState=incomingStores.map(item=>({...item}));const userId=String(d.userId||bridge.userId||user.id||user.username||user.account||'').trim();const route=String(d.route||bridge.route||routeContext()||'').trim();const parseContextId=String(d.parseContextId||bridge.parseContextId||'').trim();metaState={parseContextId,userId,route,date:d.date||bridge.date||'',vehicle:d.vehicle||bridge.vehicle||'',totalWeight:String(d.totalWeight||bridge.totalWeight||''),rawOrderCount:Number(d.rawOrderCount)||0,recognizedCount:Number(d.recognizedCount)||parsedState.length,baseDatabaseAvailable:d.baseDatabaseAvailable!==false,source:d.source||'web-confirm'};renderReview(parsedState);}
+  function syncParsed(data){const d=data||{};const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};const bridge=window.__zspParseContext&&typeof window.__zspParseContext==='object'?window.__zspParseContext:{};const bridgeStores=Array.isArray(bridge.stores)?bridge.stores:[];const incomingStores=Array.isArray(d.stores)&&d.stores.length?d.stores:bridgeStores;parsedState=incomingStores.map(item=>({...item}));const userId=String(d.userId||bridge.userId||user.id||user.username||user.account||'').trim();const route=String(d.route||bridge.route||routeContext()||'').trim();const parseContextId=String(d.parseContextId||bridge.parseContextId||'').trim();metaState={parseContextId,userId,route,date:d.date||bridge.date||'',vehicle:d.vehicle||bridge.vehicle||'',totalWeight:String(d.totalWeight||bridge.totalWeight||''),rawOrderCount:Number(d.rawOrderCount)||0,recognizedCount:Number(d.recognizedCount)||parsedState.length,baseDatabaseAvailable:d.baseDatabaseAvailable!==false,source:d.source||'web-confirm'};renderReview(parsedState);}
   function weightFromText(text){const source=String(text||'').replace(/\s+/g,' ');const match=source.match(/总\s*重\s*量\s*[:：]?\s*([\d]+(?:\.[\d]+)?)\s*(kg|千克|公斤|吨|t)?/i)||source.match(/(?:总重|重量)\s*[:：]?\s*([\d]+(?:\.[\d]+)?)\s*(kg|千克|公斤|吨|t)?/i);return match?normalizeWeight(`${match[1]}${match[2]||''}`):'';}
   function normalizeWeight(value){if(value===null||value===undefined||value==='')return '';const text=String(value).trim().replace(/,/g,'');const match=text.match(/[\d]+(?:\.\d+)?/);if(!match)return '';const n=Number(match[0]);if(!Number.isFinite(n)||n<=0)return '';const hasKg=/kg|千克|公斤/i.test(text);const hasTon=/吨|\bt\b/i.test(text);const tons=hasTon?n:hasKg?n/1000:n>=1000?n/1000:n;return `${Math.round((tons+Number.EPSILON)*1000000)/1000000}t`;}
   window.onOrderParsed=syncParsed;
@@ -173,8 +173,6 @@
   let confirmStartedAt=0;
   async function confirm(){
     const input=$('manualOrderInput');
-    const taskId=0;
-    const taskActive=()=>true;
     const button=$('primaryActionBtn');
     if(confirmInFlight)return;
     confirmInFlight=true;
@@ -211,8 +209,6 @@
         window.renderUnifiedStatus?.('error',100,'未指定配送线路');
         return;
       }
-      if(taskId&&!taskActive())return;
-
       if(button){
         button.disabled=true;
         button.textContent='正在录入…';
@@ -246,8 +242,6 @@
       });
 
       const data=await response.json().catch(()=>({}));
-      if(taskId&&!taskActive())return;
-
       if(!response.ok||!data.success){
         if(data.code==='REVIEW_REQUIRED'){
           const error=Object.assign(new Error(data.error||`确认失败（${response.status}）`),{
@@ -298,17 +292,16 @@
       const targetUrl=`pages/order_detail.html?${params.toString()}`;
       window.location.assign(targetUrl);
     }catch(error){
-      if(taskId&&!taskActive())return;
       if(error?.name==='AbortError'){
-        if(taskActive())window.renderUnifiedStatus?.('error',100,'服务器确认录入超时，请检查网络后重试');
-      }else if(taskActive()){
+        window.renderUnifiedStatus?.('error',100,'服务器确认录入超时，请检查网络后重试');
+      }else{
         const detail=error?.serverStage
           ?('录入失败：'+(error.message||'服务器错误')+'（'+error.serverStage+'）')
           :(error.message||'录入失败，请重试');
         window.renderUnifiedStatus?.('error',100,detail);
         window.homeToast?.(detail,'error');
       }
-      if(Array.isArray(error?.reviewRequired)&&error.reviewRequired.length&&taskActive()){
+      if(Array.isArray(error?.reviewRequired)&&error.reviewRequired.length){
         renderReview(error.reviewRequired);
       }
     }finally{
@@ -316,7 +309,7 @@
       confirmAbortController=null;
       confirmInFlight=false;
       confirmStartedAt=0;
-      if(taskActive()&&button){
+      if(button){
         button.disabled=false;
         button.textContent='确认录入';
         button.classList.add('ready');
