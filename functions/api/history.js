@@ -316,7 +316,9 @@ async function deleteHistoryRecord(env, route, date, batchId) {
       latestKey,
       clearLatest,
       expectedLatest: latest,
-      replacementLatest: promotedLatest
+      replacementLatest: promotedLatest,
+      lockKey,
+      lockToken
     });
     return json({
       success: true,
@@ -334,8 +336,10 @@ async function deleteHistoryRecord(env, route, date, batchId) {
 }
 
 
-async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining, todayKey, deleteToday, expectedToday, replacementToday, latestKey, clearLatest, expectedLatest, replacementLatest }) {
+async function atomicDeleteHistory(env, { historyKey, expectedHistory, remaining, todayKey, deleteToday, expectedToday, replacementToday, latestKey, clearLatest, expectedLatest, replacementLatest, lockKey, lockToken }) {
   const script = `
+local lock = redis.call('GET', KEYS[4])
+if lock ~= ARGV[11] then return 'LOCK_LOST' end
 local currentHistory = redis.call('GET', KEYS[1])
 if currentHistory ~= ARGV[1] then return 'CONFLICT' end
 if ARGV[3] == '1' then
@@ -372,10 +376,11 @@ return 'OK'
   const result = await redisCommand(env, [
     'EVAL',
     script,
-    '3',
+    '4',
     historyKey,
     todayKey,
     latestKey,
+    lockKey,
     expectedHistoryJson,
     remainingJson,
     deleteToday ? '1' : '0',
@@ -385,8 +390,10 @@ return 'OK'
     replacementToday ? '1' : '0',
     replacementTodayJson,
     replacementLatest ? '1' : '0',
-    replacementLatestJson
+    replacementLatestJson,
+    lockToken
   ]);
+  if (result === 'LOCK_LOST') throw new Error('历史记录保存锁已失效，请刷新后重试');
   if (result === 'CONFLICT' || result === 'CONFLICT_TODAY' || result === 'CONFLICT_LATEST') {
     throw new Error('历史记录刚刚发生变化，请刷新后重试');
   }
