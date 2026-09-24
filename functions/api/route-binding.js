@@ -7,6 +7,7 @@ import {
 
 const REQUEST_PREFIX = 'route:binding-request:';
 const USER_REQUEST_PREFIX = 'route:binding-request:user:';
+const REVIEW_LOCK_TTL_SECONDS = 30;
 
 export async function onRequest({ request, env }) {
   const session = await authRequired(request, env, { allowAnyRoute: true });
@@ -88,11 +89,24 @@ async function createRequest(env, user, request) {
 
 async function unbindSelf(env, user) {
   // 未通过审核时，DELETE 表示“取消当前申请”；只有已正式绑定时才执行解除绑定。
-  const pending = await findPendingForUser(env, user.id);
-  if (pending) {
-    await redisCommand(env, ['DEL', REQUEST_PREFIX + encodeKey(pending.id)]);
-    await redisCommand(env, ['DEL', USER_REQUEST_PREFIX + encodeKey(user.id)]);
-    return json({ success: true, cancelled: true, requestId: pending.id, route: pending.route, message: '线路申请已取消' });
+  // 取消申请与管理员审核共用申请级锁，避免“管理员批准”和“用户取消”同时操作同一 pending。
+  const initialPending = await findPendingForUser(env, user.id);
+  if (initialPending) {
+    const reviewLockKey = `lock:route-binding-review:${encodeKey(initialPending.id)}`;
+    const reviewLockValue = crypto.randomUUID();
+    if (!(await acquireReviewLock(env, reviewLockKey, reviewLockValue))) {
+      return json({ success: false, error: '该线路申请正在审核，请稍后刷新重试' }, 409);
+    }
+    try {
+      const pending = await findPendingForUser(env, user.id);
+      if (pending) {
+        await redisCommand(env, ['DEL', REQUEST_PREFIX + encodeKey(pending.id)]);
+        await redisCommand(env, ['DEL', USER_REQUEST_PREFIX + encodeKey(user.id)]);
+        return json({ success: true, cancelled: true, requestId: pending.id, route: pending.route, message: '线路申请已取消' });
+      }
+    } finally {
+      await releaseReviewLock(env, reviewLockKey, reviewLockValue).catch(() => {});
+    }
   }
 
   const route = normalizeRoute(user.boundRouteId);
@@ -152,6 +166,16 @@ async function findPendingForUser(env, userId) {
   if (!record) return null;
   if (record.status !== 'pending') return null;
   return record;
+}
+
+async function acquireReviewLock(env, key, value) {
+  const result = await redisCommand(env, ['SET', key, value, 'NX', 'EX', String(REVIEW_LOCK_TTL_SECONDS)]).catch(() => null);
+  return result === 'OK';
+}
+
+async function releaseReviewLock(env, key, value) {
+  const script = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+  await redisCommand(env, ['EVAL', script, '1', key, value]).catch(() => {});
 }
 
 async function acquireRequestLock(env, key, token) {
