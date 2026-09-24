@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canManageRoute, canUseRoute, getRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey, redisSet } from './_data.js';
+import { canManageRoute, canUseRoute, getRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey, redisSet, redisCommand } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -300,15 +300,32 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
 
     if (changed) {
       const now = new Date().toISOString();
-      await redisSet(env, routeBaseKey(route), {
+      const nextDataVersion = (Number(latest.dataVersion) || 0) + 1 || 1;
+      const value = {
         schemaVersion: Number(latest.schemaVersion) || 1,
         route: normalizeRoute(route),
         stores: normalizedStores,
-        dataVersion: (Number(latest.dataVersion) || 0) + 1 || 1,
+        dataVersion: nextDataVersion,
         updatedAt: now,
         updatedBy: String(userId || ''),
         source: 'confirmed-new-store'
-      });
+      };
+      const result = await redisCommand(env, [
+        'EVAL',
+        "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 'LOCK_LOST' end local current = redis.call('GET', KEYS[2]) if not current then return 'BASE_MISSING' end local ok, data = pcall(cjson.decode, current) if not ok or type(data) ~= 'table' then return 'BASE_INVALID' end local version = tonumber(data.dataVersion) or 0 if version ~= tonumber(ARGV[2]) then return 'VERSION_CONFLICT' end redis.call('SET', KEYS[2], ARGV[3]) return 'OK'",
+        2,
+        lockKey,
+        routeBaseKey(route),
+        token,
+        String(Number(latest.dataVersion) || 0),
+        JSON.stringify(value)
+      ]);
+      if (result !== 'OK') {
+        if (result === 'LOCK_LOST') throw new Error('线路基准库锁已失效，请重新确认');
+        if (result === 'VERSION_CONFLICT') throw new Error('线路基准库已被其他维护操作更新，请重新确认');
+        if (result === 'BASE_MISSING') throw new Error('线路基准数据库已不存在，请重新加载');
+        throw new Error('线路基准数据库数据异常，请重新加载');
+      }
     }
 
     return { changed, learnedCount, stores: normalizedStores };
