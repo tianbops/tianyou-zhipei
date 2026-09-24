@@ -50,7 +50,10 @@ async function createRequest(env, user, request) {
   const boundRoute = normalizeRoute(user.boundRouteId);
   if (boundRoute === route) return json({ success: false, error: '当前账号已在该线路，无需重复申请' }, 409);
 
-  // 已绑定旧线路的用户可以申请新线路；审核通过后由服务端原子完成“退出旧线路 + 进入新线路”。
+  // 已有正式线路绑定时，必须先解除当前绑定，才能提交其他线路申请。
+  // 服务端强制执行该规则，不能仅依赖前端按钮状态。
+  if (boundRoute) return json({ success: false, error: '当前已绑定 ' + boundRoute + '，请先解除当前绑定后再申请其他线路' }, 409);
+
   const existing = await findPendingForUser(env, user.id);
   if (existing) return json({ success: false, error: '已有待审核线路申请，请等待管理员处理' }, 409);
 
