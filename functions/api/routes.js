@@ -2,7 +2,7 @@
 import { authRequired } from './_auth.js';
 import {
   canManageRoute, getRoute, loadRouteBase, normalizeRoute,
-  normalizeStores, routeBaseKey, redisSet
+  normalizeStores, routeBaseKey
 } from './_data.js';
 
 const LOCK_TTL_SECONDS = 20;
@@ -56,7 +56,16 @@ export async function onRequest({ request, env }) {
           schemaVersion: 1, route, stores, dataVersion: currentVersion + 1 || 1,
           updatedAt, updatedBy: session.id, source: 'route-editor'
         };
-        await redisSet(env, routeBaseKey(route), value);
+        const writeResult = await atomicSaveRouteBase(env, {
+          lockKey,
+          lockValue,
+          baseKey: routeBaseKey(route),
+          expectedVersion: currentVersion,
+          value
+        });
+        if (writeResult === 'LOCK_LOST') return json({ error: '线路基准库锁已失效，请重新加载后保存', code: 'LOCK_LOST' }, 409);
+        if (writeResult === 'BASE_MISSING') return json({ error: '线路基准数据库已不存在，请重新加载后保存', code: 'BASE_MISSING' }, 409);
+        if (writeResult === 'VERSION_CONFLICT') return json({ error: '线路基准库已被其他维护操作更新，请刷新后再保存', code: 'DATA_CONFLICT' }, 409);
         return json({ success: true, route, stores, storeCount: stores.length, source: 'route', updatedAt, dataVersion: value.dataVersion, editable: true });
       } finally {
         await releaseLock(env, lockKey, lockValue).catch(() => {});
@@ -82,6 +91,31 @@ async function acquireLock(env, key, value, ttl) {
   if (!response.ok) return false;
   const data = await response.json().catch(() => ({}));
   return data.result === 'OK';
+}
+
+async function atomicSaveRouteBase(env, { lockKey, lockValue, baseKey, expectedVersion, value }) {
+  const script = `
+local lock = redis.call('GET', KEYS[1])
+if lock ~= ARGV[1] then return 'LOCK_LOST' end
+if redis.call('EXISTS', KEYS[2]) ~= 1 then return 'BASE_MISSING' end
+local current = redis.call('GET', KEYS[2])
+if not current then return 'BASE_MISSING' end
+local ok, parsed = pcall(cjson.decode, current)
+if not ok or type(parsed) ~= 'table' then return 'VERSION_CONFLICT' end
+local currentVersion = tonumber(parsed.dataVersion) or 0
+if currentVersion ~= tonumber(ARGV[2]) then return 'VERSION_CONFLICT' end
+redis.call('SET', KEYS[2], ARGV[3])
+return 'OK'
+`;
+  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/eval`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([script, 2, lockKey, baseKey, lockValue, String(expectedVersion), JSON.stringify(value)]),
+    cache: 'no-store'
+  });
+  if (!response.ok) throw new Error('线路基准数据库原子写入失败');
+  const data = await response.json().catch(() => ({}));
+  return data.result;
 }
 
 async function releaseLock(env, key, value) {
