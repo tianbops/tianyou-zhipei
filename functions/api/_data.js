@@ -189,14 +189,33 @@ async function releaseMigrationLock(env, key, token) {
 
 export function normalizeStores(stores) {
   if (!Array.isArray(stores)) return [];
-  return stores.map((store, index) => ({
-    ...store,
-    code: String(store?.code || index + 1).padStart(2, '0'),
-    routeOrder: index + 1,
-    name: String(store?.name || store?.storeName || store?.title || store?.customerName || store?.['门店名称'] || '').trim(),
-    nav: String(store?.nav || store?.navigation || store?.navUrl || store?.amap || '').trim(),
-    note: String(store?.note || store?.remark || '').trim()
-  })).filter(store => store.name);
+  return stores.map((store, index) => {
+    const name = String(store?.name || store?.storeName || store?.title || store?.customerName || store?.['门店名称'] || '').trim();
+    if (!name) return null;
+    const code = String(store?.code || index + 1).padStart(2, '0');
+    const baseCode = String(store?.baseCode || '').trim();
+    const storeId = String(store?.storeId || '').trim() || createStableStoreId(baseCode || code, name);
+    return {
+      ...store,
+      storeId,
+      baseCode,
+      code,
+      routeOrder: index + 1,
+      name,
+      nav: String(store?.nav || store?.navigation || store?.navUrl || store?.amap || '').trim(),
+      note: String(store?.note || store?.remark || '').trim()
+    };
+  }).filter(Boolean);
+}
+
+function createStableStoreId(identity, name) {
+  const seed = String(identity || name || '').trim() + '\\u0000' + String(name || '').trim();
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return 'S' + (hash >>> 0).toString(36).padStart(7, '0');
 }
 
 export async function listUsersByRoute(env, route) {
