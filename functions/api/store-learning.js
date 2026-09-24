@@ -2,7 +2,7 @@
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
 // 学习数据按线路写入 Upstash Redis；同一路线绑定用户共享同一学习库。
 import { authRequired } from './_auth.js';
-import { canManageRoute, legacyUserLearningKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeLearningKey, redisSet } from './_data.js';
+import { canManageRoute, legacyUserLearningKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
 
 const MAX_ALIASES = 1000;
 const MAX_BATCH = 100;
