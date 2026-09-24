@@ -128,7 +128,7 @@ export async function onRequest({ request, env }) {
       if (index >= 0) list[index] = record;
       else list.push(record);
       list.sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')));
-      const historyPayload = list.slice(0, 90);
+      const historyPayload = list.slice(0, 100);
 
       // 今日订单和历史记录必须一次提交，避免出现“今日有数据、历史没记录”的半成功状态。
       stage = 'write-order-history';
