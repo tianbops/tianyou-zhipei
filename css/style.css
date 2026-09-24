@@ -1924,3 +1924,11 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
   .dispatch-route-wrap{margin:7px 11px 9px!important}
   .dispatch-route-select{height:38px!important;min-height:38px!important;font-size:12px!important}
 }
+
+/* UI 2.6 · 弹窗视觉基线统一 2026-09-25 */
+.one-modal-surface,.dialog-box,.delete-sheet,.date-sheet,.upload-sheet{background:#151D26!important;border:1px solid rgba(255,255,255,.075)!important;color:#F2F5F7}
+.dialog,.delete-modal,.date-modal,.upload-overlay{background:rgba(0,0,0,.70)!important;backdrop-filter:blur(5px)!important}
+.dialog-box,.delete-sheet{border-radius:18px!important;box-shadow:0 18px 50px rgba(0,0,0,.50)!important}
+.dialog-btn button,.delete-actions button,.sheet-footer button{height:46px!important;border-radius:12px!important;font-size:14px!important;font-weight:600!important}
+.dialog-btn button:first-child,.delete-cancel,.btn-cancel{background:#202A34!important;color:#E3E8ED!important;border:1px solid rgba(255,255,255,.075)!important}
+.dialog-btn button:last-child,.delete-confirm,.btn-primary-action{background:#B8C1C8!important;color:#0B1015!important}
