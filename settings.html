@@ -173,7 +173,9 @@ async function openRouteBinding(){
       $('bindingRoute').innerHTML=active.map(x=>'<option value="'+escAttr(x.id)+'">'+esc(x.name||x.id)+'</option>').join('');
       if(!active.length){$('routeBindingMessage').textContent='当前暂无可申请的其他线路';$('routeBindingButton').disabled=true;}
     }else if(status.pending){
-      $('unbindRouteButton').style.display='none';
+      $('unbindRouteButton').style.display='';
+      $('unbindRouteButton').textContent='取消当前申请';
+      $('unbindRouteButton').onclick=unbindRoute;
       summary.textContent='申请审核中 · '+status.pending.route;
       $('bindingRouteField').style.display='none'; $('bindingDutyField').style.display='none';
       $('routeBindingNote').textContent='已提交 '+status.pending.route+'（'+(status.pending.duty==='driver'?'驾驶员':'配送员')+'）申请，请等待管理员审核。';
@@ -198,7 +200,7 @@ async function submitRouteBinding(){
 async function unbindRoute(){
   if(!confirm('确定解除当前线路绑定吗？解除无需管理员审核，之后可以重新申请其他线路。'))return;
   const button=$('routeBindingButton');button.disabled=true;button.textContent='解除中…';
-  try{const r=await fetch('/api/route-binding',{method:'DELETE',credentials:'same-origin',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'解除绑定失败');showMessage('routeBindingMessage','线路已解除，可重新申请','success');setTimeout(()=>openRouteBinding(),600)}catch(e){showMessage('routeBindingMessage',e.message||'解除绑定失败')}finally{button.disabled=false;button.textContent='解除当前绑定'}
+  try{const r=await fetch('/api/route-binding',{method:'DELETE',credentials:'same-origin',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'解除绑定失败');showMessage('routeBindingMessage',d.cancelled?'申请已取消，可重新申请':'线路已解除，可重新申请','success');setTimeout(()=>openRouteBinding(),600)}catch(e){showMessage('routeBindingMessage',e.message||'操作失败')}finally{button.disabled=false;button.textContent=currentUser?.boundRouteId?'解除当前绑定':'取消当前申请'}
 }
 async function saveProfile(){const vehicle=$('vehicle').value.trim();const name=String(currentUser?.name||'').trim();const button=$('saveButton');hideMessage('profileMessage');if(!name)return showMessage('profileMessage','账户资料读取失败，请刷新后重试');button.disabled=true;button.textContent='保存中…';try{const user=await Auth.updateProfile({name,vehicle});updateHero(user);showMessage('profileMessage','配送资料已保存','success');setTimeout(()=>{closeModal('deliveryModal');location.replace('home.html')},500)}catch(error){showMessage('profileMessage',error.message||'保存失败，请稍后重试')}finally{button.disabled=false;button.textContent='保存'}}
 async function changeUsername(){const newUsername=$('newUsername').value.trim();const password=$('accountPassword').value;const button=$('accountButton');hideMessage('accountMessage');if(!/^[a-zA-Z0-9_]{3,32}$/.test(newUsername))return showMessage('accountMessage','新账号需为3-32位字母、数字或下划线');if(!password)return showMessage('accountMessage','请输入当前密码');if(newUsername.toLowerCase()===$('currentUsername').value.toLowerCase())return showMessage('accountMessage','新账号不能与当前账号相同');button.disabled=true;button.textContent='更改中…';try{const response=await fetch('/api/change-username',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({newUsername,password})});const data=await response.json().catch(()=>({}));if(response.status===401){location.replace('index.html');return}if(!response.ok||!data.success)throw new Error(data.error||'账号更改失败，请稍后重试');updateHero(data.user);$('newUsername').value='';$('accountPassword').value='';showMessage('accountMessage','账号更改成功','success');setTimeout(()=>closeModal('usernameModal'),700)}catch(error){showMessage('accountMessage',error.message||'账号更改失败，请稍后重试')}finally{button.disabled=false;button.textContent='确认更改'}}
