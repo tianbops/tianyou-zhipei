@@ -15,21 +15,15 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   $('#resetDataBtn').onclick=resetData;
   $('#toggleResetKey').onclick=()=>toggleResetKey();
   $('#saveRoute').onclick=saveRoute;
-  $('#backBtn').onclick=()=>{
-    const ref=document.referrer;
-    let sameOrigin=false;
-    try{sameOrigin=!!ref&&new URL(ref,location.href).origin===location.origin&&new URL(ref,location.href).pathname!==location.pathname}catch(_){}
-    if(sameOrigin&&history.length>1){history.back();return}
-    location.replace('home.html');
-  };
+  $('#backBtn').onclick=()=>Auth.logout();
   await boot();
 });
 
 async function boot(){
   try{
     const me=await api('/api/me');
-    if(!me.success||me.user?.role!=='system_admin') throw new Error('当前账号没有系统管理权限');
-    $('#adminUser').textContent=(me.user.name||me.user.username)+' · '+(me.user.adminLevel==='primary'?'主系统管理员':'系统管理员');
+    if(!me.success||me.user?.role!=='system_admin'||me.user?.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
+    $('#adminUser').textContent=(me.user.name||me.user.username)+' · 主系统管理员;
     const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
     if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
@@ -86,8 +80,7 @@ function renderUsers(){
     <div class="actions">
       ${u.adminLevel==='primary'?'':'<button onclick="toggleUser(\''+escAttr(u.id)+'\',\''+(u.status==='active'?'disabled':'active')+'\')">'+(u.status==='active'?'停用':'启用')+'</button>'}
       <button onclick="resetPassword('${escAttr(u.id)}')">重置密码</button>
-      ${u.adminLevel==='primary'?'<button type="button" disabled>主系统管理员</button>':'<button onclick="setRole(\''+escAttr(u.id)+'\',\''+(u.role==='system_admin'?'driver':'system_admin')+'\')">'+(u.role==='system_admin'?'取消管理员':'设为管理员')+'</button>'}
-      ${u.role!=='system_admin'&&!u.boundRouteId?'<button onclick="deleteUser(\''+escAttr(u.id)+'\')">删除账号</button>':''}
+      ${u.adminLevel==='primary'?'':'<button onclick="deleteUser(\''+escAttr(u.id)+'\')">删除账号</button>'}
     </div>
   </article>`).join('')||'<div class="meta">暂无用户</div>';
 }
@@ -175,7 +168,7 @@ async function resetData(){
     if(!r.success) throw new Error(r.error||'数据重置失败');
     $('#resetResult').textContent=`已清空：扫描 ${r.scanned||0} 个键，删除 ${r.deleted||0} 个键。请重新注册管理员并建立线路数据。`;
     $('#resetResult').classList.remove('hidden');
-    notice('数据重置完成。当前管理员账号已删除，请重新注册。');
+    notice('数据重置完成。主系统管理员账号已保留，可继续进行系统管理。');
     $('#resetKey').value='';
     $('#resetConfirmation').value='';
   }catch(e){notice(e.message||'数据重置失败',true)}
