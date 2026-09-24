@@ -53,7 +53,7 @@ export async function onRequest({ request, env }) {
       await promoteNewStoresToBase(env, route, body.orders);
       base = await loadBase(env, route, userId, session.boundRouteId);
     }
-    const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
+    const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base, route);
     // 已确认的“新增门店”只有在线路维护用户权限下，才正式学习进线路基准库。
     // 这里在生成最终订单身份之前完成，确保本次订单与下一次运单使用同一个稳定 storeId。
     if (!noBase && canManageRoute(session.user || session, route)) {
@@ -132,6 +132,11 @@ export async function onRequest({ request, env }) {
           todayData.newStoreCount = learned.learnedCount || 0;
         }
       }
+
+      // 已明确选择“作为新增门店”的记录，在确认入库前正式写入线路基准库并取得稳定 storeId。
+      // 该步骤位于线路+日期锁内，避免两个并发确认同时创建同一门店。
+      stage = 'learn-new-stores';
+      await learnConfirmedNewStores(env, route, todayData.orders, userId);
 
       // Redis SET 成功响应即表示命令已执行，不再额外 GET 三次验证，避免确认录入长时间等待。
       const saved = todayData;
@@ -373,6 +378,41 @@ async function loadBase(env, route, userId, boundRouteId) {
   })).filter(store => store.name);
 }
 
+async function learnConfirmedNewStores(env, route, orders, userId) {
+  const newItems = (Array.isArray(orders) ? orders : []).filter(item => item?.isNew === true && String(item?.name || '').trim());
+  if (!newItems.length) return;
+  const current = await loadRouteBase(env, route);
+  const stores = Array.isArray(current?.stores) ? current.stores.map(store => ({ ...store })) : [];
+  const byStoreId = new Map(stores.map(store => [String(store?.storeId || '').trim(), store]).filter(([id]) => id));
+  const byName = new Map(stores.map(store => [key(store?.name || ''), store]).filter(([name]) => name));
+  let changed = false;
+  for (const item of newItems) {
+    const name = String(item.name || '').trim();
+    const stableId = String(item.storeId || createStableStoreId(route, name)).trim();
+    let target = byStoreId.get(stableId) || byName.get(key(name));
+    if (!target) {
+      const nextOrder = stores.reduce((max, store, index) => Math.max(max, Number(store?.routeOrder) || Number(store?.code) || index + 1), 0) + 1;
+      target = { storeId: stableId, baseCode: stableId, code: String(nextOrder).padStart(2, '0'), routeOrder: nextOrder, name, nav: String(item.nav || '').trim(), note: String(item.note || '').trim(), learnedAt: new Date().toISOString(), learnedBy: String(userId || '').trim() };
+      stores.push(target);
+      byStoreId.set(stableId, target);
+      byName.set(key(name), target);
+      changed = true;
+    }
+    item.storeId = String(target.storeId || stableId).trim();
+    item.baseCode = String(target.baseCode || target.storeId || stableId).trim();
+    item.baseName = String(target.name || name).trim();
+  }
+  if (!changed) return;
+  const normalizedStores = stores.map((store, index) => ({ ...store, storeId: String(store?.storeId || createStableStoreId(route, store?.name || `store-${index + 1}`)).trim(), code: String(store?.code || index + 1).padStart(2, '0'), routeOrder: Number(store?.routeOrder || index + 1) || index + 1, name: String(store?.name || '').trim() })).filter(store => store.name);
+  await redisSet(env, routeBaseKey(route), { schemaVersion: Number(current?.schemaVersion) || 1, route, stores: normalizedStores, dataVersion: (Number(current?.dataVersion) || 0) + 1 || 1, updatedAt: new Date().toISOString(), updatedBy: String(userId || '').trim(), source: 'confirmed-new-store' });
+}
+
+function createStableStoreId(route, name) {
+  const input = `${normalizeRoute(route)}\u0000${key(name)}`;
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index++) { hash ^= input.charCodeAt(index); hash = Math.imul(hash, 16777619); }
+  return `store-${(hash >>> 0).toString(36)}`;
+}
 function canonicalizeRawOrders(input) {
   return input.map(item => {
     const raw = typeof item === 'string' ? { name: item } : (item || {});
@@ -381,7 +421,7 @@ function canonicalizeRawOrders(input) {
   }).filter(item => item.name);
 }
 
-function canonicalizeOrders(input, base) {
+function canonicalizeOrders(input, base, route) {
   const byStoreId = new Map(base.filter(store => store.storeId).map(store => [store.storeId, store]));
   const byName = new Map(base.map(store => [key(store.name), store]));
   const byCode = new Map(base.map(store => [String(store.code), store]));
