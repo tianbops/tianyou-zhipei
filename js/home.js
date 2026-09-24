@@ -158,6 +158,7 @@ function invalidateUploadTask(){return typeof window.invalidateUploadTask==='fun
 function isUploadTaskActive(taskId){return !taskId||typeof window.isUploadTaskActive!=='function'||window.isUploadTaskActive(taskId)}
 async function parseOrderText(text,taskId=0){
   const route=currentRoute();
+  const parseRoute=String(route||'').trim();
   if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});if(!route)throw Error('未指定配送线路');
   if(parseInFlight)throw Error('正在处理运单，请勿重复操作');
   parseInFlight=true;parseCancelled=false;parseAbortController=new AbortController();
@@ -167,6 +168,7 @@ async function parseOrderText(text,taskId=0){
     const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,route}),credentials:'same-origin',cache:'no-store',signal:parseAbortController.signal});
     const data=await response.json().catch(()=>({}));
     if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
+    if(String(currentRoute()||'').trim()!==parseRoute)throw Object.assign(new Error(`调度线路已从 ${parseRoute||'未选择'} 切换，当前运单已失效，请重新上传`),{code:'ROUTE_CHANGED'});
     if(!response.ok||!data.success){
       const message=String(data?.error||'');
       if(/未找到.*独立基准数据库/.test(message)){if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});const fallback=fallbackParse(text);if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});return fallback;}
@@ -333,7 +335,7 @@ window.addEventListener('popstate',()=>{
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
-window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度路线不是你的绑定路线，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
+window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度线路不是你的绑定线路，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
