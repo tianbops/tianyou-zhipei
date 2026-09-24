@@ -114,7 +114,6 @@ async function saveOrder(request, env, session) {
       updatedHistory = updatedHistory.slice(0, 100);
     }
 
-    // 正常保存：今日订单与 latest 一起原子提交。
     // 更换车辆：今日订单、对应历史记录、latest 三者一起原子提交，
     // 避免网络/Redis故障造成“今日车辆已变、历史车辆未变”的半成功状态。
     await atomicSaveOrder(env, {
@@ -144,11 +143,9 @@ async function readOrder(request, env, session) {
   // 今日任务的主数据与历史汇总解耦：今日 key 可用时，历史迁移/汇总异常不能把首页或详情页整体变成 503。
   // 这尤其重要于旧用户数据迁移期间：history 缺失会触发 SCAN user:*，不应阻断已有的线路级 today 数据。
   let today = null;
-  let todayReadError = null;
   try {
     today = await redisGet(env, routeOrderKey(route, `today:${date}`));
   } catch (error) {
-    todayReadError = error;
     console.warn('读取线路当日订单失败，继续尝试旧数据迁移', route, date, error?.message || error);
   }
   let historyData = null;
