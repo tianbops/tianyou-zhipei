@@ -117,20 +117,8 @@
     const route=routeContext();
     if(!route||metaState.baseDatabaseAvailable===false)return {success:false,skipped:true};
     const items=[];
-    const newStores=[];
     for(const item of parsedState){
-      if(!item)continue;
-      if(item.isNew===true){
-        const name=String(item.name||item.baseName||'').trim();
-        if(name)newStores.push({
-          name,
-          storeId:String(item.storeId||'').trim(),
-          baseCode:String(item.baseCode||'').trim(),
-          nav:String(item.nav||'').trim(),
-          note:String(item.note||'').trim()
-        });
-        continue;
-      }
+      if(!item||item.isNew===true)continue;
       if(item.matched!==true||item.needsReview===true)continue;
       const baseName=String(item.baseName||item.name||'').trim();
       const rawNames=Array.isArray(item.rawNames)?item.rawNames.map(v=>String(v||'').trim()).filter(Boolean):[];
@@ -146,15 +134,14 @@
       const key=`${item.rawName}\u0000${item.baseCode}\u0000${item.baseName}`;
       unique.set(key,item);
     }
-    const uniqueNewStores=[...new Map(newStores.map(item=>[String(item.name).trim(),item])).values()];
-    if(!unique.size&&!uniqueNewStores.length)return {success:true,skipped:true};
+    if(!unique.size)return {success:true,skipped:true};
     try{
       const response=await fetch('/api/store-learning',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         credentials:'same-origin',
         cache:'no-store',
-        body:JSON.stringify({route,items:[...unique.values()],newStores:uniqueNewStores})
+        body:JSON.stringify({route,items:[...unique.values()]})
       });
       const data=await response.json().catch(()=>({}));
       if(!response.ok||!data.success){
