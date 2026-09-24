@@ -185,7 +185,6 @@ async function listAllHistory(env, userId, route, session) {
     }
   }
 
-  const routeHistorySet = new Set(routeHistoryKeys);
   const routeTodaySet = new Set(routeTodayKeys);
 
   // 先读取所有需要参与展示的 key；同一 key 只保留一次。
@@ -415,7 +414,7 @@ function isHistoryDateInWindow(date) {
   return normalized >= cutoff && normalized <= futureCutoff;
 }
 
-async function purgeExpiredHistory(env, userId, route) {
+async function purgeExpiredHistory(env, route) {
   const today = businessDate();
   const cutoff = addDays(today, -(HISTORY_DAYS - 1));
   const futureCutoff = addDays(today, FUTURE_DAYS);
@@ -445,9 +444,7 @@ async function scanKeys(env, pattern) {
 
 function dedupeHistory(input) { const map = new Map(); let changed = false; for (const item of input) { if (!item || typeof item !== 'object') { changed = true; continue; } const batchId = String(item?.orderBatchId || '').trim(); const route = String(item?.route || '').trim(); const date = normalizeDate(item?.date); const signature = batchId && date ? `batch:${route}:${date}:${batchId}` : historySignature(item); if (!signature) { changed = true; continue; } const old = map.get(signature); if (!old) map.set(signature, item); else { changed = true; if (compareUpdatedAt(item, old) > 0) map.set(signature, item); } } const records = Array.from(map.values()).sort((a, b) => compareUpdatedAt(b, a)); if (records.length !== input.length) changed = true; return { records, changed }; }
 function historySignature(record) { const route = String(record?.route || '').trim(), date = normalizeDate(record?.date), vehicle = String(record?.vehicle || '').trim().toLowerCase(), weight = normalizeWeight(record?.totalWeight ?? record?.weight), orders = Array.isArray(record?.orders) ? record.orders : []; if (!date && !orders.length && !weight) return ''; const stores = orders.map(item => { const storeId = String(item?.storeId || item?.baseCode || '').trim(); const name = normalizeStoreName(item?.name || item?.storeName || item?.shopName || item?.['门店名称']); return storeId ? 'id:' + storeId : name ? 'name:' + name : ''; }).filter(Boolean).sort(); return JSON.stringify({ route, date, vehicle, weight, stores }); }
-function todayOrderSignature(record) { return historySignature(record); }
 function normalizeStoreName(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase(); }
-function normalizeNumber(value) { const n = Number(value); return Number.isFinite(n) ? Math.round(n * 1000000) / 1000000 : 0; }
 function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n < 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; return `${(Math.round((tons + Number.EPSILON) * 1000000) / 1000000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`; }
 function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0) - (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0); }
 function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId) === normalizeRoute(route); }
