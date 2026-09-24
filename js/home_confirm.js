@@ -34,7 +34,7 @@
         const selected=select.value.startsWith('candidate:')?candidates[Number(select.value.slice(10))]:null;
         item._selectedCandidate=selected?.name||'';
         item._selectedCandidateCode=selected?.code||'';
-        item._selectedCandidateStoreId=selected?.storeId||'';item._selectedCandidateStoreId=selected?.storeId||'';
+        item._selectedCandidateStoreId=selected?.storeId||'';
       });
       label.addEventListener('click',()=>{select.focus();select.click?.();});
       row.append(label,select);list.appendChild(row);
