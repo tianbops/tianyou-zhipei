@@ -113,7 +113,7 @@ export async function onRequest({ request, env }) {
       if (!noBase && canManageRoute(session.user || session, route)) {
         stage = 'learn-new-stores';
         const learned = await learnNewStoresIntoBase(env, route, normalized, userId);
-        if (learned.changed) {
+        if (learned.learnedCount) {
           base = learned.stores;
           orders = sortOrders(normalized, base);
           todayData.orders = orders;
