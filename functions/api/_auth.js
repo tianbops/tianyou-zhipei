@@ -62,6 +62,8 @@ async function createToken(env, user, { client, ttl }) {
   if (!secret) throw new Error('SESSION_SECRET 未配置');
   const id = String(user?.id || '').trim();
   if (!id) throw new Error('用户资料缺少 id');
+  const isPrimaryAdmin = user?.role === 'system_admin' && user?.adminLevel === 'primary';
+  if (isPrimaryAdmin && client !== 'web') throw new Error('主系统管理员仅可签发系统管理端会话');
   const payload = {
     version: 1,
     client,
