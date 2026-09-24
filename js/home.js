@@ -335,6 +335,7 @@ window.addEventListener('popstate',()=>{
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
+window.goToAdmin=async()=>{try{const me=await Auth.getCurrentServerUser();if(me?.role!=='system_admin'){toast('非管理员用户，无法打开系统管理','error');return}location.replace('admin.html')}catch(e){toast('非管理员用户，无法打开系统管理','error')}};
 window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度线路不是你的绑定线路，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
