@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：线路绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, redisSet, scanUsers } from '../_data.js';
+import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, redisSet } from '../_data.js';
 
 async function repairCreatedRoutesFromAdminLogs(env, records) {
   const logs = await redisCommand(env, ['GET', 'system:admin:logs']).catch(() => null);
@@ -79,18 +79,6 @@ export async function onRequest({ request, env }) {
       } while (cursor !== '0');
 
       await repairCreatedRoutesFromAdminLogs(env, records);
-      const users = await scanUsers(env);
-      const byId = new Map(records.map(record => [String(record.id), record]));
-      for (const user of users) {
-        const id = normalizeRoute(user?.boundRouteId);
-        if (!id) continue;
-        if (!byId.has(id)) byId.set(id, { id, name: id, driverUserId: '', deliveryUserId: '', boundUserIds: [] });
-        const record = byId.get(id);
-        if (user.routeDuty === 'driver') record.driverUserId = user.id;
-        if (user.routeDuty === 'delivery') record.deliveryUserId = user.id;
-        if (!Array.isArray(record.boundUserIds)) record.boundUserIds = [];
-        if (!record.boundUserIds.includes(user.id)) record.boundUserIds.push(user.id);
-      }
       return json({
         success: true,
         routes: [...byId.values()].sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }))
