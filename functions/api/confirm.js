@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeOrderKey } from './_data.js';
+import { canManageRoute, canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey, redisSet } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -47,6 +47,11 @@ export async function onRequest({ request, env }) {
     }
     const inputCount = body.orders.length;
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base);
+    // 已确认的“新增门店”只有在线路维护用户权限下，才正式学习进线路基准库。
+    // 这里在生成最终订单身份之前完成，确保本次订单与下一次运单使用同一个稳定 storeId。
+    if (!noBase && canManageRoute(session.user || session, route)) {
+      await learnNewStoresIntoBase(env, route, base, canonical, session.id);
+    }
     const duplicateCount = countDuplicates(canonical);
     const uniqueCanonical = dedupeCanonical(canonical);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
@@ -202,6 +207,86 @@ function canonicalizeOrders(input, base) {
     if (hit) return { ...raw, storeId: hit.storeId || rawStoreId, baseCode: hit.baseCode || String(raw.baseCode || '').trim(), name: hit.name, code: hit.code, nav: hit.nav || raw.nav || '', note: hit.note || raw.note || '', matched: true, isNew: false, needsReview: false, candidate: '', matchType: 'confirmed', matchScore: 1, _baseIndex: hit.index };
     return { ...raw, storeId: rawStoreId, name, matched: false, isNew: true, needsReview: false, candidate: '', matchType: 'new', _baseIndex: null };
   }).filter(item => item.name);
+}
+
+async function learnNewStoresIntoBase(env, route, base, items, userId) {
+  const newItems = (Array.isArray(items) ? items : []).filter(item => item?.isNew === true && String(item?.name || '').trim());
+  if (!newItems.length) return;
+
+  const lockKey = routeBaseKey(route) + ':learn-lock';
+  const token = createLockToken();
+  if (!(await acquireLock(env, lockKey, token, 20))) {
+    throw new Error('线路基准库正在更新，请稍后重试');
+  }
+  try {
+    // 重新读取最新基准，避免线路编辑器与确认录入并发时覆盖对方刚保存的数据。
+    const latest = await loadRouteBase(env, route);
+    const latestStores = Array.isArray(latest?.stores) ? latest.stores.map((store, index) => ({
+      ...store,
+      storeId: String(store?.storeId || store?.baseCode || '').trim(),
+      baseCode: String(store?.baseCode || '').trim(),
+      name: String(store?.name || store?.storeName || store?.shopName || '').trim(),
+      code: String(store?.code || index + 1).padStart(2, '0'),
+      routeOrder: Number(store?.routeOrder) || index + 1
+    })).filter(store => store.name) : (Array.isArray(base) ? base.filter(store => store?.name) : []);
+    const byName = new Map(latestStores.map(store => [key(store.name), store]));
+    const byStoreId = new Map(latestStores.filter(store => store.storeId).map(store => [store.storeId, store]));
+    let changed = false;
+
+    for (const item of newItems) {
+      const name = String(item.name || '').trim();
+      const existing = byStoreId.get(String(item.storeId || '').trim()) || byName.get(key(name));
+      if (existing) {
+        item.storeId = String(existing.storeId || existing.baseCode || '').trim();
+        item.baseCode = String(existing.baseCode || '').trim();
+        item.name = existing.name;
+        item.matched = true;
+        item.isNew = false;
+        item.matchType = 'learned-new';
+        item.matchScore = 1;
+        continue;
+      }
+
+      const routeOrder = latestStores.length + 1;
+      const code = String(routeOrder).padStart(2, '0');
+      const storeId = String(item.storeId || '').trim() || crypto.randomUUID();
+      const store = {
+        storeId,
+        baseCode: String(item.baseCode || '').trim(),
+        code,
+        routeOrder,
+        name,
+        nav: String(item.nav || '').trim(),
+        note: String(item.note || '').trim(),
+        aliases: Array.isArray(item.rawNames) ? item.rawNames.filter(Boolean).slice(-5) : []
+      };
+      latestStores.push(store);
+      byStoreId.set(storeId, store);
+      byName.set(key(name), store);
+      item.storeId = storeId;
+      item.baseCode = store.baseCode;
+      item.code = code;
+      item.matched = true;
+      item.isNew = false;
+      item.matchType = 'learned-new';
+      item.matchScore = 1;
+      changed = true;
+    }
+
+    if (!changed) return;
+    const now = new Date().toISOString();
+    await redisSet(env, routeBaseKey(route), {
+      schemaVersion: Number(latest?.schemaVersion) || 1,
+      route: normalizeRoute(route),
+      stores: latestStores.map((store, index) => ({ ...store, routeOrder: index + 1, code: String(index + 1).padStart(2, '0') })),
+      dataVersion: (Number(latest?.dataVersion) || 0) + 1 || 1,
+      updatedAt: now,
+      updatedBy: String(userId || ''),
+      source: 'confirmed-new-store'
+    });
+  } finally {
+    await releaseLock(env, lockKey, token).catch(() => {});
+  }
 }
 
 function canonicalOrderIdentity(item) {
