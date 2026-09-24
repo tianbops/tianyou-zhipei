@@ -34,7 +34,7 @@ export async function onRequest({ request, env }) {
     const extractionDoneAt = Date.now();
     const result = matchTodayStores(parsed.stores, base, learning);
     const planningDoneAt = Date.now();
-    if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再规划路线' }, 422);
+    if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再处理运单' }, 422);
 
     const diagnostics = buildDiagnostics(result, parsed.stores.length);
     const timings = {
