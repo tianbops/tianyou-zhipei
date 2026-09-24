@@ -113,7 +113,7 @@ export async function onRequest({ request, env }) {
           updatedAt: duplicate.updatedAt || new Date().toISOString()
         };
         // 重复确认也必须修复 today key：旧数据迁移/清理后可能出现“历史有数据、today 缺失/为空”。
-        await saveHistoryAndLatest(env, userId, route, date, duplicate, duplicateLatest);
+        await saveHistoryAndLatest(env, userId, route, date, duplicate, duplicateLatest, lockKey, token);
         if (idempotencyKey) await saveIdempotency(env, idempotencyKey, duplicate.orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
         return json({ success: true, duplicate: true, data: duplicate });
       }
@@ -158,14 +158,19 @@ export async function onRequest({ request, env }) {
 
       // 今日订单和历史记录必须一次提交，避免出现“今日有数据、历史没记录”的半成功状态。
       stage = 'write-order-history';
-      const writeResult = await redisTransaction(env, [
-        ['SET', todayKey, JSON.stringify(todayData)],
-        ['SET', historyKey, JSON.stringify(historyPayload)],
-        ['SET', routeOrderKey(route, 'latest'), JSON.stringify({ date, orderBatchId, updatedAt: saved.updatedAt })]
-      ]);
-      if (!Array.isArray(writeResult) || writeResult.length !== 3 || writeResult.some(item => item && item.error)) {
-        throw new Error('今日订单与历史记录写入未完成');
-      }
+      const writeResult = await atomicSaveOrder(env, {
+        lockKey,
+        lockToken: token,
+        todayKey,
+        historyKey,
+        latestKey: routeOrderKey(route, 'latest'),
+        expectedToday: await redisGet(env, todayKey),
+        expectedHistory: oldHistory,
+        today: todayData,
+        history: historyPayload,
+        latest: { date, orderBatchId, updatedAt: saved.updatedAt }
+      });
+      if (writeResult !== 'OK') throw new Error('订单保存时数据发生变化，请重试');
 
       // 返回成功前同时核验今日与历史，保证“确认成功”与两份核心数据一致。
       stage = 'verify-order-history';
@@ -418,7 +423,7 @@ async function findDuplicateOrder(env, userId, route, date, candidate, boundRout
   return null;
 }
 
-async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
+async function saveHistoryAndLatest(env, userId, route, date, today, latest, lockKey, lockToken) {
   const todayKey = routeOrderKey(route, `today:${date}`);
   const historyKey = routeOrderKey(route, `history:${date}`);
   const latestKey = routeOrderKey(route, 'latest');
@@ -439,14 +444,29 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
   else list.push(record);
   list.sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')));
   const payload = list.slice(0, 100);
-  const result = await redisTransaction(env, [
-    ['SET', todayKey, JSON.stringify(today)],
-    ['SET', historyKey, JSON.stringify(payload)],
-    ['SET', latestKey, JSON.stringify(latest)]
+  const result = await atomicSaveOrder(env, {
+    lockKey,
+    lockToken,
+    todayKey,
+    historyKey,
+    latestKey,
+    expectedToday: await redisGet(env, todayKey),
+    expectedHistory: old,
+    today,
+    history: payload,
+    latest
+  });
+  if (result !== 'OK') throw new Error('重复订单今日、历史与索引写入未完成');
+}
+
+async function atomicSaveOrder(env, { lockKey, lockToken, todayKey, historyKey, latestKey, expectedToday, expectedHistory, today, history, latest }) {
+  const script = '\nlocal lock = redis.call("GET", KEYS[1])\nif lock ~= ARGV[1] then return "LOCK_LOST" end\nlocal currentToday = redis.call("GET", KEYS[2])\nif currentToday ~= ARGV[2] then return "CONFLICT_TODAY" end\nlocal currentHistory = redis.call("GET", KEYS[3])\nif currentHistory ~= ARGV[3] then return "CONFLICT_HISTORY" end\nredis.call("SET", KEYS[2], ARGV[4])\nredis.call("SET", KEYS[3], ARGV[5])\nredis.call("SET", KEYS[4], ARGV[6])\nreturn "OK"\n';
+  const stringify = value => value === null || value === undefined ? '' : JSON.stringify(value);
+  return redisCommand(env, [
+    'EVAL', script, '4', lockKey, todayKey, historyKey, latestKey,
+    lockToken, stringify(expectedToday), stringify(expectedHistory),
+    JSON.stringify(today), JSON.stringify(history), JSON.stringify(latest)
   ]);
-  if (!Array.isArray(result) || result.length !== 3 || result.some(item => item && item.error)) {
-    throw new Error('重复订单今日、历史与索引写入未完成');
-  }
 }
 
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
