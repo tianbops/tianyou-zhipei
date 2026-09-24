@@ -23,7 +23,7 @@ async function boot(){
   try{
     const me=await api('/api/me');
     if(!me.success||me.user?.role!=='system_admin'||me.user?.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
-    $('#adminUser').textContent=(me.user.name||me.user.username)+' · 主系统管理员;
+    $('#adminUser').textContent=(me.user.name||me.user.username)+' · 主系统管理员';
     const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
     if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
