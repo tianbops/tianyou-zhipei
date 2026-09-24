@@ -591,7 +591,6 @@ async function redisPipelineGet(env, keys) {
   });
 }
 async function redisGet(env, keyName) { const response = await redisFetch(env, `/get/${encodeURIComponent(keyName)}`); if (!response.ok) throw new Error(`Redis读取失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result === null || data.result === undefined || data.result === '') return null; try { return typeof data.result === 'string' ? JSON.parse(data.result) : data.result; } catch { return null; } }
-async function redisSet(env, keyName, value) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }); if (!response.ok) throw new Error(`Redis保存失败（HTTP ${response.status}）`); const data = await response.json().catch(() => ({})); if (data.result !== undefined && data.result !== 'OK') throw new Error('Redis保存未确认'); }
 async function saveIdempotency(env, keyName, orderBatchId) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(JSON.stringify({ orderBatchId }))}/EX/86400`, { method: 'POST' }); if (!response.ok) throw new Error(`幂等索引保存失败（HTTP ${response.status}）`); }
 async function findHistoryBatch(env, userId, route, date, orderBatchId, boundRouteId) {
   const historyKey = routeOrderKey(route, `history:${date}`);
