@@ -138,21 +138,6 @@ async function loadServerOrder(date='',expectedRoute=''){
 function parseWeight(value){if(value===null||value===undefined||value==='')return 0;const text=String(value).trim().replace(/,/g,'');const match=text.match(/[\d]+(?:\.\d+)?/);if(!match)return 0;const n=Number(match[0]);if(!Number.isFinite(n))return 0;const tons=/吨|\bt\b/i.test(text)?n:/kg|千克|公斤/i.test(text)?n/1000:n>=1000?n/1000:n;return Number.isFinite(tons)?tons:0}
 function formatWeight(value){const tons=parseWeight(value);if(!(tons>0))return '暂无数据';const rounded=Math.round((tons+Number.EPSILON)*100)/100;return `${rounded.toFixed(2)}t`}
 function updateSummary(){const hasToday=!!serverOrder&&Array.isArray(serverOrder.orders)&&serverOrder.orders.length>0;const route=serverOrder?.route||currentRoute()||'';const vehicle=serverOrder?.vehicle||'';if($('taskCard'))$('taskCard').style.display='block';if($('menuRoute'))$('menuRoute').textContent=route||'未选择线路';if(!hasToday){if($('homeRoute')){const text=$('homeRoute').querySelector('.vehicle-text');if(text)text.textContent='';}if($('storeCount'))$('storeCount').textContent='';if($('totalWeight'))$('totalWeight').textContent='';if($('statusDot')){const dot=$('statusDot');dot.textContent='0';dot.style.background='#5A6A7A';dot.classList.remove('has-count');dot.setAttribute('aria-label','今日运单笔数：0')}return}const orders=serverOrder.orders;const dailySummary=serverOrder._todaySummary||null;const count=Number(dailySummary?.storeCount)||Number(serverOrder.uniqueStoreCount||serverOrder.count)||orders.length;const orderCount=Math.max(1,Number(serverOrder._todayWaybillCount)||1);if($('homeRoute')){const text=$('homeRoute').querySelector('.vehicle-text');if(text)text.textContent=vehicle||route||'未绑定车辆';}if($('storeCount'))$('storeCount').textContent=count?`${count}家`:'暂无当日订单';if($('totalWeight'))$('totalWeight').textContent=dailySummary?.totalWeight?formatWeight(dailySummary.totalWeight):formatWeight(serverOrder.totalWeight);if($('statusDot')){const dot=$('statusDot');dot.textContent=String(orderCount);dot.style.background=count?'#3B82F6':'#5A6A7A';dot.classList.toggle('has-count',orderCount>0);dot.setAttribute('aria-label',`今日运单笔数：${orderCount}`)}}
-function setReviewText(data){
-  const input=$('manualOrderInput');if(!input)return false;
-  const stores=Array.isArray(data?.stores)?data.stores:[];
-  const route=data?.route||currentRoute()||'';
-  const date=data?.date||pendingMeta.date||currentDate();
-  const vehicle=data?.vehicle||pendingMeta.vehicle||'';
-  const totalWeight=data?.totalWeight||pendingMeta.totalWeight||'';
-  const uniqueCount=Number(data?.uniqueStoreCount)||stores.length;
-  const noBase=data?.baseDatabaseAvailable===false;
-  // 待定/新增属于用户需要优先处理的门店，显示在列表最前；正常基准门店保持原有线路顺序。
-  const orderedStores=noBase?stores:[...stores.filter(item=>item?.needsReview===true),...stores.filter(item=>item?.isNew===true&&item?.needsReview!==true),...stores.filter(item=>item?.needsReview!==true&&item?.isNew!==true)];
-  const lines=[`日期：${date}`,`线路：${route}`,`车辆：${vehicle||'未识别'}`,noBase?'基准库：⚠️ 未建立，以下按本次运单识别顺序显示':`门店：${uniqueCount}家`,`重量：${totalWeight||'未识别'}`,'',`【门店列表】`];
-  orderedStores.forEach((item,index)=>{const prefix=String(index+1).padStart(2,'0');const mark=noBase?'':item?.isNew?'⚠️ 新增：':'';const review=noBase?'':item?.needsReview?'⚠️ 待定：':'';lines.push(`${prefix}. ${mark||review}${storeName(item)}`)});
-  const value=lines.join('\\n');reviewMode=true;input.value=value;input.removeAttribute('placeholder');input.scrollTop=0;return true
-}
 window.openPendingReview=()=>{
   const pending=parsedOrders.filter(item=>item?.needsReview===true);
   if(!pending.length)return;
