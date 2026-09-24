@@ -29,7 +29,7 @@ async function boot(){
   try{
     const me=await api('/api/me');
     if(!me.success||me.user?.role!=='system_admin') throw new Error('当前账号没有系统管理权限');
-    $('#adminUser').textContent=(me.user.name||me.user.username)+' · 系统管理员';
+    $('#adminUser').textContent=(me.user.name||me.user.username)+' · '+(me.user.adminLevel==='primary'?'主系统管理员':'系统管理员');
     const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
     if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
@@ -79,14 +79,14 @@ async function loadLogs(){
   catch(e){notice(e.message,true); throw e}}
 function renderUsers(){
   $('#userCount').textContent=users.length+' 个账号';
-  const orderedUsers=[...users].sort((a,b)=>(a?.role==='system_admin'?0:1)-(b?.role==='system_admin'?0:1));
+  const orderedUsers=[...users].sort((a,b)=>(a?.adminLevel==='primary'?0:a?.role==='system_admin'?1:2)-(b?.adminLevel==='primary'?0:b?.role==='system_admin'?1:2));
   $('#userList').innerHTML=orderedUsers.map(u=>`<article class="user-card">
-    <div class="user-main"><div><div class="name">${esc(u.name||u.username)}</div><div class="meta">${esc(u.username)} · ${esc(u.id)}</div></div><span class="badge">${esc(u.status==='active'?'正常':'停用')}</span></div>
+    <div class="user-main"><div><div class="name">${esc(u.name||u.username)}</div><div class="meta">${esc(u.username)} · ${esc(u.id)}</div></div><span class="badge">${esc(u.adminLevel==='primary'?'主系统管理员':u.status==='active'?'正常':'停用')}</span></div>
     <div class="meta">角色：${esc(u.role)} · 绑定：${esc(u.boundRouteId||'未绑定')} ${u.routeDuty?'· '+esc(u.routeDuty):''}</div>
     <div class="actions">
       <button onclick="toggleUser('${escAttr(u.id)}','${u.status==='active'?'disabled':'active'}')">${u.status==='active'?'停用':'启用'}</button>
       <button onclick="resetPassword('${escAttr(u.id)}')">重置密码</button>
-      <button onclick="setRole('${escAttr(u.id)}','${u.role==='system_admin'?'driver':'system_admin'}')">${u.role==='system_admin'?'取消管理员':'设为管理员'}</button>
+      <button onclick="setRole('${escAttr(u.id)}','${u.role==='system_admin'?'driver':'system_admin'}')">${u.adminLevel==='primary'?'主系统管理员':u.role==='system_admin'?'取消管理员':'设为管理员'}</button>
       ${u.role!=='system_admin'&&!u.boundRouteId?'<button onclick="deleteUser(\''+escAttr(u.id)+'\')">删除账号</button>':''}
     </div>
   </article>`).join('')||'<div class="meta">暂无用户</div>';
