@@ -33,6 +33,10 @@ export async function onRequestPost({ request, env }) {
 
       userId = await authenticateUser(env, username, password);
       if (!userId) return json({ message: '智配 One 账号或密码错误' }, 401);
+      const authenticatedUser = parseRecord(await redisGet(env, `user:${userId}`));
+      if (authenticatedUser?.role === 'system_admin' && authenticatedUser?.adminLevel === 'primary') {
+        return json({ message: '主系统管理员仅可进入系统管理端，不能使用业务小程序登录' }, 403);
+      }
 
       const bound = await redisSetNx(env, openidKey, userId);
       if (!bound) {
@@ -45,6 +49,9 @@ export async function onRequestPost({ request, env }) {
 
     const user = parseRecord(await redisGet(env, `user:${userId}`));
     if (!user || user.status === 'disabled') return json({ message: '用户不存在或已停用' }, 401);
+    if (user.role === 'system_admin' && user.adminLevel === 'primary') {
+      return json({ message: '主系统管理员仅可进入系统管理端，不能使用业务小程序登录' }, 403);
+    }
 
     const safeUser = publicUser(user);
     const token = await createMiniToken(env, user);
