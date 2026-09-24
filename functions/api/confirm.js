@@ -50,7 +50,9 @@ export async function onRequest({ request, env }) {
     if (!totalWeight) return json({ success: false, code: 'WEIGHT_MISSING', error: '未识别到商品总量，请重新解析后再确认' }, 422);
 
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base, route);
-    const learnedNewStoreCount = noBase ? 0 : canonical.filter(item => item?.isNew === true).length;
+    const duplicateCount = countDuplicates(canonical);
+    const uniqueCanonical = dedupeCanonical(canonical);
+    const learnedNewStoreCount = noBase ? 0 : uniqueCanonical.filter(item => item?.isNew === true).length;
     // 真正新增门店：线路维护用户确认后立即写入线路基准库，并生成永久 storeId。
     // 非维护用户不能修改基准库，因此保留新增状态，等待线路维护用户后续补入。
     if (!noBase && canManageRoute(session.user || session, route)) {
@@ -58,8 +60,6 @@ export async function onRequest({ request, env }) {
       const learned = await learnNewStoresIntoBase(env, route, canonical, session.id);
       if (Array.isArray(learned?.stores)) base = learned.stores;
     }
-    const duplicateCount = countDuplicates(canonical);
-    const uniqueCanonical = dedupeCanonical(canonical);
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
     const confirmRequestId = String(body.confirmRequestId || '').trim().slice(0, 160);
     const idempotencyKey = confirmRequestId ? routeOrderKey(route, `confirm:${date}:${confirmRequestId}`) : '';
