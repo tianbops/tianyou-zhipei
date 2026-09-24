@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 系统管理：路线绑定
+// 天友智配One V1.0 - 系统管理：线路绑定
 import { requireSystemAdmin } from '../_auth.js';
 import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, redisSet, scanUsers } from '../_data.js';
 
@@ -60,10 +60,10 @@ export async function onRequest({ request, env }) {
       const route = normalizeRoute(new URL(request.url).searchParams.get('route'));
       if (route) {
         const record = await getRoute(env, route);
-        return json({ success: true, route: record || { id: route, name: route, driverUserId: '', deliveryUserId: '', boundUserIds: [] } });
+        if (!record) return json({ success: false, error: '线路不存在' , code: 'ROUTE_NOT_FOUND' }, 404);
+        return json({ success: true, route: record });
       }
 
-      // 系统管理页面使用管理员专用列表接口，避免依赖普通调度接口。
       const records = [];
       let cursor = '0';
       do {
@@ -78,7 +78,6 @@ export async function onRequest({ request, env }) {
         }
       } while (cursor !== '0');
 
-      // 管理员创建日志是线路实体的审计依据。若历史线路记录异常缺失，读取管理列表时自动修复实体。
       await repairCreatedRoutesFromAdminLogs(env, records);
       const users = await scanUsers(env);
       const byId = new Map(records.map(record => [String(record.id), record]));
@@ -150,27 +149,18 @@ export async function onRequest({ request, env }) {
     }
 
     const current = await getRoute(env, route);
+    if (!current) return json({ success: false, error: '线路不存在，请先创建线路后再绑定人员', code: 'ROUTE_NOT_FOUND' }, 404);
     const now = new Date().toISOString();
 
-    // 管理员直接设置线路人员时，也不得静默替换已有岗位人员。
-    const currentDriver = String(current?.driverUserId || '');
-    const currentDelivery = String(current?.deliveryUserId || '');
-    if (driverUserId && currentDriver && currentDriver !== driverUserId) {
-      return json({ success: false, error: '该线路驾驶员岗位已有人员，不能直接替换' }, 409);
-    }
-    if (deliveryUserId && currentDelivery && currentDelivery !== deliveryUserId) {
-      return json({ success: false, error: '该线路配送员岗位已有人员，不能直接替换' }, 409);
-    }
-    if ([driverUserId, deliveryUserId].filter(Boolean).length > 2) {
-      return json({ success: false, error: '线路人员已满，无法继续绑定' }, 409);
-    }
+    const currentDriver = String(current.driverUserId || '');
+    const currentDelivery = String(current.deliveryUserId || '');
+    if (driverUserId && currentDriver && currentDriver !== driverUserId) return json({ success: false, error: '该线路驾驶员岗位已有人员，不能直接替换' }, 409);
+    if (deliveryUserId && currentDelivery && currentDelivery !== deliveryUserId) return json({ success: false, error: '该线路配送员岗位已有人员，不能直接替换' }, 409);
 
-    // 清理本次解绑的旧用户绑定字段。
-    // 同时读取角色字段，兼容早期路线记录中 boundUserIds 缺失/过期的情况。
     const oldIds = [...new Set([
-      ...(Array.isArray(current?.boundUserIds) ? current.boundUserIds : []),
-      String(current?.driverUserId || ''),
-      String(current?.deliveryUserId || '')
+      ...(Array.isArray(current.boundUserIds) ? current.boundUserIds : []),
+      String(current.driverUserId || ''),
+      String(current.deliveryUserId || '')
     ].filter(Boolean))];
 
     const userUpdates = [];
@@ -194,7 +184,6 @@ export async function onRequest({ request, env }) {
       if (ids.includes(oldId)) continue;
       const oldUser = await getUser(env, oldId);
       if (!oldUser) continue;
-      // 防止旧路线记录中的过期绑定ID误清空用户当前已经绑定的新路线。
       const oldUserBoundRoute = normalizeRoute(oldUser.boundRouteId);
       if (oldUserBoundRoute && oldUserBoundRoute !== route) continue;
       userUpdates.push({
@@ -211,19 +200,18 @@ export async function onRequest({ request, env }) {
       driverUserId,
       deliveryUserId,
       boundUserIds: [...new Set([driverUserId, deliveryUserId].filter(Boolean))],
-      status: current?.status === 'disabled' ? 'disabled' : 'active',
-      createdAt: current?.createdAt || now,
+      status: current.status === 'disabled' ? 'disabled' : 'active',
+      createdAt: current.createdAt || now,
       updatedAt: now
     };
 
     await atomicRouteBinding(env, {
       routeKey: routeRecordKey(route),
-      expectedRouteUpdatedAt: current?.updatedAt || '',
+      expectedRouteUpdatedAt: current.updatedAt || '',
       routeRecord: record,
       userUpdates
     });
 
-    // 核心绑定事务成功后，日志失败不能把“已成功绑定”误报成接口失败。
     await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId })
       .catch(error => console.warn('bind route audit log failed', error));
 
@@ -238,7 +226,7 @@ export async function onRequest({ request, env }) {
     });
   } catch (error) {
     console.error('admin routes error', error);
-    return json({ success: false, error: error?.message || '路线绑定失败' }, 503);
+    return json({ success: false, error: error?.message || '线路绑定失败' }, 503);
   }
 }
 
