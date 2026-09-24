@@ -191,31 +191,28 @@ export function normalizeStores(stores) {
   if (!Array.isArray(stores)) return [];
   return stores.map((store, index) => {
     const name = String(store?.name || store?.storeName || store?.title || store?.customerName || store?.['门店名称'] || '').trim();
-    if (!name) return null;
-    const code = String(store?.code || index + 1).padStart(2, '0');
-    const baseCode = String(store?.baseCode || '').trim();
-    const storeId = String(store?.storeId || '').trim() || createStableStoreId(baseCode || code, name);
+    const existingId = String(store?.storeId || '').trim();
+    const legacyId = existingId || String(store?.baseCode || '').trim() || createStableStoreId(name);
     return {
       ...store,
-      storeId,
-      baseCode,
-      code,
+      storeId: legacyId,
+      code: String(store?.code || index + 1).padStart(2, '0'),
       routeOrder: index + 1,
       name,
       nav: String(store?.nav || store?.navigation || store?.navUrl || store?.amap || '').trim(),
       note: String(store?.note || store?.remark || '').trim()
     };
-  }).filter(Boolean);
+  }).filter(store => store.name);
 }
 
-function createStableStoreId(identity, name) {
-  const seed = String(identity || name || '').trim() + '\\u0000' + String(name || '').trim();
+function createStableStoreId(name) {
+  const input = String(name || '').trim().replace(/[\s\u3000]+/g, '').toLowerCase();
   let hash = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    hash ^= seed.charCodeAt(i);
+  for (let index = 0; index < input.length; index++) {
+    hash ^= input.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
-  return 'S' + (hash >>> 0).toString(36).padStart(7, '0');
+  return 'store-' + (hash >>> 0).toString(36);
 }
 
 export async function listUsersByRoute(env, route) {
