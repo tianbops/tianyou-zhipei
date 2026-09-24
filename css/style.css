@@ -1887,3 +1887,40 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
   display:none!important;
   visibility:hidden!important;
 }
+
+
+/* 2026-09-24 · 调度线路控件统一纳入首页全局UI基线 */
+.dispatch-route-wrap{
+  display:grid!important;
+  gap:6px!important;
+  margin:8px 12px 10px!important;
+  color:var(--one-secondary)!important;
+  font-size:12px!important;
+  line-height:18px!important;
+}
+.dispatch-route-select{
+  width:100%!important;
+  height:40px!important;
+  min-height:40px!important;
+  padding:0 10px!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  border-radius:11px!important;
+  background:#10161D!important;
+  color:var(--one-text)!important;
+  font:inherit!important;
+  font-size:13px!important;
+  outline:none!important;
+  box-shadow:none!important;
+  appearance:auto!important;
+}
+.dispatch-route-select:focus{
+  border-color:rgba(208,215,220,.28)!important;
+  box-shadow:0 0 0 2px rgba(208,215,220,.08)!important;
+}
+.dispatch-route-select:disabled{
+  opacity:.6!important;
+}
+@media(max-width:380px){
+  .dispatch-route-wrap{margin:7px 11px 9px!important}
+  .dispatch-route-select{height:38px!important;min-height:38px!important;font-size:12px!important}
+}
