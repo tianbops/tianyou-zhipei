@@ -204,3 +204,10 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 #routeBindingModal.state-available #unbindRouteButton{display:none!important}
 #routeBindingModal.state-pending #unbindRouteButton,
 #routeBindingModal.state-bound #unbindRouteButton{display:flex!important}
+
+
+/* UI 2.5 · 待审核线路绑定操作收口 2026-09-24 */
+#routeBindingModal.state-pending .route-binding-close-action,
+#routeBindingModal.state-pending #routeBindingButton{display:none!important}
+#routeBindingModal.state-pending .sheet-actions{margin-top:18px!important}
+#routeBindingModal.state-pending #unbindRouteButton{flex:1 1 100%!important;height:44px!important}
