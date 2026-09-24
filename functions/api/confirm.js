@@ -1,6 +1,6 @@
 // 天友智配One - 用户独立运单确认入库 API
 import { authRequired } from './_auth.js';
-import { canManageRoute, canUseRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey, redisSet } from './_data.js';
+import { canManageRoute, canUseRoute, getRoute, legacyUserOrderKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeOrderKey, redisSet } from './_data.js';
 
 const REDIS_TIMEOUT_MS = 4000;
 const ORDER_LOCK_TTL_SECONDS = 60;
@@ -19,6 +19,8 @@ export async function onRequest({ request, env }) {
     const route = normalizeRoute(body.route || session.boundRouteId);
     const userId = normalizeUserId(session.id);
     if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该线路', stage }, 403);
+    const routeRecord = await getRoute(env, route);
+    if (!routeRecord || routeRecord.status === 'disabled') return json({ success: false, error: '当前线路不存在或已停用', stage }, 404);
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
 
     const pending = body.orders.filter(item => item?.needsReview === true || item?.matchType === 'review' || String(item?.candidate || '').trim());
