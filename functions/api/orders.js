@@ -237,7 +237,7 @@ async function readOrder(request, env, session) {
     try {
       const repaired = [...history, { ...selected }];
       repaired.sort((a, b) => (Date.parse(String(b?.updatedAt || b?.createdAt || '')) || 0) - (Date.parse(String(a?.updatedAt || a?.createdAt || '')) || 0));
-      await redisSet(env, routeOrderKey(route, 'history:' + date), repaired.slice(0, 90));
+      await redisSet(env, routeOrderKey(route, 'history:' + date), repaired.slice(0, 100));
     } catch (error) {
       console.warn('当日订单恢复历史索引失败', route, date, error?.message || error);
     }
