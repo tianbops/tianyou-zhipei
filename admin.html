@@ -24,7 +24,7 @@
       <button class="tab" data-tab="routes">线路管理</button>
       <button class="tab" data-tab="requests">绑定申请</button>
       <button class="tab" data-tab="logs">管理日志</button>
-      <button class="tab" data-tab="reset">数据重置</button>
+      <button class="tab" data-tab="reset">系统数据重置</button>
     </nav>
 
     <section id="usersTab" class="panel">
@@ -62,15 +62,15 @@
     <section id="resetTab" class="panel hidden">
       <div class="reset-card">
         <div class="reset-title">清空智配One业务数据</div>
-        <p class="reset-warning">此操作不可恢复。将删除当前 Redis 中的用户、线路、基准库、今日运单、历史记录、学习数据、绑定关系、管理日志及登录关联数据。</p>
-        <p class="reset-note">不会修改 GitHub 代码、Cloudflare 环境变量或 Upstash 服务本身。清空后仅保留最初建立的“主系统管理员”账号，其余账号及业务数据全部清除；线路和基准库需要重新建立。</p>
+        <p class="reset-warning">此操作不可恢复。将清除当前 Redis 中的业务运行数据及账号数据。</p>
+        <p class="reset-note">不会修改 GitHub 代码、Cloudflare 环境变量或 Upstash 服务本身。执行后仅保留最初建立的“主系统管理员”账号；其他账号与业务数据不再保留，线路和基准库需要重新建立。</p>
         <label class="confirm-label">数据重置密钥
           <div class="reset-key-row"><input id="resetKey" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="输入或粘贴 Cloudflare 中配置的 DATA_RESET_KEY"><button id="toggleResetKey" type="button" class="key-toggle">隐藏</button></div>
         </label>
         <label class="confirm-label">确认文字
           <input id="resetConfirmation" autocomplete="off" placeholder="输入：确认清空智配One数据">
         </label>
-        <button id="resetDataBtn" class="danger-btn">清空全部智配One业务数据</button>
+        <button id="resetDataBtn" class="danger-btn">执行系统数据重置</button>
         <div id="resetResult" class="reset-result hidden"></div>
       </div>
     </section>
