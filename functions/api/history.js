@@ -433,7 +433,7 @@ async function purgeExpiredHistory(env, route) {
 
 async function scanKeys(env, pattern) {
   let cursor = '0', keys = [];
-  for (let page = 0; page < 5; page += 1) {
+  for (let page = 0; page < 100; page += 1) {
     const response = await fetch(`${env.UPSTASH_REDIS_REST_URL}/scan/${cursor}/match/${encodeURIComponent(pattern)}/count/100`, { headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}` }, cache: 'no-store' });
     if (!response.ok) break;
     const data = await response.json().catch(() => ({}));
