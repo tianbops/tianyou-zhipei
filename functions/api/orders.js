@@ -70,6 +70,8 @@ async function saveOrder(request, env, session) {
       orders, totalWeight, count: orders.length, uniqueStoreCount: orders.length,
       matchedCount: orders.filter(x => x.matched).length,
       newStoreCount: orders.filter(x => x.isNew).length,
+      reviewCount: Number(existing.reviewCount) || 0,
+      baseDatabaseAvailable: existing.baseDatabaseAvailable !== false,
       duplicateCount: Math.max(Number(existing.duplicateCount) || 0, duplicateCount),
       recognizedCount: positiveInt(existing.recognizedCount) || rawOrderCount, rawOrderCount,
       source: String(existing.source || source).trim(), updatedAt: new Date().toISOString()
@@ -95,6 +97,7 @@ async function saveOrder(request, env, session) {
         return { ...item, vehicle: todayData.vehicle, updatedAt: todayData.updatedAt };
       });
       if (!found) {
+        if (Array.isArray(historyData)) return json({ error: '原订单历史记录不存在，不能只修改车辆' }, 409);
         updatedHistory.push({
           ...existing,
           userId: todayData.userId,
