@@ -5,7 +5,6 @@
 export const API_VERSION = 'v1';
 export const ROLES = Object.freeze({
   DRIVER: 'driver',
-  ROUTE_ADMIN: 'route_admin',
   SYSTEM_ADMIN: 'system_admin'
 });
 
