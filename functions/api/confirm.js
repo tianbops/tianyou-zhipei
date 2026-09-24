@@ -112,7 +112,6 @@ export async function onRequest({ request, env }) {
         };
         // 重复确认也必须修复 today key：旧数据迁移/清理后可能出现“历史有数据、today 缺失/为空”。
         await saveHistoryAndLatest(env, userId, route, date, duplicate, duplicateLatest);
-        await redisSet(env, routeOrderKey(route, 'today:' + date), duplicate);
         if (idempotencyKey) await saveIdempotency(env, idempotencyKey, duplicate.orderBatchId).catch(error => console.warn('确认幂等索引写入失败', error));
         return json({ success: true, duplicate: true, data: duplicate });
       }
@@ -417,6 +416,7 @@ async function findDuplicateOrder(env, userId, route, date, candidate, boundRout
 }
 
 async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
+  const todayKey = routeOrderKey(route, `today:${date}`);
   const historyKey = routeOrderKey(route, `history:${date}`);
   const latestKey = routeOrderKey(route, 'latest');
   let old = await redisGet(env, historyKey);
@@ -437,11 +437,12 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
   list.sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')));
   const payload = list.slice(0, 100);
   const result = await redisTransaction(env, [
+    ['SET', todayKey, JSON.stringify(today)],
     ['SET', historyKey, JSON.stringify(payload)],
     ['SET', latestKey, JSON.stringify(latest)]
   ]);
-  if (!Array.isArray(result) || result.length !== 2 || result.some(item => item && item.error)) {
-    throw new Error('重复订单历史与索引写入未完成');
+  if (!Array.isArray(result) || result.length !== 3 || result.some(item => item && item.error)) {
+    throw new Error('重复订单今日、历史与索引写入未完成');
   }
 }
 
