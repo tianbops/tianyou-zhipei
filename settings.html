@@ -45,17 +45,6 @@
   </div>
 </section>
 
-<section class="group" id="adminSetupGroup" style="display:none">
-  <div class="group-title">系统初始化</div>
-  <div class="settings-card">
-    <button class="setting-row" type="button" onclick="openModal('adminSetupModal')">
-      <span class="row-icon"><span class="z-icon" aria-hidden="true">⚙</span></span>
-      <span class="row-main"><span class="row-title">初始化系统管理员</span><span class="row-sub">将当前账号设置为系统管理员</span></span>
-      <span class="row-arrow" aria-hidden="true">›</span>
-    </button>
-  </div>
-</section>
-
 <section class="group">
   <div class="group-title">账号与安全</div>
   <div class="settings-card">
@@ -85,9 +74,6 @@
 
 <button class="logout-btn" type="button" onclick="Auth.logout()">退出登录</button>
 </main>
-
-<div class="modal" id="adminSetupModal" onclick="backdropClose(event,'adminSetupModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="adminSetupTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="adminSetupTitle">初始化系统管理员</div><button class="close-btn" type="button" onclick="closeModal('adminSetupModal')" aria-label="关闭">×</button></div><div class="sheet-note">仅将当前登录账号提升为系统管理员。初始化密钥仅用于本次验证，不会保存到浏览器。</div><div class="field"><label class="field-label" for="adminSetupKey">管理员初始化密钥</label><div class="input-wrap"><input id="adminSetupKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="请输入初始化密钥"><button class="eye" type="button" onclick="togglePassword('adminSetupKey',this)" aria-label="显示或隐藏密钥">◉</button></div></div><div id="adminSetupMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('adminSetupModal')">取消</button><button class="primary-btn" id="adminSetupButton" type="button" onclick="bootstrapAdmin()">初始化</button></div></section></div>
-
 
 <div class="modal" id="routeBindingModal" onclick="backdropClose(event,'routeBindingModal')"><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="routeBindingTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title" id="routeBindingTitle">线路绑定</div><button class="close-btn" type="button" onclick="closeModal('routeBindingModal')" aria-label="关闭">×</button></div><div class="sheet-note" id="routeBindingNote">未绑定用户可以申请已有线路；管理员通过后才会正式绑定。</div><div class="field" id="bindingRouteField"><label class="field-label" for="bindingRoute">申请线路</label><div class="input-wrap"><select id="bindingRoute"></select></div></div><div class="field" id="bindingDutyField"><label class="field-label">申请身份</label><div class="duty-picker" id="dutyPicker" role="group" aria-label="申请身份"><button type="button" class="duty-option active" data-duty="driver" onclick="selectDuty('driver')"><span class="duty-mark">驾</span><span class="duty-text"><strong>驾驶员</strong><small>负责车辆驾驶</small></span></button><button type="button" class="duty-option" data-duty="delivery" onclick="selectDuty('delivery')"><span class="duty-mark">配</span><span class="duty-text"><strong>配送员</strong><small>负责随车配送</small></span></button></div><input id="bindingDuty" type="hidden" value="driver"></div><div id="routeBindingMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn route-binding-close-action" type="button" onclick="closeModal('routeBindingModal')">取消</button><button class="secondary-btn" id="unbindRouteButton" type="button" onclick="unbindRoute()">解除当前绑定</button><button class="primary-btn" id="routeBindingButton" type="button" onclick="submitRouteBinding()">提交申请</button></div></section></div>
 
@@ -128,34 +114,11 @@ async function init(){
     const user=await Auth.getProfile();
     updateHero(user);
     $('vehicle').value=user?.vehicle||'';
-    const setupMode = new URLSearchParams(location.search).get('setup') === '1';
-    if(setupMode){
-      $('adminSetupGroup').style.display='';
-      history.replaceState({},'', 'settings.html');
-      setTimeout(()=>openModal('adminSetupModal'),120);
-    }
   }catch(error){
     if(error.status===401){location.replace('index.html');return}
     updateHero({name:'用户',username:'—'})
   }
 }
-async function bootstrapAdmin(){
-  const key=$('adminSetupKey').value.trim();
-  const button=$('adminSetupButton');
-  hideMessage('adminSetupMessage');
-  if(!key)return showMessage('adminSetupMessage','请输入管理员初始化密钥');
-  button.disabled=true;button.textContent='初始化中…';
-  try{
-    const response=await fetch('/api/admin/bootstrap',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Bootstrap-Key':key},credentials:'same-origin',cache:'no-store',body:JSON.stringify({username:currentUser?.username||''})});
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok||!data.success)throw new Error(data.error||`初始化失败（HTTP ${response.status}）`);
-    $('adminSetupKey').value='';
-    showMessage('adminSetupMessage','系统管理员初始化成功，请重新登录。','success');
-    setTimeout(()=>{Auth.logout();location.replace('index.html?adminInitialized=1')},800);
-  }catch(error){showMessage('adminSetupMessage',error.message||'初始化失败，请检查密钥后重试');}
-  finally{button.disabled=false;button.textContent='初始化'}
-}
-
 async function openRouteBinding(){
   hideMessage('routeBindingMessage');
   try{
