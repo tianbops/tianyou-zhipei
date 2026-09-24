@@ -113,7 +113,7 @@ window.Auth = {
     if (['index.html', 'login.html', ''].includes(page)) {
       const user = await this.getCurrentServerUser().catch(() => null);
       if (user) {
-        const target = 'home.html';
+        const target = user.adminLevel === 'primary' ? 'admin.html' : 'home.html';
         if (location.pathname.endsWith('/index.html') || location.pathname.endsWith('/')) location.replace(target);
       }
       return !user;
@@ -122,6 +122,10 @@ window.Auth = {
     this.authPromise = this.getCurrentServerUser().then(user => {
       if (!user) {
         location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
+        return false;
+      }
+      if (user.adminLevel === 'primary' && page !== 'admin.html') {
+        location.replace(location.pathname.includes('/pages/') ? '../admin.html' : 'admin.html');
         return false;
       }
       return true;
