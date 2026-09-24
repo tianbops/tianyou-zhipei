@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>智配One · 系统管理</title>
-  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/admin.css?v=20260924-2">
 </head>
 <body>
   <main class="admin-shell">
@@ -28,17 +28,19 @@
     </nav>
 
     <section id="usersTab" class="panel">
-      <div class="panel-head"><div><h2>用户</h2><span id="userCount">0</span></div><button id="refreshUsers" class="primary">刷新</button></div>
+      <div class="panel-head"><div><h2>用户</h2><span id="userCount">0 个账号</span></div><button id="refreshUsers" class="ghost">刷新</button></div>
       <div id="userList" class="user-list"></div>
     </section>
 
     <section id="routesTab" class="panel hidden">
-      <div class="panel-head"><div><h2>线路管理</h2><span>创建线路、绑定驾驶员与配送员</span></div><button id="refreshRoutes" class="primary">刷新</button></div>
-      <div class="route-create">
-        <label>新建线路<input id="newRouteInput" placeholder="例如 17号线" inputmode="numeric" autocomplete="off"></label>
-        <button id="createRoute" class="primary" type="button">创建线路</button>
+      <div class="panel-head"><div><h2>线路管理</h2><span>管理线路及驾驶员、配送员配置</span></div><div class="panel-head-actions"><button id="refreshRoutes" class="ghost">刷新</button><button id="showCreateRoute" class="primary">＋ 新建线路</button></div></div>
+      <div id="routeCreatePanel" class="route-create hidden">
+        <div class="section-label">新建线路</div>
+        <label>线路名称<input id="newRouteInput" placeholder="例如 17号线" inputmode="text" autocomplete="off"></label>
+        <div class="form-actions"><button id="cancelCreateRoute" class="ghost" type="button">取消</button><button id="createRoute" class="primary" type="button">创建线路</button></div>
       </div>
-      <div class="route-form">
+      <div id="routeEditPanel" class="route-form hidden">
+        <div class="route-edit-head"><div><strong>人员配置</strong><span id="routeEditName">选择线路</span></div><button id="cancelRouteEdit" class="ghost" type="button">取消</button></div>
         <label>线路<select id="routeInput"><option value="">选择线路</option></select></label>
         <label>驾驶员<select id="driverSelect"></select></label>
         <label>配送员<select id="deliverySelect"></select></label>
@@ -48,12 +50,12 @@
     </section>
 
     <section id="requestsTab" class="panel hidden">
-      <div class="panel-head"><div><h2>绑定申请</h2><span>普通用户提交的线路绑定申请</span></div><button id="refreshRequests" class="primary">刷新</button></div>
+      <div class="panel-head"><div><h2>绑定申请</h2><span>普通用户提交的线路绑定申请</span></div><button id="refreshRequests" class="ghost">刷新</button></div>
       <div id="requestList" class="route-list"></div>
     </section>
 
     <section id="logsTab" class="panel hidden">
-      <div class="panel-head"><div><h2>管理日志</h2><span>系统管理操作记录</span></div><button id="refreshLogs" class="primary">刷新</button></div>
+      <div class="panel-head"><div><h2>管理日志</h2><span>系统管理操作记录</span></div><button id="refreshLogs" class="ghost">刷新</button></div>
       <div id="logList" class="route-list"></div>
     </section>
 
