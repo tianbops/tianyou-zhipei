@@ -284,10 +284,13 @@ function dedupeOrders(orders, base) {
 function sortByRouteBase(orders, base) {
   if (!base.length) return orders.map((item, index) => ({ ...item, code: String(index + 1).padStart(2, '0') }));
   const orderMap = new Map(base.map((store, index) => [store.nameKey, Number(store.routeOrder) || index + 1]));
+  const storeIdMap = new Map(base.filter(store => String(store?.storeId || '').trim()).map((store, index) => [String(store.storeId).trim(), Number(store.routeOrder) || index + 1]));
   const codeMap = new Map(base.filter(store => store.businessCode).map((store, index) => [store.businessCode, Number(store.routeOrder) || index + 1]));
   const matched = [], news = [];
   for (const order of orders) {
-    const routeOrder = orderMap.get(normalizeStoreName(order.name)) ?? codeMap.get(order.businessCode || extractBusinessCode(order.name));
+    const routeOrder = storeIdMap.get(String(order.storeId || '').trim())
+      ?? orderMap.get(normalizeStoreName(order.name))
+      ?? codeMap.get(order.businessCode || extractBusinessCode(order.name));
     if (routeOrder != null && !order.isNew) matched.push({ ...order, routeOrder, matched: true, isNew: false });
     else news.push({ ...order, routeOrder: null, matched: false, isNew: true });
   }
