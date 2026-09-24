@@ -68,7 +68,9 @@ export async function onRequest({ request, env }) {
     };
     await redisCommand(env, ['SET', `user:${encodeKey(preserved.id)}`, JSON.stringify(preserved)]);
     await redisCommand(env, ['SET', `user:username:${encodeURIComponent(String(preserved.username || '').trim().toLowerCase())}`, preserved.id]);
-    await redisCommand(env, ['SET', PRIMARY_ADMIN_KEY, JSON.stringify({ userId: preserved.id, username: preserved.username, createdAt: primaryAdmin.createdAt || '', markedAt: new Date().toISOString() })]);
+    const primaryMarker = { userId: preserved.id, username: preserved.username, createdAt: primaryAdmin.createdAt || '', markedAt: new Date().toISOString() };
+    await redisCommand(env, ['SET', PRIMARY_ADMIN_KEY, JSON.stringify(primaryMarker)]);
+    await redisCommand(env, ['SET', 'system:admin:bootstrap:used', JSON.stringify({ usedAt: primaryMarker.markedAt, userId: preserved.id })]);
 
     return json({
       success: true,
