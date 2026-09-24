@@ -267,8 +267,10 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
         byId.set(target.storeId, target);
         byName.set(nameKey, target);
         changed = true;
+        learnedCount++;
       } else if (!String(existing.storeId || '').trim()) {
         existing.storeId = crypto.randomUUID();
+        byId.set(existing.storeId, existing);
         changed = true;
       }
 
@@ -280,7 +282,6 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
       item.isNew = false;
       item.matchType = 'learned-new';
       item.matchScore = 1;
-      learnedCount++;
     }
 
     const normalizedStores = stores.map((store, index) => ({
