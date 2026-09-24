@@ -41,6 +41,9 @@ export async function onRequest({ request, env }) {
       updated.role = role;
     }
     if (body.status !== undefined) {
+      if (String(user.adminLevel || '') === 'primary' && String(body.status || '').trim() !== 'active') {
+        return json({ success: false, error: '主系统管理员账号不可停用' }, 409);
+      }
       const status = String(body.status || '').trim();
       if (!['active', 'disabled'].includes(status)) return json({ success: false, error: '非法用户状态' }, 400);
       updated.status = status;
