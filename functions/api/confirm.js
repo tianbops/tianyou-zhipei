@@ -329,7 +329,7 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
   if (index >= 0) list[index] = record;
   else list.push(record);
   list.sort((x, y) => String(y?.updatedAt || '').localeCompare(String(x?.updatedAt || '')));
-  const payload = list.slice(0, 90);
+  const payload = list.slice(0, 100);
   const result = await redisTransaction(env, [
     ['SET', historyKey, JSON.stringify(payload)],
     ['SET', latestKey, JSON.stringify(latest)]
@@ -372,7 +372,7 @@ async function saveHistory(env, userId, route, date, today) {
   let saveError = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      await redisSet(env, keyName, list.slice(0, 90));
+      await redisSet(env, keyName, list.slice(0, 100));
       saveError = null;
       break;
     } catch (error) {
