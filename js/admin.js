@@ -6,7 +6,10 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
   $('#refreshUsers').onclick=loadUsers;
   $('#refreshRoutes').onclick=loadRoutes;
-$('#createRoute').onclick=createRoute;
+  $('#showCreateRoute').onclick=()=>{$('#routeCreatePanel').classList.remove('hidden');$('#newRouteInput').focus();};
+  $('#cancelCreateRoute').onclick=()=>$('#routeCreatePanel').classList.add('hidden');
+  $('#createRoute').onclick=createRoute;
+  $('#cancelRouteEdit').onclick=closeRouteEditor;
   $('#refreshRequests').onclick=loadRequests;
   $('#refreshLogs').onclick=loadLogs;
   $('#resetDataBtn').onclick=resetData;
@@ -39,7 +42,7 @@ async function createRoute(){
   const input=$('#newRouteInput'); const route=input.value.trim();
   if(!route){notice('请输入线路，例如 17号线',true);return}
   const button=$('#createRoute'); button.disabled=true; button.textContent='创建中…';
-  try{const r=await api('/api/admin/routes',{method:'POST',body:{route}});if(!r.success)throw new Error(r.error||'线路创建失败');input.value='';notice('线路 '+r.route.name+' 已创建');await loadRoutes();fillSelects()}catch(e){notice(e.message||'线路创建失败',true)}finally{button.disabled=false;button.textContent='创建线路'}
+  try{const r=await api('/api/admin/routes',{method:'POST',body:{route}});if(!r.success)throw new Error(r.error||'线路创建失败');input.value='';$('#routeCreatePanel').classList.add('hidden');notice('线路 '+r.route.name+' 已创建');await loadRoutes();fillSelects()}catch(e){notice(e.message||'线路创建失败',true)}finally{button.disabled=false;button.textContent='创建线路'}
 }
 async function loadRoutes(){
   try{
@@ -75,7 +78,7 @@ async function loadLogs(){
   try{const r=await api(endpoint);if(!r.success)throw new Error(`${endpoint}：${r.error||'日志读取失败'}`);$('#logList').innerHTML=(r.logs||[]).map(x=>`<article class="route-card"><div class="name">${esc(x.action)}</div><div class="meta">${esc(x.createdAt)} · ${esc(x.targetType)} · ${esc(x.targetId)}</div></article>`).join('')||'<div class="meta">暂无日志</div>'; return true}
   catch(e){notice(e.message,true); throw e}}
 function renderUsers(){
-  $('#userCount').textContent=users.length;
+  $('#userCount').textContent=users.length+' 个账号';
   const orderedUsers=[...users].sort((a,b)=>(a?.role==='system_admin'?0:1)-(b?.role==='system_admin'?0:1));
   $('#userList').innerHTML=orderedUsers.map(u=>`<article class="user-card">
     <div class="user-main"><div><div class="name">${esc(u.name||u.username)}</div><div class="meta">${esc(u.username)} · ${esc(u.id)}</div></div><span class="badge">${esc(u.status==='active'?'正常':'停用')}</span></div>
@@ -89,7 +92,31 @@ function renderUsers(){
   </article>`).join('')||'<div class="meta">暂无用户</div>';
 }
 function renderRoutes(){
-  $('#routeList').innerHTML=routes.map(r=>`<article class="route-card"><div class="route-main"><div><div class="name">${esc(r.name||r.id)}</div><div class="meta">驾驶员：${esc(findUser(r.driverUserId)?.name||'未绑定')} · 配送员：${esc(findUser(r.deliveryUserId)?.name||'未绑定')}</div></div> </div></article>`).join('')||'<div class="meta">暂无已登记线路</div>';
+  $('#routeList').innerHTML=routes.map(r=>{
+    const driver=findUser(r.driverUserId)?.name||'未绑定';
+    const delivery=findUser(r.deliveryUserId)?.name||'未绑定';
+    return `<article class="route-card">
+      <div class="route-card-head"><div><div class="name">${esc(r.name||r.id)}</div><div class="route-id">${esc(r.id||'')}</div></div><button class="route-manage" type="button" onclick="openRouteEditor('${escAttr(r.id||r.name)}')">管理人员配置</button></div>
+      <div class="route-people">
+        <div class="person-line"><span>驾驶员</span><strong>${esc(driver)}</strong></div>
+        <div class="person-line"><span>配送员</span><strong>${esc(delivery)}</strong></div>
+      </div>
+    </article>`;
+  }).join('')||'<div class="empty-state">暂无已登记线路</div>';
+}
+function openRouteEditor(routeId){
+  const route=routes.find(x=>String(x.id||x.name)===String(routeId));
+  if(!route)return;
+  fillSelects();
+  $('#routeInput').value=route.id||route.name||'';
+  $('#routeEditName').textContent=route.name||route.id||'';
+  $('#driverSelect').value=route.driverUserId||'';
+  $('#deliverySelect').value=route.deliveryUserId||'';
+  $('#routeEditPanel').classList.remove('hidden');
+  $('#routeEditPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeRouteEditor(){
+  $('#routeEditPanel').classList.add('hidden');
 }
 function fillSelects(){
   const options='<option value="">未绑定</option>'+users.filter(u=>u.status==='active'&&u.role!=='system_admin').map(u=>`<option value="${escAttr(u.id)}">${esc(u.name||u.username)} · ${esc(u.boundRouteId||'未绑定')}</option>`).join('');
@@ -100,7 +127,7 @@ function fillSelects(){
 async function saveRoute(){
   const route=$('#routeInput').value.trim(),driverUserId=$('#driverSelect').value,deliveryUserId=$('#deliverySelect').value;
   if(!route){notice('请选择线路');return}
-  try{const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});if(!r.success)throw new Error(r.error||'线路绑定失败');notice('线路绑定已保存');await Promise.all([loadUsers(),loadRoutes()])}catch(e){notice(e.message,true)}
+  try{const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});if(!r.success)throw new Error(r.error||'线路绑定失败');notice('线路人员配置已保存');closeRouteEditor();await Promise.all([loadUsers(),loadRoutes()])}catch(e){notice(e.message,true)}
 }
 async function resetPassword(id){const password=prompt('输入新的6-72位密码');if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
