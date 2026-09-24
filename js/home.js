@@ -57,7 +57,7 @@ async function handleDispatchRouteChange(){
     return;
   }
 
-  // 线路是当前上传/当日任务的一级上下文。切换线路后，旧线路的解析结果、首页缓存和订单显示均必须失效。
+  // 线路是当前上传/当日任务的一级上下文。切换线路后，旧线路的解析结果和订单显示均必须失效。
   const seq=++homeOrderLoadSeq;
   Auth.setDispatchRoute?.(next);
   if($('menuRoute'))$('menuRoute').textContent=next;
@@ -72,7 +72,6 @@ async function handleDispatchRouteChange(){
     const order=await loadServerOrder(currentDate(),next);
     if(seq!==homeOrderLoadSeq||String(currentRoute()||'').trim()!==next)return;
     serverOrder=order;
-    writeCachedHomeOrder(serverOrder);
     updateSummary();
   }catch(error){
     if(seq!==homeOrderLoadSeq||String(currentRoute()||'').trim()!==next)return;
