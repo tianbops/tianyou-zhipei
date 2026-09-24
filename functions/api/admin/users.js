@@ -40,6 +40,9 @@ export async function onRequest({ request, env }) {
       }
       const status = String(body.status || '').trim();
       if (!['active', 'disabled'].includes(status)) return json({ success: false, error: '非法用户状态' }, 400);
+      if (status === 'disabled' && user.status !== 'disabled' && String(user.boundRouteId || '').trim()) {
+        return json({ success: false, error: '该用户已绑定线路，请先解除线路绑定后再停用账号' }, 409);
+      }
       updated.status = status;
     }
     updated.updatedAt = new Date().toISOString();
