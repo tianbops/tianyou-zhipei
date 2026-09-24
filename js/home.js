@@ -20,7 +20,7 @@ async function loadDispatchRoutes(){
     const data=await response.json().catch(()=>({}));
     if(response.ok&&data.success){
       available=(Array.isArray(data.routes)?data.routes:[])
-        .map(x=>Auth.formatRouteCode?Auth.formatRouteCode(x.id||x.name):String(x.id||x.name||'').trim())
+        .map(x=>{const name=String(x?.name||'').trim();const id=String(x?.id||'').trim();const candidate=/^\\d+(?:号线)?$/.test(name)?name:(/^\\d+(?:号线)?$/.test(id)?id:'');return Auth.formatRouteCode?Auth.formatRouteCode(candidate):candidate;})
         .filter(Boolean);
       available=[...new Set(available)];
     }else{
