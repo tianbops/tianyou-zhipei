@@ -81,7 +81,7 @@ export async function onRequest({ request, env }) {
       await repairCreatedRoutesFromAdminLogs(env, records);
       return json({
         success: true,
-        routes: [...byId.values()].sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }))
+        routes: records.sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }))
       });
     }
 
