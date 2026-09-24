@@ -445,58 +445,6 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest) {
   }
 }
 
-async function saveHistory(env, userId, route, date, today) {
-  const keyName = routeOrderKey(route, `history:${date}`);
-  let old = null;
-  let lastError = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      old = await redisGet(env, keyName);
-      lastError = null;
-      break;
-    } catch (error) {
-      lastError = error;
-      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 120));
-    }
-  }
-  if (lastError) throw lastError;
-  const list = Array.isArray(old) ? old : [];
-  const record = {
-    orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle,
-    count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count,
-    weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders,
-    matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: 0,
-    duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount,
-    rawOrderCount: today.rawOrderCount, baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
-    source: today.source, updatedAt: today.updatedAt
-  };
-  const signature = historySignature(record);
-  const index = list.findIndex(item => historySignature(item) === signature);
-  if (index >= 0) list[index] = record;
-  else list.push(record);
-  list.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
-  let saveError = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      await redisSet(env, keyName, list.slice(0, 100));
-      saveError = null;
-      break;
-    } catch (error) {
-      saveError = error;
-      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 120));
-    }
-  }
-  if (saveError) throw saveError;
-}
-
-async function getLearning(env, keyName) {
-  const data = await redisGet(env, keyName);
-  if (!data || typeof data !== 'object') return { version: 4, aliases: {} };
-  return { ...data, aliases: data.aliases && typeof data.aliases === 'object' ? data.aliases : {} };
-}
-
-function scopedLearningKey(userId, route, suffix = '') { return `${routeLearningKey(route)}${suffix ? `:${suffix}` : ''}`; }
-function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function key(value) { return String(value || '').trim().replace(/[\s\u3000（）()【】\[\]{}]/g, '').replace(/谊品鲜/g, '谊品生鲜').replace(/客户中心/g, '客服中心').replace(/\b20\d{2}\b/g, '').replace(/临时/g, '').toLowerCase(); }
 function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
@@ -554,8 +502,6 @@ function historySignature(record) {
     stores
   });
 }
-async function readAfterWrite(env, keyName, batchId, count) { for (let attempt = 0; attempt < 3; attempt++) { const saved = await redisGet(env, keyName); if (saved?.orderBatchId === batchId && Array.isArray(saved.orders) && saved.orders.length === count && normalizeWeight(saved.totalWeight)) return saved; if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1))); } return null; }
-function pruneAliases(aliases, limit) { const entries = Object.entries(aliases); if (entries.length <= limit) return; entries.sort((a, b) => String(a[1]?.updatedAt || '').localeCompare(String(b[1]?.updatedAt || ''))); for (const [alias] of entries.slice(0, entries.length - limit)) delete aliases[alias]; }
 function createBatchId(date, route) { const stamp = new Date().toISOString().replace(/[-:.TZ]/g, ''); const suffix = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/gi, '').slice(0, 12); return `${date}-${route.replace(/\D/g, '')}-${stamp}-${suffix}`; }
 function createLockToken() { return `${Date.now()}-${Math.random().toString(36).slice(2)}-${crypto.randomUUID?.() || ''}`; }
 async function acquireLock(env, keyName, token, seconds) { const response = await redisFetch(env, `/set/${encodeURIComponent(keyName)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST' }); if (!response.ok) return false; const data = await response.json().catch(() => ({})); return data.result === 'OK'; }
