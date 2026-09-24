@@ -10,8 +10,131 @@ function error(message){const box=$('error-box');if(!box)return;box.textContent=
 function currentDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
 function storeName(store){return String(store?.name||store?.storeName||store?.shopName||'').trim()}
 function currentRoute(){return Auth.getDispatchRoute?Auth.getDispatchRoute():Auth.getCurrentRoute()}
-async function loadDispatchRoutes(){const select=$('dispatchRouteSelect');const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();const selected=currentRoute();let available=[];try{const response=await fetch('/api/routes',{cache:'no-store',credentials:'same-origin'});const data=await response.json().catch(()=>({}));if(response.ok&&data.success)available=(Array.isArray(data.routes)?data.routes:[]).map(x=>String(x.id||x.name||'').trim()).filter(Boolean);else console.warn('线路列表读取失败',response.status,data?.error||'');}catch(error){console.warn('线路列表请求失败',error);}if(bound&&!available.includes(bound))available.unshift(bound);if(selected&&!available.includes(selected))available.unshift(selected);if(select){select.innerHTML=available.map(route=>`<option value="${route}">${route}</option>`).join('');if(selected&&available.includes(selected))select.value=selected;else if(bound&&available.includes(bound)){Auth.setDispatchRoute?.(bound);select.value=bound;}else if(available[0]){Auth.setDispatchRoute?.(available[0]);select.value=available[0];}}if($('menuRoute'))$('menuRoute').textContent=select?.value||selected||bound||'未选择线路';return currentRoute();}
-async function loadServerOrder(date=''){const route=currentRoute();if(!route)throw Error('未指定配送线路');const params=new URLSearchParams();params.set('route',route);if(date)params.set('date',date);const query=params.toString();const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),10000);try{const response=await fetch(`/api/orders${query?`?${query}`:''}`,{cache:'no-store',credentials:'same-origin',signal:controller.signal});if(!response.ok)throw Error(response.status===401?'登录已失效，请重新登录':`当日订单读取失败（${response.status}）`);const data=await response.json();const incoming=data?.today;const incomingValid=Boolean(incoming&&Array.isArray(incoming.orders)&&incoming.orders.length);if(incomingValid){serverOrder=incoming;serverOrder._todayWaybillCount=Math.max(0,Number(data?.todayWaybillCount)||0);serverOrder._todaySummary=data?.todaySummary||null;return serverOrder;}\n    // 兜底：历史查询与当日入口必须共享同一份线路级业务数据。若 /api/orders 的 today 为空，\n    // 直接读取同日期历史记录，避免“历史有数据、首页却显示暂无数据”。同时保留正常的 /api/orders 主路径。\n    try{\n      const hp=new URLSearchParams({route});if(date)hp.set('date',date);\n      const hr=await fetch(`/api/history?${hp.toString()}`,{cache:'no-store',credentials:'same-origin'});\n      if(hr.ok){const payload=await hr.json().catch(()=>[]);const records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);const valid=records.filter(item=>item&&Array.isArray(item.orders)&&item.orders.length);\n        if(valid.length){const recovered=valid.slice().sort((a,b)=>(Date.parse(String(b?.updatedAt||b?.createdAt||''))||0)-(Date.parse(String(a?.updatedAt||a?.createdAt||''))||0))[0];serverOrder={...recovered,date:date||recovered.date||currentDate(),route:recovered.route||route};serverOrder._todayWaybillCount=valid.length;serverOrder._todaySummary={storeCount:valid.reduce((sum,item)=>sum+(Number(item?.uniqueStoreCount)||Number(item?.count)||item.orders.length),0),totalWeight:valid.reduce((sum,item)=>sum+parseWeight(item?.totalWeight??item?.weight),0)>0?(`${Math.round((valid.reduce((sum,item)=>sum+parseWeight(item?.totalWeight??item?.weight),0)+Number.EPSILON)*1000000)/1000000}t`):''};return serverOrder;}}\n    }catch(fallbackError){console.warn('当日订单接口为空，历史兜底读取失败',fallbackError)}\n    if(!serverOrder||!Array.isArray(serverOrder.orders)||!serverOrder.orders.length)serverOrder=null;return serverOrder}catch(error){if(error?.name==='AbortError')throw Error('当日任务读取超时，请稍后重试');throw error}finally{clearTimeout(timer)}}
+async function loadDispatchRoutes(){
+  const select=$('dispatchRouteSelect');
+  const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();
+  const selected=currentRoute();
+  let available=[];
+  try{
+    const response=await fetch('/api/routes',{cache:'no-store',credentials:'same-origin'});
+    const data=await response.json().catch(()=>({}));
+    if(response.ok&&data.success){
+      available=(Array.isArray(data.routes)?data.routes:[])
+        .map(x=>Auth.formatRouteCode?Auth.formatRouteCode(x.id||x.name):String(x.id||x.name||'').trim())
+        .filter(Boolean);
+      available=[...new Set(available)];
+    }else{
+      console.warn('线路列表读取失败',response.status,data?.error||'');
+    }
+  }catch(error){console.warn('线路列表请求失败',error)}
+  if(bound){
+    const normalizedBound=Auth.formatRouteCode?Auth.formatRouteCode(bound):String(bound).trim();
+    if(normalizedBound&&!available.includes(normalizedBound))available.unshift(normalizedBound);
+  }
+  const normalizedSelected=Auth.formatRouteCode?Auth.formatRouteCode(selected):String(selected||'').trim();
+  if(normalizedSelected&&!available.includes(normalizedSelected))available.unshift(normalizedSelected);
+  if(select){
+    select.innerHTML=available.map(route=>`<option value="${route}">${route}</option>`).join('');
+    const initial=normalizedSelected|| (Auth.formatRouteCode?Auth.formatRouteCode(bound):String(bound||'').trim()) || available[0] || '';
+    if(initial){
+      Auth.setDispatchRoute?.(initial);
+      select.value=initial;
+    }
+    select.onchange=handleDispatchRouteChange;
+  }
+  if($('menuRoute'))$('menuRoute').textContent=select?.value||normalizedSelected||bound||'未选择线路';
+  return currentRoute();
+}
+
+let homeOrderLoadSeq=0;
+async function handleDispatchRouteChange(){
+  const select=$('dispatchRouteSelect');
+  const next=Auth.formatRouteCode?Auth.formatRouteCode(select?.value):String(select?.value||'').trim();
+  if(!next)return;
+  const current=String(currentRoute()||'').trim();
+  if(next===current){
+    if($('menuRoute'))$('menuRoute').textContent=next;
+    return;
+  }
+
+  // 线路是当前上传/当日任务的一级上下文。切换线路后，旧线路的解析结果、首页缓存和订单显示均必须失效。
+  const seq=++homeOrderLoadSeq;
+  Auth.setDispatchRoute?.(next);
+  if($('menuRoute'))$('menuRoute').textContent=next;
+
+  const overlay=$('uploadOverlay');
+  if(overlay?.classList.contains('active')) window.cancelUpload?.();
+
+  serverOrder=null;
+  updateSummary();
+
+  try{
+    const order=await loadServerOrder(currentDate(),next);
+    if(seq!==homeOrderLoadSeq||String(currentRoute()||'').trim()!==next)return;
+    serverOrder=order;
+    writeCachedHomeOrder(serverOrder);
+    updateSummary();
+  }catch(error){
+    if(seq!==homeOrderLoadSeq||String(currentRoute()||'').trim()!==next)return;
+    console.error('切换线路后刷新当日任务失败',error);
+    serverOrder=null;
+    updateSummary();
+    toast(error?.message||'线路切换后数据读取失败','error');
+  }
+}
+
+async function loadServerOrder(date='',expectedRoute=''){
+  const route=String(expectedRoute||currentRoute()||'').trim();
+  if(!route)throw Error('未指定配送线路');
+  if(expectedRoute&&String(currentRoute()||'').trim()!==route)return null;
+  const params=new URLSearchParams();
+  params.set('route',route);
+  if(date)params.set('date',date);
+  const query=params.toString();
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),10000);
+  try{
+    const response=await fetch(`/api/orders${query?`?${query}`:''}`,{cache:'no-store',credentials:'same-origin',signal:controller.signal});
+    if(!response.ok)throw Error(response.status===401?'登录已失效，请重新登录':`当日订单读取失败（${response.status}）`);
+    const data=await response.json();
+    const incoming=data?.today;
+    const incomingValid=Boolean(incoming&&Array.isArray(incoming.orders)&&incoming.orders.length);
+    if(incomingValid){
+      const result={...incoming};
+      result._todayWaybillCount=Math.max(0,Number(data?.todayWaybillCount)||0);
+      result._todaySummary=data?.todaySummary||null;
+      return result;
+    }
+
+    // 兜底：历史查询与当日入口必须共享同一份线路级业务数据。
+    try{
+      const hp=new URLSearchParams({route});
+      if(date)hp.set('date',date);
+      const hr=await fetch(`/api/history?${hp.toString()}`,{cache:'no-store',credentials:'same-origin'});
+      if(hr.ok){
+        const payload=await hr.json().catch(()=>[]);
+        const records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
+        const valid=records.filter(item=>item&&Array.isArray(item.orders)&&item.orders.length);
+        if(valid.length){
+          const recovered=valid.slice().sort((a,b)=>(Date.parse(String(b?.updatedAt||b?.createdAt||''))||0)-(Date.parse(String(a?.updatedAt||a?.createdAt||''))||0))[0];
+          const result={...recovered,date:date||recovered.date||currentDate(),route:recovered.route||route};
+          result._todayWaybillCount=valid.length;
+          const totalWeight=valid.reduce((sum,item)=>sum+parseWeight(item?.totalWeight??item?.weight),0);
+          const storeCount=valid.reduce((sum,item)=>sum+(Number(item?.uniqueStoreCount)||Number(item?.count)||item.orders.length),0);
+          result._todaySummary={
+            storeCount,
+            totalWeight:totalWeight>0?`${Math.round((totalWeight+Number.EPSILON)*1000000)/1000000}t`:''
+          };
+          return result;
+        }
+      }
+    }catch(fallbackError){console.warn('当日订单接口为空，历史兜底读取失败',fallbackError)}
+    return null;
+  }catch(error){
+    if(error?.name==='AbortError')throw Error('当日任务读取超时，请稍后重试');
+    throw error;
+  }finally{clearTimeout(timer)}
+}
 function parseWeight(value){if(value===null||value===undefined||value==='')return 0;const text=String(value).trim().replace(/,/g,'');const match=text.match(/[\d]+(?:\.\d+)?/);if(!match)return 0;const n=Number(match[0]);if(!Number.isFinite(n))return 0;const tons=/吨|\bt\b/i.test(text)?n:/kg|千克|公斤/i.test(text)?n/1000:n>=1000?n/1000:n;return Number.isFinite(tons)?tons:0}
 function formatWeight(value){const tons=parseWeight(value);if(!(tons>0))return '暂无数据';const rounded=Math.round((tons+Number.EPSILON)*100)/100;return `${rounded.toFixed(2)}t`}
 function updateSummary(){const hasToday=!!serverOrder&&Array.isArray(serverOrder.orders)&&serverOrder.orders.length>0;const route=serverOrder?.route||currentRoute()||'';const vehicle=serverOrder?.vehicle||'';if($('taskCard'))$('taskCard').style.display='block';if($('menuRoute'))$('menuRoute').textContent=route||'未选择线路';if(!hasToday){if($('homeRoute')){const text=$('homeRoute').querySelector('.vehicle-text');if(text)text.textContent='';}if($('storeCount'))$('storeCount').textContent='';if($('totalWeight'))$('totalWeight').textContent='';if($('statusDot')){const dot=$('statusDot');dot.textContent='0';dot.style.background='#5A6A7A';dot.classList.remove('has-count');dot.setAttribute('aria-label','今日运单笔数：0')}return}const orders=serverOrder.orders;const dailySummary=serverOrder._todaySummary||null;const count=Number(dailySummary?.storeCount)||Number(serverOrder.uniqueStoreCount||serverOrder.count)||orders.length;const orderCount=Math.max(1,Number(serverOrder._todayWaybillCount)||1);if($('homeRoute')){const text=$('homeRoute').querySelector('.vehicle-text');if(text)text.textContent=vehicle||route||'未绑定车辆';}if($('storeCount'))$('storeCount').textContent=count?`${count}家`:'暂无当日订单';if($('totalWeight'))$('totalWeight').textContent=dailySummary?.totalWeight?formatWeight(dailySummary.totalWeight):formatWeight(serverOrder.totalWeight);if($('statusDot')){const dot=$('statusDot');dot.textContent=String(orderCount);dot.style.background=count?'#3B82F6':'#5A6A7A';dot.classList.toggle('has-count',orderCount>0);dot.setAttribute('aria-label',`今日运单笔数：${orderCount}`)}}
@@ -303,6 +426,6 @@ function readCachedHomeOrder(){try{const cacheKey=homeCacheScope();if(!cacheKey)
 function writeCachedHomeOrder(order){try{const cacheKey=homeCacheScope();if(!cacheKey)return;sessionStorage.setItem(cacheKey,JSON.stringify({date:currentDate(),route:String(currentRoute()||''),order}))}catch(_){}}
 async function refreshHomeOrder(){try{await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary()}catch(e){console.error('刷新当日任务失败',e)}}
 document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');
-if(!(await Auth.checkAuth()))return;const me=await Auth.getCurrentServerUser();if(me?.role==='system_admin'&&$('adminMenuItem'))$('adminMenuItem').style.display='flex';await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const cached=readCachedHomeOrder();if(cached){serverOrder=cached;updateSummary()}await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary();$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];statusBaseDetails=[];pendingReviewCount=0;setPrimaryActionMode('idle');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
+if(!(await Auth.checkAuth()))return;const me=await Auth.getCurrentServerUser();if(me?.role==='system_admin'&&$('adminMenuItem'))$('adminMenuItem').style.display='flex';await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const cached=readCachedHomeOrder();if(cached&&String(cached.route||'')===String(currentRoute()||'')){serverOrder=cached;updateSummary()}const initialSeq=++homeOrderLoadSeq;const initialRoute=String(currentRoute()||'').trim();const loaded=await loadServerOrder(currentDate(),initialRoute);if(initialSeq===homeOrderLoadSeq&&String(currentRoute()||'').trim()===initialRoute){serverOrder=loaded;writeCachedHomeOrder(serverOrder);updateSummary()}$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];statusBaseDetails=[];pendingReviewCount=0;setPrimaryActionMode('idle');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
 window.addEventListener('pageshow',event=>{document.body.classList.remove('is-leaving');const menu=$('homeMenu');if(menu)menu.style.display='none';const overlay=$('uploadOverlay');if(event.persisted)window.clearManualInput?.();if(overlay)overlay.classList.remove('active');closeUploadSource();if(event.persisted&&typeof Auth!=='undefined')refreshHomeOrder()});
 })();
