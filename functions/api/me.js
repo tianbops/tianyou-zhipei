@@ -4,7 +4,7 @@ import { publicUser } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'GET') return json({ success: false, error: 'Method not allowed' }, 405);
-  const session = await authRequired(request, env);
+  const session = await authRequired(request, env, { allowSystemAdmin: true });
   if (!session) return json({ success: false, error: '登录已失效' }, 401);
   return json({ success: true, apiVersion: 'v1', user: publicUser(session.user || session) });
 }
