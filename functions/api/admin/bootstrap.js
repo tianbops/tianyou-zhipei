@@ -27,6 +27,7 @@ export async function onRequest({ request, env }) {
     const updated = {
       ...target,
       role: 'system_admin',
+      adminLevel: 'primary',
       updatedAt: new Date().toISOString(),
       sessionVersion: Number(target.sessionVersion || 1) + 1
     };
