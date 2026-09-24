@@ -124,7 +124,12 @@ window.Auth = {
         location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
         return false;
       }
-      if (user.adminLevel === 'primary' && page !== 'admin.html') {
+      const isPrimaryAdmin = user.role === 'system_admin' && user.adminLevel === 'primary';
+      if (page === 'admin.html' && !isPrimaryAdmin) {
+        location.replace('home.html');
+        return false;
+      }
+      if (isPrimaryAdmin && page !== 'admin.html') {
         location.replace(location.pathname.includes('/pages/') ? '../admin.html' : 'admin.html');
         return false;
       }
