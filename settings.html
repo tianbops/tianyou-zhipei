@@ -86,6 +86,7 @@
 <div class="modal" id="deleteAccountModal" onclick="backdropClose(event,'deleteAccountModal')"><section class="sheet danger-sheet" role="dialog" aria-modal="true" aria-labelledby="deleteAccountTitle"><div class="grabber"></div><div class="sheet-head"><div class="sheet-title danger-title" id="deleteAccountTitle">注销账号</div><button class="close-btn" type="button" onclick="closeModal('deleteAccountModal')" aria-label="关闭">×</button></div><div class="danger-warning"><strong>此操作不可恢复</strong><span>账号、订单、历史记录和个人学习数据将被永久删除。线路公共基准库不会被删除。</span></div><div class="field"><label class="field-label" for="deletePassword">当前密码</label><div class="input-wrap"><input id="deletePassword" type="password" autocomplete="current-password" placeholder="请输入当前密码"><button class="eye" type="button" onclick="togglePassword('deletePassword',this)" aria-label="显示或隐藏密码">◉</button></div></div><div class="field"><label class="field-label" for="deleteConfirmation">确认注销</label><div class="input-wrap"><input id="deleteConfirmation" type="text" autocomplete="off" placeholder="请输入：注销账号" maxlength="4"></div></div><div id="deleteMessage" class="message" role="alert" aria-live="polite"></div><div class="sheet-actions"><button class="secondary-btn" type="button" onclick="closeModal('deleteAccountModal')">取消</button><button class="danger-btn" id="deleteButton" type="button" onclick="deleteAccount()">永久注销</button></div></section></div>
 
 <script src="js/auth.js?v=20260924-6"></script>
+<script src="js/modal.js?v=20260925-1"></script>
 <script>
 'use strict';
 let currentUser=null;
@@ -167,7 +168,7 @@ async function unbindRoute(){
   const message=isBound
     ? '确定解除当前线路绑定吗？解除无需管理员审核，之后可以重新申请其他线路。'
     : '确定取消当前线路申请吗？取消后可以重新申请其他线路。';
-  if(!confirm(message))return;
+  if(!(await OneModal.confirm(message,{title:isBound?'解除线路绑定':'取消线路申请',confirmText:isBound?'解除绑定':'取消申请',danger:isBound})))return;
   const button=$('unbindRouteButton');button.disabled=true;button.textContent='处理中…';
   try{const r=await fetch('/api/route-binding',{method:'DELETE',credentials:'same-origin',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||'解除绑定失败');showMessage('routeBindingMessage',d.cancelled?'申请已取消，可重新申请':'线路已解除，可重新申请','success');setTimeout(()=>openRouteBinding(),600)}catch(e){showMessage('routeBindingMessage',e.message||'操作失败')}finally{button.disabled=false;button.textContent=currentUser?.boundRouteId?'解除当前绑定':'取消当前申请'}
 }
