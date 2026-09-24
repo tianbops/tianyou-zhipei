@@ -162,3 +162,37 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 #routeBindingModal .duty-option.active strong{color:#F2F5F7}
 #routeBindingModal .duty-option:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(208,215,220,.48)}
 #routeBindingModal #bindingRouteField{margin-bottom:14px}
+
+
+/* UI 2.3 · 线路绑定状态弹窗重构 2026-09-24 */
+#routeBindingModal .sheet{padding-top:11px}
+#routeBindingModal .sheet-head{margin-bottom:14px}
+#routeBindingModal .sheet-note{margin:-2px 1px 16px;color:#8A96A2;line-height:1.65}
+#routeBindingModal.state-bound .sheet-note,
+#routeBindingModal.state-pending .sheet-note{padding:11px 12px;margin:-1px 0 16px;border:1px solid rgba(255,255,255,.065);border-radius:13px;background:#0D1319}
+#routeBindingModal.state-bound .sheet-note{color:#B8C2CC}
+#routeBindingModal.state-pending .sheet-note{color:#B8C2CC}
+#routeBindingModal.state-bound .sheet-note::before,
+#routeBindingModal.state-pending .sheet-note::before{display:block;font-size:11px;font-weight:700;letter-spacing:.2px;margin-bottom:4px}
+#routeBindingModal.state-bound .sheet-note::before{content:'当前线路';color:#D0D7DC}
+#routeBindingModal.state-pending .sheet-note::before{content:'待审核申请';color:#D0D7DC}
+#routeBindingModal.state-bound #bindingRouteField,
+#routeBindingModal.state-bound #bindingDutyField{display:none!important}
+#routeBindingModal.state-bound #unbindRouteButton{height:46px;flex:1 1 auto;margin-top:0;border-color:rgba(255,255,255,.09);background:#202A34!important;color:#E3E8ED!important}
+#routeBindingModal.state-bound #unbindRouteButton:active{background:#313E49!important;color:#fff!important}
+#routeBindingModal.state-bound #routeBindingButton{display:none!important}
+#routeBindingModal.state-bound .sheet-actions{flex-wrap:nowrap;margin-top:18px}
+#routeBindingModal.state-pending #bindingRouteField,
+#routeBindingModal.state-pending #bindingDutyField{display:none!important}
+#routeBindingModal.state-pending #unbindRouteButton{flex:1.15;height:44px;margin-top:0;background:transparent!important;border-color:rgba(255,255,255,.09);color:#D5DCE2}
+#routeBindingModal.state-pending #routeBindingButton{display:flex;flex:1;height:44px;background:#202A34!important;color:#E3E8ED!important}
+#routeBindingModal.state-pending .sheet-actions{flex-wrap:nowrap;margin-top:18px}
+#routeBindingModal.state-available .sheet-actions{margin-top:18px}
+#routeBindingModal.state-available #routeBindingButton{min-width:0}
+#routeBindingModal .message{margin-top:12px}
+#routeBindingModal .field-label{color:#8995A1}
+#routeBindingModal select{font-weight:500}
+@media(max-width:380px){
+  #routeBindingModal.state-pending #unbindRouteButton,
+  #routeBindingModal.state-pending #routeBindingButton{font-size:13px}
+}
