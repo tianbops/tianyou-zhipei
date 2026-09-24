@@ -253,18 +253,6 @@
       const savedBatch=data.data?.orderBatchId||'';
       if(isDuplicate&&!savedBatch)throw Error('重复运单缺少原批次信息，请重试');
 
-      try{
-        const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};
-        const userId=String(user.id||user.username||user.account||'').trim();
-        sessionStorage.setItem('zsp_order_handoff_v1',JSON.stringify({
-          userId,
-          route,
-          date:savedDate,
-          orderBatchId:savedBatch,
-          order:data.data,
-          createdAt:Date.now()
-        }));
-      }catch(_){}
 
       window.renderUnifiedStatus?.('loading',100,'录入成功，正在打开当日数据…');
       document.body.classList.add('navigating-to-order');
