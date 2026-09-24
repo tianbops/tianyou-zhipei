@@ -1863,3 +1863,27 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
   background:var(--primary-action)!important;
   color:var(--primary-action-text)!important;
 }
+
+
+/* 2026-09-24 上传弹窗：取消操作统一为单一 footer 按钮
+   来源选择、处理中、结果态均复用同一个 #uploadOverlay .btn-cancel，
+   DOM 不再同时存在两个“取消”按钮，避免重复操作与视觉层级冲突。 */
+.upload-source-menu .source-menu-cancel{display:none!important;}
+.upload-sheet.waiting .sheet-footer{
+  display:flex!important;
+  margin-top:10px!important;
+}
+.upload-sheet.waiting .sheet-footer .btn-cancel{
+  display:flex!important;
+  flex:1 1 100%!important;
+  width:100%!important;
+  height:42px!important;
+  min-height:42px!important;
+  border-radius:11px!important;
+  justify-content:center!important;
+  align-items:center!important;
+}
+.upload-sheet.waiting .sheet-footer .btn-primary-action{
+  display:none!important;
+  visibility:hidden!important;
+}
