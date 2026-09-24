@@ -128,6 +128,9 @@ export async function loadRouteBase(env, route, options = {}) {
   const lockKey = `lock:route-base:${encodeURIComponent(normalized)}`;
   const lockToken = createLockToken();
   const lockAlreadyHeld = options.lockAlreadyHeld === true;
+  const heldLockToken = String(options.lockToken || '').trim();
+  if (lockAlreadyHeld && !heldLockToken) throw new Error('线路基准库锁上下文缺失，请重新操作');
+  const effectiveLockToken = lockAlreadyHeld ? heldLockToken : lockToken;
   const migrationLockAcquired = lockAlreadyHeld || await acquireMigrationLock(env, lockKey, lockToken, 20);
   if (migrationLockAcquired) {
     try {
@@ -148,7 +151,7 @@ export async function loadRouteBase(env, route, options = {}) {
           updatedAt: legacy.updatedAt || new Date().toISOString(),
           source: 'route-migration', migratedFromUserId: userId
         };
-        await redisSet(env, routeBaseKey(normalized), migrated);
+        if (!(await atomicMigrateRouteBase(env, lockKey, effectiveLockToken, routeBaseKey(normalized), migrated))) continue;
         return { ...migrated, source: 'route-migration' };
       }
 
@@ -161,8 +164,7 @@ export async function loadRouteBase(env, route, options = {}) {
             updatedAt: legacy.updatedAt || new Date().toISOString(),
             source: 'route-migration', migratedFromUserId: options.allowLegacyUserId
           };
-          await redisSet(env, routeBaseKey(normalized), migrated);
-          return { ...migrated, source: 'route-migration' };
+          if (await atomicMigrateRouteBase(env, lockKey, effectiveLockToken, routeBaseKey(normalized), migrated)) return { ...migrated, source: 'route-migration' };
         }
       }
     } finally {
@@ -175,6 +177,13 @@ export async function loadRouteBase(env, route, options = {}) {
     return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
   }
   return null;
+}
+
+async function atomicMigrateRouteBase(env, lockKey, lockToken, baseKey, value) {
+  const script = "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 'LOCK_LOST' end if redis.call('EXISTS', KEYS[2]) == 1 then return 'BASE_EXISTS' end redis.call('SET', KEYS[2], ARGV[2]) return 'OK'";
+  const result = await redisCommand(env, ['EVAL', script, '2', lockKey, baseKey, lockToken, JSON.stringify(value)]);
+  if (result === 'LOCK_LOST') throw new Error('线路基准库锁已失效，请重新加载');
+  return result === 'OK';
 }
 
 async function acquireMigrationLock(env, key, token, seconds) {
