@@ -7,9 +7,11 @@
   const $=id=>document.getElementById(id);
   const routeContext=()=>typeof Auth!=='undefined'?(Auth.getDispatchRoute?Auth.getDispatchRoute():''):'';
   function candidateList(item){
-    const names=[item?.candidate,...(Array.isArray(item?.candidates)?item.candidates:[])].map(v=>String(v||'').trim()).filter(Boolean);
+    const rawCandidates=[item?.candidate,...(Array.isArray(item?.candidates)?item.candidates:[])];
+    const names=rawCandidates.map(v=>typeof v==='object'?String(v?.name||v?.storeName||'').trim():String(v||'').trim()).filter(Boolean);
     const codes=[String(item?.candidateCode||'').trim(),...(Array.isArray(item?.candidateCodes)?item.candidateCodes.map(v=>String(v||'').trim()):[])];
-    return [...new Map(names.map((name,index)=>[name,{name,code:codes[index]||''}])).values()];
+    const ids=[String(item?.candidateStoreId||item?.storeId||'').trim(),...(Array.isArray(item?.candidateStoreIds)?item.candidateStoreIds.map(v=>String(v||'').trim()):[])];
+    return [...new Map(names.map((name,index)=>[name,{name,code:codes[index]||'',storeId:ids[index]||''}])).values()];
   }
   function renderReview(items){
     reviewState=(Array.isArray(items)?items:[]).filter(item=>item?.needsReview);
@@ -31,7 +33,8 @@
         item._choice=select.value;
         const selected=select.value.startsWith('candidate:')?candidates[Number(select.value.slice(10))]:null;
         item._selectedCandidate=selected?.name||'';
-        item._selectedCandidateCode=selected?.code||'';item._selectedCandidateStoreId=selected?.storeId||'';
+        item._selectedCandidateCode=selected?.code||'';
+        item._selectedCandidateStoreId=selected?.storeId||'';item._selectedCandidateStoreId=selected?.storeId||'';
       });
       label.addEventListener('click',()=>{select.focus();select.click?.();});
       row.append(label,select);list.appendChild(row);
@@ -65,6 +68,7 @@
         const selected=select.value.startsWith('candidate:')?candidates[Number(select.value.slice(10))]:null;
         item._selectedCandidate=selected?.name||'';
         item._selectedCandidateCode=selected?.code||'';
+        item._selectedCandidateStoreId=selected?.storeId||'';
         card.classList.toggle('is-selected',!!select.value);
         if(select.value==='new'){item._selectedCandidate='';item._selectedCandidateCode='';item._selectedCandidateStoreId='';}
       };
