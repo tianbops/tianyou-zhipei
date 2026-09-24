@@ -1,7 +1,7 @@
 // Zhipei One - 微信小程序统一登录
 // 微信身份只绑定现有 userId，不创建第二套账号。
 import { createMiniToken } from './_auth.js';
-import { publicUser, redisGet } from './_data.js';
+import { publicUser, redisCommand, redisGet } from './_data.js';
 
 export async function onRequestPost({ request, env }) {
   if (request.method !== 'POST') return json({ message: 'Method not allowed' }, 405);
@@ -44,7 +44,27 @@ export async function onRequestPost({ request, env }) {
         if (!userId) return json({ message: '微信账号绑定失败，请重试' }, 409);
       }
 
-      if (wechat.unionid) await redisSetNx(env, `wx:unionid:${wechat.unionid}`, userId);
+      if (wechat.unionid) {
+        const unionKey = `wx:unionid:${wechat.unionid}`;
+        const existingUnionUserId = await redisGet(env, unionKey);
+        if (existingUnionUserId && String(existingUnionUserId) !== String(userId)) {
+          await redisCommand(env, ['DEL', openidKey]);
+          return json({ message: '该微信身份已绑定其他智配 One 账号' }, 409);
+        }
+        const unionBound = await redisSetNx(env, unionKey, userId);
+        if (!unionBound) {
+          const owner = await redisGet(env, unionKey);
+          if (owner && String(owner) !== String(userId)) {
+            await redisCommand(env, ['DEL', openidKey]);
+            return json({ message: '该微信身份已绑定其他智配 One 账号' }, 409);
+          }
+        }
+      }
+    } else if (wechat.unionid) {
+      const unionOwner = await redisGet(env, `wx:unionid:${wechat.unionid}`);
+      if (unionOwner && String(unionOwner) !== String(userId)) {
+        return json({ message: '微信身份绑定关系异常，请联系系统管理员处理' }, 409);
+      }
     }
 
     const user = parseRecord(await redisGet(env, `user:${userId}`));
