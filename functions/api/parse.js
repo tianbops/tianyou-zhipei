@@ -295,7 +295,7 @@ async function redisGet(env, key, deadline = Date.now() + REDIS_TIMEOUT_MS) {
 }
 
 function buildBaseMatchIndex(base) {
-  const byName = new Map(), byCode = new Map(), byBaseCode = new Map(), byNameLength = new Map(), byWeakName = new Map(), byNgram = new Map();
+  const byName = new Map(), byCode = new Map(), byBaseCode = new Map(), byStoreId = new Map(), byNameLength = new Map(), byWeakName = new Map(), byNgram = new Map();
   for (const item of base) {
     for (const candidateName of getBaseMatchNames(item)) {
       const nameKey = matchKey(candidateName);
@@ -313,8 +313,12 @@ function buildBaseMatchIndex(base) {
       }
       const businessCode = extractBusinessCode(candidateName);
       if (businessCode && !byCode.has(businessCode)) byCode.set(businessCode, item);
-      const baseCode = String(item.code || '').trim();
+      const baseCode = String(item.baseCode || '').trim();
       if (baseCode && !byBaseCode.has(baseCode)) byBaseCode.set(baseCode, item);
+      const legacyCode = String(item.code || '').trim();
+      if (legacyCode && !byBaseCode.has(legacyCode)) byBaseCode.set(legacyCode, item);
+      const storeId = String(item.storeId || '').trim();
+      if (storeId && !byStoreId.has(storeId)) byStoreId.set(storeId, item);
       for (const gram of ngramSet(nameKey, 2)) {
         const gramBucket = byNgram.get(gram) || [];
         if (!gramBucket.includes(item)) gramBucket.push(item);
@@ -322,17 +326,19 @@ function buildBaseMatchIndex(base) {
       }
     }
   }
-  return { base, byName, byCode, byBaseCode, byNameLength, byWeakName, byNgram };
+  return { base, byName, byCode, byBaseCode, byStoreId, byNameLength, byWeakName, byNgram };
 }
 
 function matchTodayStores(recognized, baseMatchIndex, learning) {
   const baseIndex = baseMatchIndex && Array.isArray(baseMatchIndex.base)
     ? baseMatchIndex
     : buildBaseMatchIndex(Array.isArray(baseMatchIndex) ? baseMatchIndex.filter(Boolean) : []);
-  const { base, byName, byCode, byBaseCode, byNameLength, byWeakName, byNgram } = baseIndex;
+  const { base, byName, byCode, byBaseCode, byStoreId, byNameLength, byWeakName, byNgram } = baseIndex;
   const byLearning = new Map();
   for (const [aliasKey, record] of Object.entries(learning?.aliases || {})) {
-    const target = (record?.baseKey && byName.get(record.baseKey)) || (record?.baseCode && byBaseCode.get(String(record.baseCode)));
+    const target = (record?.storeId && byStoreId.get(String(record.storeId).trim()))
+      || (record?.baseCode && byBaseCode.get(String(record.baseCode).trim()))
+      || (record?.baseKey && byName.get(record.baseKey));
     if (target && !byLearning.has(aliasKey)) byLearning.set(aliasKey, target);
   }
 
