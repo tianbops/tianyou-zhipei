@@ -172,7 +172,8 @@ async function loadBase(env, route, userId, boundRouteId) {
   const stores = Array.isArray(raw?.stores) ? raw.stores : [];
   if (!stores.length) throw new Error(`未找到${route}线路基准数据库`);
   return stores.map((store, index) => ({
-    storeId: String(store?.storeId || store?.baseCode || store?.code || '').trim(),
+    // storeId 是稳定身份，绝不能退化为本次线路顺序 code。
+    storeId: String(store?.storeId || '').trim(),
     baseCode: String(store?.baseCode || '').trim(),
     name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
     code: String(store?.code || index + 1).padStart(2, '0'),
@@ -223,7 +224,8 @@ async function learnNewStoresIntoBase(env, route, base, items, userId) {
     const latest = await loadRouteBase(env, route);
     const latestStores = Array.isArray(latest?.stores) ? latest.stores.map((store, index) => ({
       ...store,
-      storeId: String(store?.storeId || store?.baseCode || '').trim(),
+      // storeId 必须来自持久化身份；baseCode 只能作为业务辅助编码。
+      storeId: String(store?.storeId || '').trim(),
       baseCode: String(store?.baseCode || '').trim(),
       name: String(store?.name || store?.storeName || store?.shopName || '').trim(),
       code: String(store?.code || index + 1).padStart(2, '0'),
@@ -232,6 +234,15 @@ async function learnNewStoresIntoBase(env, route, base, items, userId) {
     const byName = new Map(latestStores.map(store => [key(store.name), store]));
     const byStoreId = new Map(latestStores.filter(store => store.storeId).map(store => [store.storeId, store]));
     let changed = false;
+
+    // 一次性补齐历史基准门店缺失的稳定身份，避免旧数据继续把 code 当作 storeId。
+    for (const store of latestStores) {
+      if (!String(store.storeId || '').trim()) {
+        store.storeId = crypto.randomUUID();
+        byStoreId.set(store.storeId, store);
+        changed = true;
+      }
+    }
 
     for (const item of newItems) {
       const name = String(item.name || '').trim();
@@ -249,6 +260,7 @@ async function learnNewStoresIntoBase(env, route, base, items, userId) {
 
       const routeOrder = latestStores.length + 1;
       const code = String(routeOrder).padStart(2, '0');
+      // 新门店第一次确认即生成永久 storeId；后续运单只通过该身份关联。
       const storeId = String(item.storeId || '').trim() || crypto.randomUUID();
       const store = {
         storeId,
