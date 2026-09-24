@@ -2,7 +2,7 @@
 // 只保存用户确认过的 OCR 门店别名，不保存原始图片。
 // 学习数据按线路写入 Upstash Redis；同一路线绑定用户共享同一学习库。
 import { authRequired } from './_auth.js';
-import { canManageRoute, legacyUserLearningKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeLearningKey } from './_data.js';
+import { canManageRoute, legacyUserLearningKey, listUsersByRoute, loadRouteBase, normalizeRoute, routeBaseKey, routeLearningKey, redisSet as dataRedisSet } from './_data.js';
 
 const MAX_ALIASES = 1000;
 const MAX_BATCH = 100;
@@ -21,23 +21,69 @@ export async function onRequest({ request, env }) {
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '学习数据库不可用' }, 500);
 
     const input = Array.isArray(body.items) ? body.items : [body];
-    if (input.length > MAX_BATCH) return json({ success: false, error: `单次最多学习 ${MAX_BATCH} 家门店` }, 400);
+    const newInput = Array.isArray(body.newStores) ? body.newStores : [];
+    if (input.length + newInput.length > MAX_BATCH) return json({ success: false, error: `单次最多学习 ${MAX_BATCH} 家门店` }, 400);
     const items = input.map(normalizeInput).filter(item => item.rawName && item.baseName);
-    if (!items.length) return json({ success: false, error: '缺少待学习门店信息' }, 400);
-
-    const base = await getBaseStores(env, route, userId);
-    const validated = [];
-    for (const item of items) {
-      const target = resolveTarget(base, item);
-      if (!target) return json({ success: false, error: `确认的基准门店不属于当前线路：${item.baseName}` }, 400);
-      validated.push({ ...item, target });
-    }
+    const newStores = newInput.map(normalizeNewStore).filter(item => item.name);
+    if (!items.length && !newStores.length) return json({ success: false, error: '缺少待学习门店信息' }, 400);
 
     const key = routeLearningKey(route);
     const lockKey = `lock:learning:${encodeKey(route)}`;
     const lockToken = createLockToken();
     if (!(await acquireLock(env, lockKey, lockToken, LOCK_SECONDS))) return json({ success: false, error: '当前用户学习库正在更新，请稍后再试' }, 409);
     try {
+      let baseRecord = await loadRouteBase(env, route);
+      if (!baseRecord || !Array.isArray(baseRecord.stores) || !baseRecord.stores.length) throw new Error(`未找到${route}独立基准数据库`);
+      let base = baseRecord.stores.map((store, index) => normalizeBase(store, index)).filter(Boolean);
+      let baseChanged = false;
+      const addedStores = [];
+      const existingNames = new Map(base.map(store => [matchKey(store.name), store]));
+      for (const candidate of newStores) {
+        const nameKey = matchKey(candidate.name);
+        if (!nameKey) continue;
+        const existing = existingNames.get(nameKey);
+        if (existing) {
+          addedStores.push({ name: existing.name, storeId: existing.storeId, existing: true });
+          continue;
+        }
+        const storeId = String(candidate.storeId || crypto.randomUUID()).trim();
+        const code = String(base.length + 1).padStart(2, '0');
+        const created = {
+          storeId,
+          baseCode: String(candidate.baseCode || '').trim(),
+          code,
+          name: candidate.name,
+          nav: candidate.nav,
+          note: candidate.note,
+          routeOrder: base.length + 1,
+          aliases: []
+        };
+        base.push(created);
+        existingNames.set(nameKey, created);
+        addedStores.push({ name: created.name, storeId, code, existing: false });
+        baseChanged = true;
+      }
+      if (baseChanged) {
+        const updatedAt = new Date().toISOString();
+        const savedBase = {
+          schemaVersion: Number(baseRecord.schemaVersion) || 1,
+          route,
+          stores: base,
+          dataVersion: (Number(baseRecord.dataVersion) || 0) + 1 || 1,
+          updatedAt,
+          updatedBy: userId,
+          source: 'confirmed-new-store'
+        };
+        await dataRedisSet(env, routeBaseKey(route), savedBase);
+        baseRecord = savedBase;
+      }
+      const validated = [];
+      for (const item of items) {
+        const target = resolveTarget(base, item);
+        if (!target) return json({ success: false, error: `确认的基准门店不属于当前线路：${item.baseName}` }, 400);
+        validated.push({ ...item, target });
+      }
+
       const learning = await getLearning(env, key, userId, route, session.boundRouteId);
       learning.version = 4;
       delete learning.userId;
@@ -71,7 +117,7 @@ export async function onRequest({ request, env }) {
       pruneAliases(learning.aliases, MAX_ALIASES);
       learning.updatedAt = now;
       await redisSet(env, key, learning);
-      return json({ success: true, data: { route, userId, learned: true, learnedCount, aliasCount: Object.keys(learning.aliases).length, items: learned } });
+      return json({ success: true, data: { route, userId, learned: true, learnedCount, aliasCount: Object.keys(learning.aliases).length, items: learned, baseUpdated: baseChanged, addedStores } });
     } finally {
       await releaseLock(env, lockKey, lockToken).catch(() => {});
     }
@@ -79,6 +125,17 @@ export async function onRequest({ request, env }) {
     console.error('store learning error', error);
     return json({ success: false, error: error?.message || '学习记录保存失败' }, 503);
   }
+}
+
+function normalizeNewStore(item) {
+  const value = item && typeof item === 'object' ? item : {};
+  return {
+    name: clean(value.name || value.storeName || value.storeNameText),
+    storeId: clean(value.storeId),
+    baseCode: cleanCode(value.baseCode),
+    nav: clean(value.nav || value.navigation || value.navUrl),
+    note: clean(value.note)
+  };
 }
 
 function normalizeInput(item) {
