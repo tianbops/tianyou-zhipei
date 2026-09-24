@@ -49,15 +49,14 @@ export async function onRequest({ request, env }) {
     const totalWeight = resolveTotalWeight(body.totalWeight ?? body.weight, body.rawText);
     if (!totalWeight) return json({ success: false, code: 'WEIGHT_MISSING', error: '未识别到商品总量，请重新解析后再确认' }, 422);
 
-    if (!noBase && canManageRoute(session.user || session, route)) {
-      await promoteNewStoresToBase(env, route, body.orders);
-      base = await loadBase(env, route, userId, session.boundRouteId);
-    }
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base, route);
-    // 已确认的“新增门店”只有在线路维护用户权限下，才正式学习进线路基准库。
-    // 这里在生成最终订单身份之前完成，确保本次订单与下一次运单使用同一个稳定 storeId。
+    const learnedNewStoreCount = noBase ? 0 : canonical.filter(item => item?.isNew === true).length;
+    // 真正新增门店：线路维护用户确认后立即写入线路基准库，并生成永久 storeId。
+    // 非维护用户不能修改基准库，因此保留新增状态，等待线路维护用户后续补入。
     if (!noBase && canManageRoute(session.user || session, route)) {
-      await learnNewStoresIntoBase(env, route, base, canonical, session.id);
+      stage = 'learn-new-stores';
+      const learned = await learnNewStoresIntoBase(env, route, canonical, session.id);
+      if (Array.isArray(learned?.stores)) base = learned.stores;
     }
     const duplicateCount = countDuplicates(canonical);
     const uniqueCanonical = dedupeCanonical(canonical);
@@ -75,7 +74,7 @@ export async function onRequest({ request, env }) {
       count: orders.length,
       uniqueStoreCount: orders.length,
       matchedCount: noBase ? 0 : orders.filter(item => item.matched).length,
-      newStoreCount: noBase ? 0 : orders.filter(item => item.isNew).length,
+      newStoreCount: noBase ? 0 : learnedNewStoreCount,
       reviewCount: 0,
       duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
       recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount,
@@ -301,64 +300,6 @@ async function redisSetBase(env, route, value) {
   const data = await response.json().catch(() => ({}));
   if (data.result !== undefined && data.result !== 'OK') throw new Error('线路基准库保存未确认');
   return true;
-}
-
-async function promoteNewStoresToBase(env, route, inputOrders) {
-  const candidates = (Array.isArray(inputOrders) ? inputOrders : [])
-    .filter(item => item?.isNew === true && !item?.needsReview)
-    .map(item => ({
-      name: String(item?.name || item?.storeName || item?.shopName || '').trim(),
-      nav: String(item?.nav || item?.navigation || '').trim(),
-      note: String(item?.note || '').trim(),
-      storeId: String(item?.storeId || '').trim(),
-      baseCode: String(item?.baseCode || '').trim()
-    }))
-    .filter(item => item.name);
-  if (!candidates.length) return;
-
-  const lockKey = routeOrderKey(route, 'base-learning-lock');
-  const token = createLockToken();
-  if (!(await acquireLock(env, lockKey, token, ORDER_LOCK_TTL_SECONDS))) {
-    throw new Error('当前线路基准库正在更新，请稍后再试');
-  }
-  try {
-    const current = await loadRouteBase(env, route);
-    if (!current || !Array.isArray(current.stores)) throw new Error('未找到线路基准数据库');
-    const stores = normalizeStores(current.stores);
-    const byId = new Map(stores.filter(item => item.storeId).map(item => [String(item.storeId), item]));
-    const byName = new Map(stores.map(item => [key(item.name), item]));
-    let changed = false;
-
-    for (const candidate of candidates) {
-      const nameKey = key(candidate.name);
-      if (!nameKey) continue;
-      if (byId.has(candidate.storeId) || byName.has(nameKey)) continue;
-      const next = normalizeStores([...stores, {
-        ...candidate,
-        code: String(stores.length + 1).padStart(2, '0'),
-        routeOrder: stores.length + 1
-      }]).at(-1);
-      if (!next?.storeId) continue;
-      stores.push(next);
-      byId.set(next.storeId, next);
-      byName.set(key(next.name), next);
-      changed = true;
-    }
-    if (!changed) return;
-
-    const updatedAt = new Date().toISOString();
-    await redisSet(env, routeBaseKey(route), {
-      schemaVersion: Number(current.schemaVersion) || 1,
-      route: normalizeRoute(route),
-      stores: normalizeStores(stores),
-      dataVersion: (Number(current.dataVersion) || 0) + 1 || 1,
-      updatedAt,
-      updatedBy: 'confirm-new-store',
-      source: 'route-editor'
-    });
-  } finally {
-    await releaseLock(env, lockKey, token).catch(() => {});
-  }
 }
 
 async function loadBase(env, route, userId, boundRouteId) {
