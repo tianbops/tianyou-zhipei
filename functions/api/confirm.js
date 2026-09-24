@@ -129,7 +129,7 @@ export async function onRequest({ request, env }) {
           todayData.count = orders.length;
           todayData.uniqueStoreCount = orders.length;
           todayData.matchedCount = orders.filter(item => item.matched).length;
-          todayData.newStoreCount = orders.filter(item => item.isNew).length;
+          todayData.newStoreCount = learned.learnedCount || 0;
         }
       }
 
@@ -203,6 +203,7 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
     })).filter(store => store.name) : [];
     const byName = new Map(stores.map(store => [storeMatchKey(store.name), store]));
     let changed = false;
+    let learnedCount = 0;
 
     for (const order of orders) {
       if (!order?.isNew || !String(order?.name || '').trim()) continue;
@@ -240,9 +241,11 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
       order.isNew = false;
       order.matchType = 'confirmed-new';
       order.matchScore = 1;
+      order.learned = true;
+      learnedCount++;
     }
 
-    if (!changed) return { changed: false, stores: normalizeBaseForConfirm(stores) };
+    if (!changed) return { changed: false, learnedCount: 0, stores: normalizeBaseForConfirm(stores) };
 
     const now = new Date().toISOString();
     const value = {
@@ -256,7 +259,7 @@ async function learnNewStoresIntoBase(env, route, orders, userId) {
       source: 'confirm-learning'
     };
     await redisSetBase(env, route, value);
-    return { changed: true, stores: normalizeBaseForConfirm(stores) };
+    return { changed: true, learnedCount, stores: normalizeBaseForConfirm(stores) };
   } finally {
     await releaseLock(env, lockKey, lockToken).catch(() => {});
   }
