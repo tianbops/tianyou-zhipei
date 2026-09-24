@@ -262,13 +262,19 @@ async function loadBaseData(env, route, userId) {
 }
 
 function dedupeOrders(orders, base) {
-  const baseByName = new Map(base.map((store, index) => [store.nameKey, `b:${index}`]));
-  const baseByBusinessCode = new Map(base.filter(store => store.businessCode).map((store, index) => [store.businessCode, `b:${index}`]));
+  // 门店唯一身份以 storeId 为最高优先级；baseCode/名称仅作为兼容旧数据的回退。
+  const baseByStoreId = new Map(base.filter(store => store.storeId).map((store, index) => [store.storeId, 'b:' + index]));
+  const baseByName = new Map(base.map((store, index) => [store.nameKey, 'b:' + index]));
+  const baseByBusinessCode = new Map(base.filter(store => store.businessCode).map((store, index) => [store.businessCode, 'b:' + index]));
   const seen = new Set(), result = [];
   for (const order of orders) {
     const nameKey = normalizeStoreName(order.name), businessCode = order.businessCode || extractBusinessCode(order.name);
-    if (!nameKey) continue;
-    const identity = baseByName.get(nameKey) || (businessCode ? baseByBusinessCode.get(businessCode) : '') || `n:${nameKey}`;
+    const storeId = String(order.storeId || '').trim();
+    if (!nameKey && !storeId) continue;
+    const identity = (storeId && baseByStoreId.get(storeId))
+      || baseByName.get(nameKey)
+      || (businessCode ? baseByBusinessCode.get(businessCode) : '')
+      || (storeId ? 'id:' + storeId : 'n:' + nameKey);
     if (seen.has(identity)) continue;
     seen.add(identity); result.push(order);
   }
@@ -293,7 +299,9 @@ function sortByRouteBase(orders, base) {
 
 function normalizeOrder(item, index, batchId, date, route) {
   const value = typeof item === 'string' ? { name: item } : (item || {}), name = String(value.name || value.storeName || value.shopName || value['门店名称'] || '').trim();
-  return { id: String(value.id || `${batchId}-${index + 1}`), orderBatchId: batchId, code: String(value.code || index + 1).padStart(2, '0'), businessCode: String(value.businessCode || extractBusinessCode(name)).trim().toUpperCase(), name, nav: String(value.nav || value.navigation || value.url || value['导航'] || '').trim(), weight: Number(value.weight ?? value['重量'] ?? 0) || 0, note: String(value.note || value['备注'] || '').trim(), matched: value.matched === true, isNew: value.isNew === true || value.newStore === true, status: String(value.status || '待配送'), route, date };
+  const storeId = String(value.storeId || '').trim();
+  const baseCode = String(value.baseCode || '').trim();
+  return { id: String(value.id || (batchId + '-' + (index + 1))), storeId, baseCode, orderBatchId: batchId, code: String(value.code || index + 1).padStart(2, '0'), businessCode: String(value.businessCode || extractBusinessCode(name)).trim().toUpperCase(), name, nav: String(value.nav || value.navigation || value.url || value['导航'] || '').trim(), weight: Number(value.weight ?? value['重量'] ?? 0) || 0, note: String(value.note || value['备注'] || '').trim(), matched: value.matched === true, isNew: value.isNew === true || value.newStore === true, status: String(value.status || '待配送'), route, date };
 }
 
 function extractBusinessCode(value) { const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])((?:JM\d{4,6}|Q\d{3,5}|A\d{4,6}))(?:[^A-Z0-9]|$)/); return match ? match[1] : ''; }
@@ -331,7 +339,12 @@ function dedupeHistoryRecords(input) {
   });
 }
 function historyRecordSignature(record) {
-  const stores = Array.isArray(record?.orders) ? record.orders.map(item => normalizeStoreName(item?.name)).filter(Boolean).sort() : [];
+  const stores = Array.isArray(record?.orders) ? record.orders.map(item => {
+    const storeId = String(item?.storeId || '').trim();
+    const baseCode = String(item?.baseCode || item?.businessCode || '').trim().toUpperCase();
+    const name = normalizeStoreName(item?.name);
+    return storeId ? 'id:' + storeId : baseCode ? 'code:' + baseCode : name ? 'name:' + name : '';
+  }).filter(Boolean).sort() : [];
   return JSON.stringify({
     route: String(record?.route || ''),
     date: String(record?.date || ''),
