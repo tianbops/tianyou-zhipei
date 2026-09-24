@@ -172,6 +172,23 @@ window.Auth = {
   }
 };
 
+/*
+ * 全站统一身份守卫：
+ * - 业务页面必须是业务用户
+ * - admin.html 必须是唯一主系统管理员
+ * - 直接 URL、浏览器前进/后退、BFCache 恢复都重新以服务器 Session 为准
+ * - 不依赖页面自身是否主动调用 checkAuth()
+ */
+(function setupGlobalAuthGuard() {
+  const guard = () => window.Auth?.checkAuth?.();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', guard, { once: true });
+  } else {
+    guard();
+  }
+  window.addEventListener('pageshow', guard);
+})();
+
 // 全站统一返回。这里使用简单的 URL 解析，不使用容易造成语法错误的复杂正则。
 (function setupSmartBack() {
   function isAppPage(url) {
