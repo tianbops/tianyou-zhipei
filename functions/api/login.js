@@ -27,7 +27,8 @@ export async function onRequest({ request, env }) {
       return json({ success: false, error: '用户名或密码错误' }, 401);
     }
 
-    const updatedUser = { ...user, role: normalizeRole(user.role), boundRouteId: normalizeRoute(user.boundRouteId), route: normalizeRoute(user.boundRouteId), lastLoginAt: new Date().toISOString() };
+    const normalizedBoundRoute = normalizeRoute(user.boundRouteId);
+    const updatedUser = { ...user, role: normalizeRole(user.role), boundRouteId: normalizedBoundRoute, route: normalizedBoundRoute, lastLoginAt: new Date().toISOString() };
     await redisSet(env, `user:${userId}`, updatedUser);
     const safeUser = publicUser(updatedUser);
     if (client === 'miniprogram') {
