@@ -34,6 +34,9 @@ export async function onRequest({ request, env }) {
     if (body.name !== undefined) updated.name = String(body.name || '').trim().slice(0, 40);
     if (body.phone !== undefined) updated.phone = String(body.phone || '').trim().slice(0, 30);
     if (body.role !== undefined) {
+      if (String(user.adminLevel || '') === 'primary' && normalizeRole(body.role) !== 'system_admin') {
+        return json({ success: false, error: '主系统管理员账号不可取消管理员身份' }, 409);
+      }
       const role = normalizeRole(body.role);
       updated.role = role;
     }
@@ -61,7 +64,7 @@ async function deleteUser(env, admin, userId) {
   if (!user) return json({ success: false, error: '用户不存在' }, 404);
 
   if (normalizeRole(user.role) === 'system_admin') {
-    return json({ success: false, error: '不能直接删除系统管理员账号，请先取消管理员身份' }, 400);
+    return json({ success: false, error: String(user.adminLevel || '') === 'primary' ? '主系统管理员账号不可删除' : '不能直接删除系统管理员账号，请先取消管理员身份' }, 400);
   }
 
   const boundRoute = String(user.boundRouteId || '').trim();
