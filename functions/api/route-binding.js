@@ -101,6 +101,13 @@ async function unbindSelf(env, user) {
   if (!current) return json({ success: false, error: '绑定线路不存在，请联系管理员' }, 404);
 
   const duty = String(user.routeDuty || '').trim().toLowerCase();
+  if (!['driver', 'delivery'].includes(duty)) {
+    return json({ success: false, error: '当前线路绑定岗位信息异常，请联系系统管理员处理' }, 409);
+  }
+  const boundSlotUserId = duty === 'driver' ? String(current.driverUserId || '') : String(current.deliveryUserId || '');
+  if (boundSlotUserId !== String(user.id)) {
+    return json({ success: false, error: '当前账号与线路岗位绑定数据不一致，请联系系统管理员处理' }, 409);
+  }
   const driverUserId = duty === 'driver' ? '' : String(current.driverUserId || '');
   const deliveryUserId = duty === 'delivery' ? '' : String(current.deliveryUserId || '');
   const ids = [driverUserId, deliveryUserId].filter(Boolean);
