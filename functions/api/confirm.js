@@ -36,7 +36,7 @@ export async function onRequest({ request, env }) {
     let base = [];
     stage = 'load-base';
     try {
-      base = await loadBase(env, route, userId, session.boundRouteId);
+      base = await loadRouteBase(env, route, userId, session.boundRouteId);
     } catch (error) {
       if (/未找到.*线路基准数据库/.test(String(error?.message || ''))) {
         noBase = true;
