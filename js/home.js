@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 
-let parsedOrders=[],serverOrder=null,pendingMeta={},reviewMode=false,primaryActionMode='plan',statusBaseDetails=[],pendingReviewCount=0;
+let parsedOrders=[],serverOrder=null,pendingMeta={},reviewMode=false,primaryActionMode='idle',statusBaseDetails=[],pendingReviewCount=0;
 const $=id=>document.getElementById(id);
 function toast(message,type=''){let el=$('homeToast');if(!el){el=document.createElement('div');el.id='homeToast';el.className='toast';document.body.appendChild(el)}el.textContent=message;el.className=`toast show ${type}`;clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),2800)}
 window.homeToast=toast;
@@ -50,15 +50,15 @@ function invalidateUploadTask(){return typeof window.invalidateUploadTask==='fun
 function isUploadTaskActive(taskId){return !taskId||typeof window.isUploadTaskActive!=='function'||window.isUploadTaskActive(taskId)}
 async function parseOrderText(text,taskId=0){
   const route=currentRoute();
-  if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});if(!route)throw Error('未指定配送线路');
-  if(parseInFlight)throw Error('规划正在进行，请勿重复点击');
+  if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});if(!route)throw Error('未指定配送线路');
+  if(parseInFlight)throw Error('正在处理运单，请勿重复操作');
   parseInFlight=true;parseCancelled=false;parseAbortController=new AbortController();
   const PARSE_TIMEOUT_MS=120000; // 门店提取与基准库比对最多等待2分钟
   const timer=setTimeout(()=>parseAbortController?.abort(),PARSE_TIMEOUT_MS);
   try{
     const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,route}),credentials:'same-origin',cache:'no-store',signal:parseAbortController.signal});
     const data=await response.json().catch(()=>({}));
-    if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});
+    if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
     if(!response.ok||!data.success){
       const message=String(data?.error||'');
       if(/未找到.*独立基准数据库/.test(message)){if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});const fallback=fallbackParse(text);if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消规划'),{code:'PARSE_CANCELLED'});return fallback;}
@@ -77,24 +77,35 @@ async function parseOrderText(text,taskId=0){
 }
 window.cancelParse=async()=>{invalidateUploadTask();if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')await cancelOCR().catch(()=>{});};
 
-function setPrimaryActionMode(mode){primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'plan';const button=$('primaryActionBtn');if(!button)return;const visible=primaryActionMode!=='plan';button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'';button.classList.toggle('ready',primaryActionMode==='confirm');button.disabled=false;button.hidden=!visible;button.setAttribute('aria-hidden',visible?'false':'true')}
-function ensureConfirmModule(){
-  if(typeof window.submitManualOrder==='function')return Promise.resolve(true);
-  return new Promise(resolve=>{
-    const existing=document.querySelector('script[data-home-confirm-loader="1"]');
-    if(existing){existing.addEventListener('load',()=>resolve(typeof window.submitManualOrder==='function'),{once:true});existing.addEventListener('error',()=>resolve(false),{once:true});setTimeout(()=>resolve(typeof window.submitManualOrder==='function'),1500);return;}
-    const script=document.createElement('script');
-    script.src='js/home_confirm.js?v=20260922-10';
-    script.async=false;
-    script.dataset.homeConfirmLoader='1';
-    script.onload=()=>resolve(typeof window.submitManualOrder==='function');
-    script.onerror=()=>resolve(false);
-    document.head.appendChild(script);
-  });
+function setPrimaryActionMode(mode){
+  primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'idle';
+  const button=$('primaryActionBtn');
+  if(!button)return;
+  const visible=primaryActionMode==='confirm'||primaryActionMode==='error';
+  button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'';
+  button.classList.toggle('ready',primaryActionMode==='confirm');
+  button.disabled=false;
+  button.hidden=!visible;
+  button.setAttribute('aria-hidden',visible?'false':'true');
 }
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.add('waiting')}}
 window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
-window.handlePrimaryAction=async()=>{if(primaryActionMode==='confirm'){if(typeof window.submitManualOrder!=='function'){const loaded=await ensureConfirmModule();if(!loaded){window.renderUnifiedStatus?.('error',100,'确认录入模块加载失败，请刷新页面后重试');window.homeToast?.('确认录入模块加载失败，请刷新页面后重试','error');return}}return window.submitManualOrder();}if(primaryActionMode==='error'){window.restartUpload?.();return}const button=$('primaryActionBtn');if(!button||parseInFlight)return;button.disabled=true;button.textContent='正在规划…';button.classList.remove('ready');try{const stores=await window.parseManualInput?.();if(Array.isArray(stores)&&stores.length)setPrimaryActionMode('confirm');else setPrimaryActionMode('plan')}finally{if(primaryActionMode==='plan')setPrimaryActionMode('plan')}};
+window.handlePrimaryAction=async()=>{
+  if(primaryActionMode==='confirm'){
+    if(typeof window.submitManualOrder!=='function'){
+      const loaded=await ensureConfirmModule();
+      if(!loaded){
+        window.renderUnifiedStatus?.('error',100,'确认录入模块加载失败，请刷新页面后重试');
+        window.homeToast?.('确认录入模块加载失败，请刷新页面后重试','error');
+        return;
+      }
+    }
+    return window.submitManualOrder();
+  }
+  if(primaryActionMode==='error'){
+    window.restartUpload?.();
+  }
+};
 let uploadDetailMode='';
 function getCorrectionDetailText(){
   return Array.isArray(correctionDetails)&&correctionDetails.length?correctionDetails:[];
@@ -102,15 +113,15 @@ function getCorrectionDetailText(){
 function renderUploadDetail(mode){
   const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody');
   if(!view||!title||!body)return;
-  uploadDetailMode=mode==='correction'?'correction':'planning';
+  uploadDetailMode=mode==='correction'?'correction':'recognition';
   const sheet=document.querySelector('.upload-sheet');
   if(sheet){
-    sheet.classList.remove('detail-mode-planning','detail-mode-correction');
+    sheet.classList.remove('detail-mode-planning','detail-mode-recognition','detail-mode-correction');
     sheet.classList.add(`detail-mode-${uploadDetailMode}`);
   }
-  title.textContent=uploadDetailMode==='correction'?'修正详情':'规划详情';
+  title.textContent=uploadDetailMode==='correction'?'修正详情':'识别详情';
   body.textContent='';
-  if(uploadDetailMode==='planning'){
+  if(uploadDetailMode==='recognition'){
     const sectionTitle=document.createElement('div');sectionTitle.className='detail-section-title';sectionTitle.textContent='当日订单信息';body.appendChild(sectionTitle);
     const info=document.createElement('div');info.className='order-info-list';
     const lines=String($('manualOrderInput')?.value||'').split(/\n/).map(v=>v.trim()).filter(Boolean);const values={};
@@ -179,7 +190,7 @@ function closeUploadDetail(){
   uploadDetailMode='';
 }
 window.closeUploadDetail=closeUploadDetail;
-window.toggleOCRText=()=>renderUploadDetail('planning');
+window.toggleOCRText=()=>renderUploadDetail('recognition');
 window.openCorrectionDetails=()=>renderUploadDetail('correction');
 window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
 let uploadHistoryGuard=false;
@@ -195,7 +206,13 @@ function closeUploadHistoryGuard(){
   uploadHistoryGuard=false;
   if(history.state&&history.state.zpeiUploadOverlay){history.back();}
 }
-window.cancelUpload=async()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(overlay){overlay.classList.remove('active');window.closeUploadSource?.();}closeUploadHistoryGuard();};
+window.cancelUpload=()=>{
+  const overlay=$('uploadOverlay');
+  if(overlay)overlay.classList.remove('active');
+  window.closeUploadSource?.();
+  closeUploadHistoryGuard();
+  try{window.clearManualInput?.();}catch(e){console.warn('清理上传状态失败',e);}
+};
 window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');if(opening){overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.cancelUpload?.();}};
 window.addEventListener('popstate',()=>{
   const overlay=$('uploadOverlay');
@@ -212,7 +229,7 @@ window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoun
 window.goToOrderDetail=()=>navigateApp('pages/order_detail.html');
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
-window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对后规划路线。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('plan');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.();};
+window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;setPrimaryActionMode('idle');const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.();};
 let correctionDetails=[];let correctionStats={raw:0,corrected:0,merged:0};function setCorrectionSummary(count){
   const row=$('reviewSummary');
   if(row)row.hidden=count<=0;
@@ -226,7 +243,7 @@ window.updatePendingReviewCount=count=>{
   pendingReviewCount=Math.max(0,Number(count)||0);
   renderCurrentStatusDetails();
 };
-window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');const taskId=Number(options?.taskId)||ensureUploadTask();if(taskId&&!isUploadTaskActive(taskId))return[];if(parseInFlight)return auto?[]:toast('规划正在进行，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',10,auto?'正在根据运单生成路线…':'正在规划路线…');const data=await parseOrderText(text,taskId);if(taskId&&!isUploadTaskActive(taskId))return[];window.renderUnifiedStatus('loading',78,'正在生成配送顺序…');parsedOrders=Array.isArray(data.stores)?data.stores:[];const parseContextId=`parse-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;const parsedRoute=String(data?.route||currentRoute()||'').trim();const parsedUserId=String(data?.userId||((typeof Auth!=='undefined'&&Auth.serverUser)?(Auth.serverUser.id||Auth.serverUser.username||Auth.serverUser.account||''):'')).trim();data.parseContextId=parseContextId;pendingMeta={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;if(taskId&&!isUploadTaskActive(taskId))return[];window.onOrderParsed?.(data);setReviewText(data);
+window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');const taskId=Number(options?.taskId)||ensureUploadTask();if(taskId&&!isUploadTaskActive(taskId))return[];if(parseInFlight)return auto?[]:toast('规划正在进行，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',10,'正在处理运单…');const data=await parseOrderText(text,taskId);if(taskId&&!isUploadTaskActive(taskId))return[];window.renderUnifiedStatus('loading',78,'正在生成配送顺序…');parsedOrders=Array.isArray(data.stores)?data.stores:[];const parseContextId=`parse-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;const parsedRoute=String(data?.route||currentRoute()||'').trim();const parsedUserId=String(data?.userId||((typeof Auth!=='undefined'&&Auth.serverUser)?(Auth.serverUser.id||Auth.serverUser.username||Auth.serverUser.account||''):'')).trim();data.parseContextId=parseContextId;pendingMeta={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;if(taskId&&!isUploadTaskActive(taskId))return[];window.onOrderParsed?.(data);setReviewText(data);
 if(parsedOrders.length){
   let mergeCount=0,correctionCount=0;
   const newStoreCount=Number(data?.newStoreCount)||parsedOrders.filter(item=>item?.isNew===true||item?.matchType==='new').length;
@@ -286,6 +303,6 @@ function readCachedHomeOrder(){try{const cacheKey=homeCacheScope();if(!cacheKey)
 function writeCachedHomeOrder(order){try{const cacheKey=homeCacheScope();if(!cacheKey)return;sessionStorage.setItem(cacheKey,JSON.stringify({date:currentDate(),route:String(currentRoute()||''),order}))}catch(_){}}
 async function refreshHomeOrder(){try{await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary()}catch(e){console.error('刷新当日任务失败',e)}}
 document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');
-if(!(await Auth.checkAuth()))return;const me=await Auth.getCurrentServerUser();if(me?.role==='system_admin'&&$('adminMenuItem'))$('adminMenuItem').style.display='flex';await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const cached=readCachedHomeOrder();if(cached){serverOrder=cached;updateSummary()}await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary();$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];statusBaseDetails=[];pendingReviewCount=0;setPrimaryActionMode('plan');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新规划')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
+if(!(await Auth.checkAuth()))return;const me=await Auth.getCurrentServerUser();if(me?.role==='system_admin'&&$('adminMenuItem'))$('adminMenuItem').style.display='flex';await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const cached=readCachedHomeOrder();if(cached){serverOrder=cached;updateSummary()}await loadServerOrder(currentDate());writeCachedHomeOrder(serverOrder);updateSummary();$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];statusBaseDetails=[];pendingReviewCount=0;setPrimaryActionMode('idle');window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
 window.addEventListener('pageshow',event=>{document.body.classList.remove('is-leaving');const menu=$('homeMenu');if(menu)menu.style.display='none';const overlay=$('uploadOverlay');if(event.persisted)window.clearManualInput?.();if(overlay)overlay.classList.remove('active');closeUploadSource();if(event.persisted&&typeof Auth!=='undefined')refreshHomeOrder()});
 })();
