@@ -52,14 +52,6 @@ export async function onRequest({ request, env }) {
     const canonical = noBase ? canonicalizeRawOrders(body.orders) : canonicalizeOrders(body.orders, base, route);
     const duplicateCount = countDuplicates(canonical);
     const uniqueCanonical = dedupeCanonical(canonical);
-    const learnedNewStoreCount = noBase ? 0 : uniqueCanonical.filter(item => item?.isNew === true).length;
-    // 真正新增门店：线路维护用户确认后立即写入线路基准库，并生成永久 storeId。
-    // 非维护用户不能修改基准库，因此保留新增状态，等待线路维护用户后续补入。
-    if (!noBase && canManageRoute(session.user || session, route)) {
-      stage = 'learn-new-stores';
-      const learned = await learnNewStoresIntoBase(env, route, canonical, session.id);
-      if (Array.isArray(learned?.stores)) base = learned.stores;
-    }
     const orderBatchId = String(body.orderBatchId || '').trim() || createBatchId(date, route);
     const confirmRequestId = String(body.confirmRequestId || '').trim().slice(0, 160);
     const idempotencyKey = confirmRequestId ? routeOrderKey(route, `confirm:${date}:${confirmRequestId}`) : '';
@@ -74,7 +66,7 @@ export async function onRequest({ request, env }) {
       count: orders.length,
       uniqueStoreCount: orders.length,
       matchedCount: noBase ? 0 : orders.filter(item => item.matched).length,
-      newStoreCount: noBase ? 0 : learnedNewStoreCount,
+      newStoreCount: noBase ? 0 : orders.filter(item => item.isNew).length,
       reviewCount: 0,
       duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
       recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount,
@@ -132,11 +124,6 @@ export async function onRequest({ request, env }) {
         }
       }
 
-      // 已明确选择“作为新增门店”的记录，在确认入库前正式写入线路基准库并取得稳定 storeId。
-      // 该步骤位于线路+日期锁内，避免两个并发确认同时创建同一门店。
-      stage = 'learn-new-stores';
-      await learnConfirmedNewStores(env, route, todayData.orders, userId);
-
       // Redis SET 成功响应即表示命令已执行，不再额外 GET 三次验证，避免确认录入长时间等待。
       const saved = todayData;
       const historyKey = routeOrderKey(route, `history:${date}`);
@@ -191,177 +178,6 @@ export async function onRequest({ request, env }) {
   }
 }
 
-async function learnNewStoresIntoBase(env, route, orders, userId) {
-  const lockKey = `lock:route-base:${encodeURIComponent(route)}`;
-  const lockToken = createLockToken();
-  if (!(await acquireLock(env, lockKey, lockToken, 20))) {
-    throw new Error('该线路基准库正在被修改，请稍后重试');
-  }
-  try {
-    const raw = await loadRouteBase(env, route, { allowLegacyUserId: userId });
-    const stores = Array.isArray(raw?.stores) ? raw.stores.map((store, index) => ({
-      ...store,
-      code: String(store?.code || index + 1).padStart(2, '0'),
-      routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1,
-      name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim()
-    })).filter(store => store.name) : [];
-    const byName = new Map(stores.map(store => [storeMatchKey(store.name), store]));
-    let changed = false;
-    let learnedCount = 0;
-
-    // 兼容历史基准库：首次经过确认链路时，为仍缺失 storeId 的旧门店补齐永久身份。
-    for (const store of stores) {
-      if (!String(store?.storeId || '').trim()) {
-        store.storeId = `store-${crypto.randomUUID()}`;
-        changed = true;
-      }
-    }
-
-    for (const order of orders) {
-      if (!order?.isNew || !String(order?.name || '').trim()) continue;
-      const name = String(order.name).trim();
-      const key = storeMatchKey(name);
-      if (!key) continue;
-
-      let target = byName.get(key);
-      if (!target) {
-        target = {
-          storeId: String(order.storeId || '').trim() || `store-${crypto.randomUUID()}`,
-          baseCode: String(order.baseCode || '').trim(),
-          code: String(stores.length + 1).padStart(2, '0'),
-          name,
-          nav: String(order.nav || '').trim(),
-          note: String(order.note || '').trim(),
-          routeOrder: stores.length + 1,
-          aliases: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        stores.push(target);
-        byName.set(key, target);
-        changed = true;
-      } else if (!target.storeId) {
-        target.storeId = String(order.storeId || '').trim() || `store-${crypto.randomUUID()}`;
-        changed = true;
-      }
-
-      order.storeId = String(target.storeId || '').trim();
-      order.baseCode = String(target.baseCode || '').trim();
-      order.baseName = target.name;
-      order.name = target.name;
-      order.matched = true;
-      order.isNew = false;
-      order.matchType = 'confirmed-new';
-      order.matchScore = 1;
-      order.learned = true;
-      learnedCount++;
-    }
-
-    if (!changed) return { changed: false, learnedCount: 0, stores: normalizeBaseForConfirm(stores) };
-
-    const now = new Date().toISOString();
-    const value = {
-      ...(raw && typeof raw === 'object' ? raw : {}),
-      schemaVersion: Number(raw?.schemaVersion) || 1,
-      route: normalizeRoute(route),
-      stores,
-      dataVersion: (Number(raw?.dataVersion) || 0) + 1 || 1,
-      updatedAt: now,
-      updatedBy: userId,
-      source: 'confirm-learning'
-    };
-    await redisSetBase(env, route, value);
-    return { changed: true, learnedCount, stores: normalizeBaseForConfirm(stores) };
-  } finally {
-    await releaseLock(env, lockKey, lockToken).catch(() => {});
-  }
-}
-
-function normalizeBaseForConfirm(stores) {
-  return stores.map((store, index) => ({
-    ...store,
-    storeId: String(store?.storeId || '').trim(),
-    baseCode: String(store?.baseCode || '').trim(),
-    code: String(store?.code || index + 1).padStart(2, '0'),
-    routeOrder: Number(store?.routeOrder || index + 1) || index + 1,
-    name: String(store?.name || '').trim(),
-    nav: String(store?.nav || '').trim(),
-    note: String(store?.note || '').trim(),
-    index
-  })).filter(store => store.name);
-}
-
-function storeMatchKey(value) {
-  return String(value || '').trim()
-    .replace(/[\\s\\u3000]+/g, '')
-    .replace(/[【】\\[\\]（）()<>《》“”"''·,，。；;：:\\-_/]/g, '')
-    .toLowerCase();
-}
-
-async function redisSetBase(env, route, value) {
-  const response = await redisFetch(env, `/set/${encodeURIComponent(routeBaseKey(route))}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(value)
-  });
-  if (!response.ok) throw new Error(`线路基准库保存失败（HTTP ${response.status}）`);
-  const data = await response.json().catch(() => ({}));
-  if (data.result !== undefined && data.result !== 'OK') throw new Error('线路基准库保存未确认');
-  return true;
-}
-
-async function loadBase(env, route, userId, boundRouteId) {
-  const raw = await loadRouteBase(env, route, { allowLegacyUserId: normalizeRoute(boundRouteId) === normalizeRoute(route) ? userId : undefined });
-  const stores = Array.isArray(raw?.stores) ? raw.stores : [];
-  if (!stores.length) throw new Error(`未找到${route}线路基准数据库`);
-  return stores.map((store, index) => ({
-    // storeId 是稳定身份，绝不能退化为本次线路顺序 code。
-    storeId: String(store?.storeId || '').trim(),
-    baseCode: String(store?.baseCode || '').trim(),
-    name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
-    code: String(store?.code || index + 1).padStart(2, '0'),
-    nav: String(store?.nav || store?.navigation || store?.url || store?.['导航'] || '').trim(),
-    note: String(store?.note || store?.['备注'] || '').trim(),
-    routeOrder: Number(store?.routeOrder || store?.code || index + 1) || index + 1,
-    index
-  })).filter(store => store.name);
-}
-
-async function learnConfirmedNewStores(env, route, orders, userId) {
-  const newItems = (Array.isArray(orders) ? orders : []).filter(item => item?.isNew === true && String(item?.name || '').trim());
-  if (!newItems.length) return;
-  const current = await loadRouteBase(env, route);
-  const stores = Array.isArray(current?.stores) ? current.stores.map(store => ({ ...store })) : [];
-  const byStoreId = new Map(stores.map(store => [String(store?.storeId || '').trim(), store]).filter(([id]) => id));
-  const byName = new Map(stores.map(store => [key(store?.name || ''), store]).filter(([name]) => name));
-  let changed = false;
-  for (const item of newItems) {
-    const name = String(item.name || '').trim();
-    const stableId = String(item.storeId || createStableStoreId(route, name)).trim();
-    let target = byStoreId.get(stableId) || byName.get(key(name));
-    if (!target) {
-      const nextOrder = stores.reduce((max, store, index) => Math.max(max, Number(store?.routeOrder) || Number(store?.code) || index + 1), 0) + 1;
-      target = { storeId: stableId, baseCode: stableId, code: String(nextOrder).padStart(2, '0'), routeOrder: nextOrder, name, nav: String(item.nav || '').trim(), note: String(item.note || '').trim(), learnedAt: new Date().toISOString(), learnedBy: String(userId || '').trim() };
-      stores.push(target);
-      byStoreId.set(stableId, target);
-      byName.set(key(name), target);
-      changed = true;
-    }
-    item.storeId = String(target.storeId || stableId).trim();
-    item.baseCode = String(target.baseCode || target.storeId || stableId).trim();
-    item.baseName = String(target.name || name).trim();
-  }
-  if (!changed) return;
-  const normalizedStores = stores.map((store, index) => ({ ...store, storeId: String(store?.storeId || createStableStoreId(route, store?.name || `store-${index + 1}`)).trim(), code: String(store?.code || index + 1).padStart(2, '0'), routeOrder: Number(store?.routeOrder || index + 1) || index + 1, name: String(store?.name || '').trim() })).filter(store => store.name);
-  await redisSet(env, routeBaseKey(route), { schemaVersion: Number(current?.schemaVersion) || 1, route, stores: normalizedStores, dataVersion: (Number(current?.dataVersion) || 0) + 1 || 1, updatedAt: new Date().toISOString(), updatedBy: String(userId || '').trim(), source: 'confirmed-new-store' });
-}
-
-function createStableStoreId(route, name) {
-  const input = `${normalizeRoute(route)}\u0000${key(name)}`;
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index++) { hash ^= input.charCodeAt(index); hash = Math.imul(hash, 16777619); }
-  return `store-${(hash >>> 0).toString(36)}`;
-}
 function canonicalizeRawOrders(input) {
   return input.map(item => {
     const raw = typeof item === 'string' ? { name: item } : (item || {});
@@ -391,9 +207,10 @@ function canonicalizeOrders(input, base, route) {
   }).filter(item => item.name);
 }
 
-async function learnNewStoresIntoBase(env, route, base, items, userId) {
-  const newItems = (Array.isArray(items) ? items : []).filter(item => item?.isNew === true && String(item?.name || '').trim());
-  if (!newItems.length) return;
+async function learnNewStoresIntoBase(env, route, orders, userId) {
+  const newItems = (Array.isArray(orders) ? orders : [])
+    .filter(item => item?.isNew === true && !item?.needsReview && String(item?.name || '').trim());
+  if (!newItems.length) return { changed: false, learnedCount: 0, stores: [] };
 
   const lockKey = routeBaseKey(route) + ':learn-lock';
   const token = createLockToken();
@@ -401,82 +218,84 @@ async function learnNewStoresIntoBase(env, route, base, items, userId) {
     throw new Error('线路基准库正在更新，请稍后重试');
   }
   try {
-    // 重新读取最新基准，避免线路编辑器与确认录入并发时覆盖对方刚保存的数据。
     const latest = await loadRouteBase(env, route);
-    const latestStores = Array.isArray(latest?.stores) ? latest.stores.map((store, index) => ({
-      ...store,
-      // storeId 必须来自持久化身份；baseCode 只能作为业务辅助编码。
-      storeId: String(store?.storeId || '').trim(),
-      baseCode: String(store?.baseCode || '').trim(),
-      name: String(store?.name || store?.storeName || store?.shopName || '').trim(),
-      code: String(store?.code || index + 1).padStart(2, '0'),
-      routeOrder: Number(store?.routeOrder) || index + 1
-    })).filter(store => store.name) : (Array.isArray(base) ? base.filter(store => store?.name) : []);
-    const byName = new Map(latestStores.map(store => [key(store.name), store]));
-    const byStoreId = new Map(latestStores.filter(store => store.storeId).map(store => [store.storeId, store]));
-    let changed = false;
+    if (!latest || !Array.isArray(latest.stores)) throw new Error('未找到线路基准数据库');
 
-    // 一次性补齐历史基准门店缺失的稳定身份，避免旧数据继续把 code 当作 storeId。
-    for (const store of latestStores) {
-      if (!String(store.storeId || '').trim()) {
-        store.storeId = crypto.randomUUID();
-        byStoreId.set(store.storeId, store);
-        changed = true;
-      }
-    }
+    const stores = latest.stores.map((store, index) => ({
+      ...store,
+      storeId: String(store?.storeId || '').trim() || crypto.randomUUID(),
+      baseCode: String(store?.baseCode || '').trim(),
+      code: String(store?.code || index + 1).padStart(2, '0'),
+      routeOrder: Number(store?.routeOrder) || index + 1,
+      name: String(store?.name || store?.storeName || store?.shopName || store?.['门店名称'] || '').trim(),
+      nav: String(store?.nav || store?.navigation || store?.navUrl || store?.amap || '').trim(),
+      note: String(store?.note || store?.remark || '').trim()
+    })).filter(store => store.name);
+
+    const byId = new Map(stores.map(store => [String(store.storeId), store]));
+    const byName = new Map(stores.map(store => [key(store.name), store]));
+    let changed = false;
+    let learnedCount = 0;
 
     for (const item of newItems) {
       const name = String(item.name || '').trim();
-      const existing = byStoreId.get(String(item.storeId || '').trim()) || byName.get(key(name));
-      if (existing) {
-        item.storeId = String(existing.storeId || existing.baseCode || '').trim();
-        item.baseCode = String(existing.baseCode || '').trim();
-        item.name = existing.name;
-        item.matched = true;
-        item.isNew = false;
-        item.matchType = 'learned-new';
-        item.matchScore = 1;
-        continue;
-      }
+      const nameKey = key(name);
+      if (!nameKey) continue;
 
-      const routeOrder = latestStores.length + 1;
-      const code = String(routeOrder).padStart(2, '0');
-      // 新门店第一次确认即生成永久 storeId；后续运单只通过该身份关联。
-      const storeId = String(item.storeId || '').trim() || crypto.randomUUID();
-      const store = {
-        storeId,
+      const existing = byId.get(String(item.storeId || '').trim()) || byName.get(nameKey);
+      const target = existing || {
+        storeId: String(item.storeId || '').trim() || crypto.randomUUID(),
         baseCode: String(item.baseCode || '').trim(),
-        code,
-        routeOrder,
+        code: String(stores.length + 1).padStart(2, '0'),
+        routeOrder: stores.length + 1,
         name,
         nav: String(item.nav || '').trim(),
         note: String(item.note || '').trim(),
         aliases: Array.isArray(item.rawNames) ? item.rawNames.filter(Boolean).slice(-5) : []
       };
-      latestStores.push(store);
-      byStoreId.set(storeId, store);
-      byName.set(key(name), store);
-      item.storeId = storeId;
-      item.baseCode = store.baseCode;
-      item.code = code;
+
+      if (!existing) {
+        stores.push(target);
+        byId.set(target.storeId, target);
+        byName.set(nameKey, target);
+        changed = true;
+      } else if (!String(existing.storeId || '').trim()) {
+        existing.storeId = crypto.randomUUID();
+        changed = true;
+      }
+
+      item.storeId = String(target.storeId || '').trim();
+      item.baseCode = String(target.baseCode || item.storeId || '').trim();
+      item.baseName = String(target.name || name).trim();
+      item.name = item.baseName;
       item.matched = true;
       item.isNew = false;
       item.matchType = 'learned-new';
       item.matchScore = 1;
-      changed = true;
+      learnedCount++;
     }
 
-    if (!changed) return;
-    const now = new Date().toISOString();
-    await redisSet(env, routeBaseKey(route), {
-      schemaVersion: Number(latest?.schemaVersion) || 1,
-      route: normalizeRoute(route),
-      stores: latestStores.map((store, index) => ({ ...store, routeOrder: index + 1, code: String(index + 1).padStart(2, '0') })),
-      dataVersion: (Number(latest?.dataVersion) || 0) + 1 || 1,
-      updatedAt: now,
-      updatedBy: String(userId || ''),
-      source: 'confirmed-new-store'
-    });
+    const normalizedStores = stores.map((store, index) => ({
+      ...store,
+      code: String(index + 1).padStart(2, '0'),
+      routeOrder: index + 1,
+      index
+    }));
+
+    if (changed) {
+      const now = new Date().toISOString();
+      await redisSet(env, routeBaseKey(route), {
+        schemaVersion: Number(latest.schemaVersion) || 1,
+        route: normalizeRoute(route),
+        stores: normalizedStores,
+        dataVersion: (Number(latest.dataVersion) || 0) + 1 || 1,
+        updatedAt: now,
+        updatedBy: String(userId || ''),
+        source: 'confirmed-new-store'
+      });
+    }
+
+    return { changed, learnedCount, stores: normalizedStores };
   } finally {
     await releaseLock(env, lockKey, token).catch(() => {});
   }
