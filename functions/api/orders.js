@@ -80,8 +80,9 @@ async function saveOrder(request, env, session) {
     };
     const historyKey = routeOrderKey(route, `history:${date}`);
     let updatedHistory = null;
+    let historyData = null;
     if (isVehicleOnlyUpdate) {
-      let historyData = await redisGet(env, historyKey);
+      historyData = await redisGet(env, historyKey);
       if (!Array.isArray(historyData) && isBoundRoute(session, route)) {
         const users = await listUsersByRoute(env, route);
         const legacyLists = await Promise.all(users.map(async user => {
