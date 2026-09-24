@@ -56,7 +56,14 @@ Page({
       const value = match ? Number(match[0]) : NaN;
       const tons = Number.isFinite(value) ? (/kg|千克|公斤/i.test(source) ? value / 1000 : /吨|\bt\b/i.test(source) ? value : value >= 1000 ? value / 1000 : value) : NaN;
       const weight = Number.isFinite(tons) ? ((Math.round((tons + Number.EPSILON) * 100) / 100).toFixed(2) + 't') : '0.00t';
-      this.setData({ order: { count: Number(order.uniqueStoreCount ?? order.count ?? stores.length), weight, stores }, user: { ...this.data.user, vehicle: String(order.vehicle || this.data.user.vehicle || '') } });
+      // 首页统计与 Web 首页保持同一口径：今日配送/商品总量使用当天全部运单汇总；
+      // 门店列表仍展示当前选中的运单，避免多运单时统计与列表口径混乱。
+      const summary = data?.todaySummary || null;
+      const summaryCount = Number(summary?.storeCount);
+      const summaryWeight = String(summary?.totalWeight || '').trim();
+      const displayCount = Number.isFinite(summaryCount) && summaryCount >= 0 ? summaryCount : Number(order.uniqueStoreCount ?? order.count ?? stores.length);
+      const displayWeight = summaryWeight || weight;
+      this.setData({ order: { count: displayCount, weight: displayWeight, stores }, user: { ...this.data.user, vehicle: String(order.vehicle || this.data.user.vehicle || '') } });
     } catch (e) {
       if (/401|403|未登录|登录/.test(String(e.message))) wx.reLaunch({ url: '/pages/login/login' });
     }
