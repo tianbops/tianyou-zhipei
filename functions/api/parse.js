@@ -842,23 +842,7 @@ function normalizeBase(store, index) {
 }
 
 function toMatched(item, mode, score, rawName) {
-  return {
-    code: item.code,
-    name: item.name,
-    nav: item.nav || item.navigation || item.navUrl || item.amap || '',
-    note: item.note || item.remark || '',
-    storeId: String(item.storeId || item.baseCode || item.code || '').trim(),
-    baseCode: String(item.baseCode || item.code || '').trim(),
-    isNew: false,
-    matched: true,
-    needsReview: false,
-    matchType: mode,
-    matchScore: Number(score || 0),
-    baseName: item.name,
-    rawName,
-    rawNames: [rawName],
-    _i: item.index
-  };
+  return { code: item.code, name: item.name, storeId: String(item.storeId || item.baseCode || '').trim(), baseCode: String(item.baseCode || item.code || '').trim(), nav: item.nav || item.navigation || item.navUrl || item.amap || '', note: item.note || item.remark || '', isNew: false, matched: true, needsReview: false, matchType: mode, matchScore: Number(score || 0), baseName: item.name, rawName, rawNames: [rawName], _i: item.index };
 }
 
 function extractBusinessCode(value) {
