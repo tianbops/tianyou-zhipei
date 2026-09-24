@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const $=id=>document.getElementById(id);
-const MESSAGES={idle:'准备好开始今天的配送任务',loading:'正在处理…',success:'线路规划完成',error:'运单识别失败',cancelled:'已取消'};
+const MESSAGES={idle:'准备好开始今天的配送任务',loading:'正在处理…',success:'运单处理完成',error:'运单处理失败',cancelled:'已取消'};
 function setError(message){const text=String(message||'').trim();if($('statusText')&&text){$('statusText').textContent=text;$('statusText').setAttribute('data-text',text);}}
 function clearError(){setError('');}
 function render(status='idle',progress=0,message=''){
