@@ -86,7 +86,7 @@ function renderUsers(){
     <div class="actions">
       <button onclick="toggleUser('${escAttr(u.id)}','${u.status==='active'?'disabled':'active'}')">${u.status==='active'?'停用':'启用'}</button>
       <button onclick="resetPassword('${escAttr(u.id)}')">重置密码</button>
-      <button onclick="setRole('${escAttr(u.id)}','${u.role==='system_admin'?'driver':'system_admin'}')">${u.adminLevel==='primary'?'主系统管理员':u.role==='system_admin'?'取消管理员':'设为管理员'}</button>
+      ${u.adminLevel==='primary'?'<button type="button" disabled>主系统管理员</button>':'<button onclick="setRole(\''+escAttr(u.id)+'\',\''+(u.role==='system_admin'?'driver':'system_admin')+'\')">'+(u.role==='system_admin'?'取消管理员':'设为管理员')+'</button>'}
       ${u.role!=='system_admin'&&!u.boundRouteId?'<button onclick="deleteUser(\''+escAttr(u.id)+'\')">删除账号</button>':''}
     </div>
   </article>`).join('')||'<div class="meta">暂无用户</div>';
@@ -165,7 +165,7 @@ async function resetData(){
   const confirmation=$('#resetConfirmation').value.trim();
   if(!key){notice('请输入数据重置密钥',true);return}
   if(confirmation!=='确认清空智配One数据'){notice('确认文字不正确',true);return}
-  if(!confirm('最后确认：这将删除全部智配One业务数据，包括当前管理员账号。确定继续？')) return;
+  if(!confirm('最后确认：这将清除全部智配One业务数据，仅保留原始主系统管理员账号。确定继续？')) return;
   const btn=$('#resetDataBtn');
   btn.disabled=true;
   btn.textContent='正在清空…';
