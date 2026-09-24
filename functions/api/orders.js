@@ -219,7 +219,8 @@ async function readOrder(request, env, session) {
       }
     }
   }
-  const history = Array.isArray(historyData) ? historyData : [];
+  // 汇总前先按 orderBatchId/稳定业务身份去重，避免旧迁移数据重复导致“x笔/总门店/总重量”被重复累计。
+  const history = Array.isArray(historyData) ? dedupeHistoryRecords(historyData) : [];
 
   // 当日订单读取必须以“有有效门店”为有效数据。
   // 旧版本可能留下 today:<date> = 空对象/空 orders；这种脏数据不能阻断 history:<date> 的有效记录。
