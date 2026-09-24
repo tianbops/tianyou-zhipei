@@ -42,7 +42,14 @@ async function createRoute(){
   try{const r=await api('/api/admin/routes',{method:'POST',body:{route}});if(!r.success)throw new Error(r.error||'线路创建失败');input.value='';notice('线路 '+r.route.name+' 已创建');await loadRoutes();fillSelects()}catch(e){notice(e.message||'线路创建失败',true)}finally{button.disabled=false;button.textContent='创建线路'}
 }
 async function loadRoutes(){
-  try{const r=await api('/api/admin/routes'); if(!r.success) throw new Error(r.error||'线路读取失败'); routes=r.routes||[]; renderRoutes()}catch(e){notice(e.message,true)}
+  try{
+    const r=await api('/api/admin/routes');
+    if(!r.success) throw new Error(r.error||'线路读取失败');
+    routes=r.routes||[];
+    renderRoutes();
+    // 路线列表与下拉选择必须使用同一份最新数据，避免并发加载时下拉框停留在旧列表。
+    fillSelects();
+  }catch(e){notice(e.message,true)}
 }
 async function loadRequests(){
   const endpoint='/api/admin/route-requests';
