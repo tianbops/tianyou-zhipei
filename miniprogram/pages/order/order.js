@@ -19,6 +19,11 @@ Page({
       } catch (e) { /* 保持空线路，后续统一按登录/线路错误处理 */ }
     }
     this.setData({ user, dispatchRoute: route });
+    if (!route) {
+      wx.showToast({ title: '当前未选择调度线路', icon: 'none' });
+      this.setData({ stores: [], vehicle: '' });
+      return;
+    }
     try {
       const date = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       const data = await request('/api/v3/today?route='+encodeURIComponent(route)+'&date='+encodeURIComponent(date));
