@@ -1,6 +1,6 @@
 // 天友智配One V3 · 待定/新增门店确认
 import { authRequired } from '../_auth.js';
-import { isRouteMaintainer, getBase, getLearning, normalizeRoute, acquireRouteDateLock, releaseRouteDateLock, planKey, confirmationKey } from './data.js';
+import { isRouteMaintainer, getBase, getLearning, normalizeRoute, acquireRouteDateLock, releaseRouteDateLock, planKey, confirmationKey, baseKey, learningKey } from './data.js';
 import { get, evalRedis } from './_redis.js';
 
 export async function onRequest({request,env}){
