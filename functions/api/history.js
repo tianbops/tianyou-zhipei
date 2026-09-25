@@ -556,7 +556,22 @@ function encodeKey(value) { return encodeURIComponent(String(value || '').trim()
 
 async function redisPipeline(env, commands) {
   if (!Array.isArray(commands) || !commands.length) return [];
-  return Promise.all(commands.map(command => redisCommand(env, command)));
+  const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, '');
+  const response = await fetch(base + '/pipeline', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + env.UPSTASH_REDIS_REST_TOKEN,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(commands),
+    cache: 'no-store'
+  });
+  if (!response.ok) throw new Error('Redis批量操作失败（HTTP ' + response.status + '）');
+  const data = await response.json().catch(() => null);
+  if (!Array.isArray(data)) throw new Error('Redis批量操作返回格式异常');
+  const failed = data.find(item => item && item.error);
+  if (failed) throw new Error(String(failed.error));
+  return data;
 }
 
 async function redisPipelineGet(env, keys) {
