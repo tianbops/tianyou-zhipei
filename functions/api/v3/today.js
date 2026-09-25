@@ -13,7 +13,7 @@ export async function onRequest({request,env}){
     const date=String(url.searchParams.get('date')||'').trim();
     const taskId=String(url.searchParams.get('taskId')||'').trim();
     if(!route||!date)return json({success:false,error:'缺少线路或日期'},400);
-    if(!canUseRoute(session,route))return json({success:false,error:'无权使用该线路'},403);
+    if(!canUseRoute(session,route))return json({success:false,error:'无权使用该线路'},403);\n    const routeRecord=await getRoute(env,route);\n    if(!routeRecord||routeRecord.status==='disabled')return json({success:false,error:'当前线路不存在或已停用'},404);
     if(taskId){
       const [waybill,corrections]=await Promise.all([
         get(env,todayWaybillKey(route,date,taskId)),
