@@ -112,6 +112,7 @@ function extractStores(source) {
   // 第二优先级：补充OCR把箭头吞掉后留下的独立行。
   const normalLines = routeText
     .split('\n')
+    .filter(line => !/->/.test(line))
     .map(cleanPart)
     .filter(isLikelyStore);
   candidates.push(...normalLines);
@@ -127,6 +128,7 @@ function extractStores(source) {
   // 第四优先级：补充OCR使用竖线分隔的门店。
   const pipeParts = routeText
     .split(/[|｜]/)
+    .filter(part => !/->/.test(part))
     .map(cleanPart)
     .filter(isLikelyStore);
   candidates.push(...pipeParts);
