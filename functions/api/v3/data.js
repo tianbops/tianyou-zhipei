@@ -19,6 +19,9 @@ export function todayLatestKey(route,date){return v3Key('route',normalizeRoute(r
 export function pendingKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'pending',date,taskId);}
 export function confirmationKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'confirmation',date,taskId);}
 export function lockKey(route,date){return v3Key('lock','route-date',normalizeRoute(route),date);}
+export function bindingRequestKey(requestId){return v3Key('binding-request',String(requestId||'').trim());}
+export function bindingRequestUserKey(userId){return v3Key('user',String(userId||'').trim(),'binding-request');}
+export function bindingRequestIndexKey(){return v3Key('binding-request-index');}
 export function normalizeRoute(v){const s=String(v||'').trim();const m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?String(parseInt(m[1]||m[2],10)).padStart(2,'0')+'号线':s;}
 export async function getBase(env,route){const v=await redisGet(env,baseKey(route));return v&&Array.isArray(v.stores)?{...v,route:normalizeRoute(route)}:null;}
 export async function setBase(env,route,value){return redisSet(env,baseKey(route),{...value,route:normalizeRoute(route),schemaVersion:3});}
