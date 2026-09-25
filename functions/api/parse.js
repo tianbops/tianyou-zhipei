@@ -11,8 +11,10 @@ export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
   const session = await authRequired(request, env, { allowAnyRoute: true });
   if (!session) return json({ success: false, error: '登录已失效或无权限' }, 401);
+  let body = {};
+  const startedAt = Date.now();
   try {
-    const body = await request.json().catch(() => ({}));
+    body = await request.json().catch(() => ({}));
     const text = String(body?.text || '').trim();
     if (!text) return json({ success: false, error: '请输入或先识别运单文字' }, 400);
     const route = normalizeRoute(body.route || session.boundRouteId);
@@ -20,7 +22,6 @@ export async function onRequest({ request, env }) {
     if (!route || !userId) return json({ success: false, error: '用户资料不完整，请重新登录' }, 403);
     if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) return json({ success: false, error: '服务器基准数据库不可用' }, 500);
 
-    const startedAt = Date.now();
     const deadline = startedAt + 120000;
     if (!canUseRoute(session.user || session, route)) return json({ success: false, error: '无权使用该线路' }, 403);
     const [baseRecord, learning] = await Promise.all([
