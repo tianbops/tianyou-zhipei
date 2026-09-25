@@ -32,10 +32,21 @@ async function validateRoute(route){
   if(found.status==='disabled')throw Error('当前线路已停用，无法查看运单');
   return target;
 }
-async function getOrder(date,isHistory,batch){if(isHistory){if(!batch)throw Error('历史记录缺少运单批次');const r=await fetch(`/api/history?date=${encodeURIComponent(date)}&route=${encodeURIComponent(currentRoute)}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw Error(`历史数据服务不可用（${r.status}）`);const payload=await r.json(),records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);return records.find(x=>x?.orderBatchId===batch)||null}const query=new URLSearchParams({date,route:currentRoute});if(batch)query.set('orderBatchId',batch);const r=await fetch(`/api/orders?${query}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw Error(`当日订单服务不可用（${r.status})`);const d=await r.json();if(d?.today&&Array.isArray(d.today.orders)&&d.today.orders.length){const selectedSummary=batch?{storeCount:Number(d.today.uniqueStoreCount)||d.today.orders.length,totalWeight:d.today.totalWeight??d.today.weight??''}:{...(d.todaySummary||{})};return {...d.today,_todaySummary:selectedSummary,_todayWaybillCount:batch?1:(Number(d.todayWaybillCount)||0)};}
-  // 当日入口兜底直接读取历史，确保历史已有数据时详情页不会显示空订单。
-  const hr=await fetch(`/api/history?date=${encodeURIComponent(date)}&route=${encodeURIComponent(currentRoute)}`,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
-  if(hr.ok){const payload=await hr.json().catch(()=>[]),records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);const valid=records.filter(x=>x&&Array.isArray(x.orders)&&x.orders.length);if(batch){const hit=valid.find(x=>String(x?.orderBatchId||'').trim()===String(batch).trim());if(hit)return hit;}if(valid.length){const picked=valid.slice().sort((a,b)=>(Date.parse(String(b?.updatedAt||b?.createdAt||''))||0)-(Date.parse(String(a?.updatedAt||a?.createdAt||''))||0))[0];return {...picked,_todaySummary:{storeCount:Number(picked.uniqueStoreCount)||picked.orders.length,totalWeight:picked.totalWeight??picked.weight??''},_todayWaybillCount:batch?1:valid.length};}}return null}
+async function getOrder(date,isHistory,batch){
+  if(!currentRoute)throw Error('未指定配送线路');
+  const query=new URLSearchParams({date,route:currentRoute});
+  if(batch)query.set('taskId',batch);
+  const r=await fetch('/api/v3/today?'+query.toString(),{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+  if(r.status===401)throw Error('登录已失效，请重新登录');
+  if(!r.ok)throw Error(`今日运单数据服务不可用（${r.status}）`);
+  const d=await r.json();
+  if(batch){
+    if(!d?.waybill)return null;
+    return {...d.waybill,_todaySummary:{storeCount:Number(d.waybill.totalStores)||d.waybill.stores?.length||0,totalWeight:d.waybill.totalWeight||''},_todayWaybillCount:1};
+  }
+  if(d?.today)return {...d.today,_todaySummary:d.todaySummary||null,_todayWaybillCount:Number(d.todayWaybillCount)||0};
+  return null;
+}
 function readOrderHandoff(date,batch){try{const raw=sessionStorage.getItem('zsp_order_handoff_v1');if(!raw)return null;const item=JSON.parse(raw);const user=typeof Auth!=='undefined'?(Auth.serverUser||{}):{};const userId=String(user.id||user.username||user.account||'').trim();if(!item?.order||item?.date!==date||item?.orderBatchId!==batch||String(item.userId||'')!==userId)return null;if(Date.now()-Number(item.createdAt||0)>120000){sessionStorage.removeItem('zsp_order_handoff_v1');return null}return item.order}catch(_){return null}}
 async function load(options={}){const p=new URLSearchParams(location.search);historyMode=p.get('mode')==='history';const date=p.get('date')||currentDate(),batch=p.get('orderBatchId')||p.get('batch')||'';const handoff=options.allowHandoff!==false&&!historyMode?readOrderHandoff(date,batch):null;const t=handoff||await getOrder(date,historyMode,batch);if(!t||!Array.isArray(t.orders))return{orders:[],weight:'',orderBatchId:t?.orderBatchId||batch,date:t?.date||date,vehicle:t?.vehicle||'',route:currentRoute,uniqueStoreCount:0,summary:null,waybillCount:0};let orders=preserveSavedOrder(t.orders);
   // 服务器保存时已经完成去重、匹配与线路排序；详情页只负责展示，不能再次按当前基准库重算。
