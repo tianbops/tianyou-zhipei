@@ -1,9 +1,7 @@
 // 天友智配One V3 · 规划结果原子保存
-import { get, set, evalRedis } from './_redis.js';
+import { evalRedis } from './_redis.js';
 import { planKey, latestPlanKey, todayWaybillKey, todayCorrectionKey, todayIndexKey, historyIndexKey, acquireRouteDateLock, releaseRouteDateLock } from './data.js';
 export async function savePlan(env,result){
- const existing=await get(env,planKey(result.route,result.date,result.taskId));
- if(existing)return {saved:true,idempotent:true,key:planKey(result.route,result.date,result.taskId),result:existing};
  const token=crypto.randomUUID();
  if(!(await acquireRouteDateLock(env,result.route,result.date,token,30)))throw Object.assign(new Error('当前线路当天正在保存另一笔运单，请稍后重试'),{code:'ROUTE_DATE_BUSY',stage:'saving'});
  try{
