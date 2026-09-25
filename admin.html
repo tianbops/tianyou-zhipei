@@ -23,6 +23,7 @@
       <button class="tab active" data-tab="users">用户管理</button>
       <button class="tab" data-tab="routes">线路管理</button>
       <button class="tab" data-tab="requests">绑定申请</button>
+      <button class="tab" data-tab="invites">邀请码管理</button>
       <button class="tab" data-tab="logs">管理日志</button>
       <button class="tab" data-tab="reset">系统数据重置</button>
     </nav>
@@ -54,6 +55,17 @@
       <div id="requestList" class="route-list"></div>
     </section>
 
+
+    <section id="invitesTab" class="panel hidden">
+      <div class="panel-head"><div><h2>邀请码管理</h2><span>内部注册资格由管理员统一发放</span></div><div class="panel-head-actions"><button id="refreshInvites" class="ghost">刷新</button><button id="showCreateInvite" class="primary">＋ 创建邀请码</button></div></div>
+      <div id="inviteCreatePanel" class="invite-create hidden">
+        <div class="section-label">创建邀请码</div>
+        <label>使用次数<select id="inviteUses"><option value="1">1次</option><option value="5">5次</option><option value="10">10次</option><option value="unlimited">不限</option></select></label>
+        <label>有效期<select id="inviteExpiry"><option value="7">7天</option><option value="30" selected>30天</option><option value="90">90天</option><option value="permanent">永久</option></select></label>
+        <div class="form-actions"><button id="cancelCreateInvite" class="ghost" type="button">取消</button><button id="createInvite" class="primary" type="button">创建邀请码</button></div>
+      </div>
+      <div id="inviteList" class="invite-list"></div>
+    </section>
     <section id="logsTab" class="panel hidden">
       <div class="panel-head"><div><h2>管理日志</h2><span>系统管理操作记录</span></div><button id="refreshLogs" class="ghost">刷新</button></div>
       <div id="logList" class="route-list"></div>
@@ -77,6 +89,6 @@
   </main>
   <script src="js/auth.js?v=20260924-6"></script>
   <script src="js/modal.js?v=20260925-1"></script>
-  <script src="js/admin.js?v=20260924-5"></script>
+  <script src="js/admin.js?v=20260926-1"></script>
 </body>
 </html>
