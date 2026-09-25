@@ -1,5 +1,6 @@
 // 天友智配One V1.0 - 线路与基准数据库 API
 import { authRequired } from './_auth.js';
+import { baseKey as v3BaseKey, getBase as getV3Base, setBase as setV3Base } from './v3/data.js';
 import {
   canManageRoute, getRoute, loadRouteBase, normalizeRoute,
   normalizeStores, routeBaseKey
@@ -18,12 +19,12 @@ export async function onRequest({ request, env }) {
   try {
     if (request.method === 'GET') {
       if (!route) return json({ success: true, routes: await listRoutes(env) });
-      const base = await loadRouteBase(env, route, legacyBaseOptions(session, route));
+      const base = await getV3Base(env, route);
       if (!base) return json({ route, stores: [], source: 'server', updatedAt: null, dataVersion: 0, migrationRequired: true });
       return json({
         route,
         stores: normalizeStores(base.stores),
-        source: base.source || 'route',
+        source: 'v3',
         updatedAt: base.updatedAt || null,
         dataVersion: Number(base.dataVersion) || 1,
         schemaVersion: Number(base.schemaVersion) || 1,
@@ -44,7 +45,7 @@ export async function onRequest({ request, env }) {
       if (!(await acquireLock(env, lockKey, lockValue, LOCK_TTL_SECONDS))) return json({ error: '该线路基准库正在被修改，请稍后重试' }, 409);
 
       try {
-        const current = await loadRouteBase(env, route, { ...legacyBaseOptions(session, route), lockAlreadyHeld: true, lockToken: lockValue });
+        const current = await getV3Base(env, route);
         const currentVersion = Number(current?.dataVersion) || 0;
         const expectedVersion = body.expectedDataVersion === undefined || body.expectedDataVersion === null ? null : Number(body.expectedDataVersion);
         if (expectedVersion !== null && expectedVersion !== currentVersion) {
@@ -59,7 +60,7 @@ export async function onRequest({ request, env }) {
         const writeResult = await atomicSaveRouteBase(env, {
           lockKey,
           lockValue,
-          baseKey: routeBaseKey(route),
+          baseKey: v3BaseKey(route),
           expectedVersion: currentVersion,
           value
         });
