@@ -29,7 +29,7 @@ export async function onRequest({request,env}){
       for(let i=0;i<HISTORY_DAYS;i++){const d=new Date(today.getTime()-i*86400000).toISOString().slice(0,10);dates.push(d);}
     }
     const taskRefs=[];
-    for(const d of dates){const idx=await get(env,historyIndexKey(route,d));if(Array.isArray(idx))for(const id of idx)taskRefs.push({date:d,taskId:String(id)});}
+    for(const d of dates){const idx=await evalRedis(env,"return redis.call('SMEMBERS',KEYS[1])",[historyIndexKey(route,d)],[]);if(Array.isArray(idx))for(const id of idx)taskRefs.push({date:d,taskId:String(id)});}
     if(!taskRefs.length)return json({success:true,route,history:[],records:[]});
     const keys=taskRefs.map(x=>planKey(route,x.date,x.taskId));
     const raw=await evalRedis(env,"local out={}; for i,k in ipairs(KEYS) do local v=redis.call('GET',k); if v then table.insert(out,v) end end; return cjson.encode(out)",keys,[]);
