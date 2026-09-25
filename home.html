@@ -48,7 +48,7 @@
     <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon" aria-hidden="true"></span><span id="statusText" data-text="等待处理...">等待处理...</span></div><div id="statusDetail" class="status-detail" aria-live="polite"></div></div>
     <div class="upload-detail-view" id="uploadDetailView" hidden aria-hidden="true">
       <div class="upload-detail-header">
-        <div class="upload-detail-title" id="uploadDetailTitle">识别详情</div>
+        <div class="upload-detail-title" id="uploadDetailTitle">修正详情</div>
         <button class="upload-detail-close" type="button" onclick="closeUploadDetail()" aria-label="关闭详情">×</button>
       </div>
       <div class="upload-detail-body" id="uploadDetailBody"></div>
@@ -58,7 +58,7 @@
       <div class="review-summary" id="reviewSummary" hidden role="button" tabindex="0" aria-expanded="false" onclick="openCorrectionDetails()">修正详情 <span>›</span></div>
     </div>
     <div class="sheet-footer">
-      <button class="btn-primary-action" id="primaryActionBtn" type="button" onclick="handlePrimaryAction()" hidden aria-hidden="true">确认录入</button>
+      <button class="btn-primary-action" id="primaryActionBtn" type="button" hidden aria-hidden="true"></button>
       <button class="btn-cancel" type="button" onclick="cancelUpload()">取消</button>
     </div>
   </div>
