@@ -18,37 +18,24 @@ function normalizeCorrections(record){
   return saved.length?saved:fallbackCorrections(record);
 }
 async function loadRecord(){
-  const fetchRecords=async(includeRoute)=>{
-    const params=new URLSearchParams();
-    if(currentDate)params.set('date',currentDate);
-    if(includeRoute&&currentRoute)params.set('route',currentRoute);
-    const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),12000);
-    let r;
-    try{
-      r=await fetch('/api/history?'+params.toString(),{cache:'no-store',headers:authHeaders(),credentials:'same-origin',signal:controller.signal});
-    }catch(error){
-      if(error?.name==='AbortError')throw Error('历史数据读取超时，请返回历史查询后重试');
-      throw error;
-    }finally{
-      clearTimeout(timer);
-    }
-    if(!r.ok)throw Error('历史数据服务不可用（'+r.status+'）');
-    const payload=await r.json().catch(()=>[]);
-    return Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
-  };
-  // 首先按历史列表点击时携带的线路读取，保证跨线路调度场景下不会串数据。
-  let records=await fetchRecords(true);
-  let record=records.find(x=>String(x?.orderBatchId||'').trim()===currentBatch)||null;
-  // 兼容旧历史记录缺少 route 字段、或历史页使用了旧线路编号格式的情况：
-  // API 本身会按当前登录会话校验权限，因此这里不猜线路，只在同一业务日期内再读取一次。
-  if(!record){
-    records=await fetchRecords(false);
-    record=records.find(x=>String(x?.orderBatchId||'').trim()===currentBatch)||null;
-  }
-  // 极旧数据可能没有 orderBatchId，但当天只有一笔记录；允许直接展示这笔记录。
-  if(!record&&records.length===1)record=records[0];
-  return record;
+  const route=String(currentRoute||'').trim();
+  const date=String(currentDate||'').trim();
+  const taskId=String(currentBatch||'').trim();
+  if(!route||!date||!taskId)throw Error('缺少运单数据标识，无法读取修正详情');
+  const params=new URLSearchParams({route,date,taskId});
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),12000);
+  try{
+    const r=await fetch('/api/v3/today?'+params.toString(),{cache:'no-store',headers:authHeaders(),credentials:'same-origin',signal:controller.signal});
+    if(r.status===401)throw Error('登录已失效，请重新登录');
+    if(!r.ok)throw Error('今日运单数据读取失败（'+r.status+'）');
+    const payload=await r.json();
+    if(!payload?.waybill)throw Error('该运单数据不存在');
+    return {...payload.waybill,correctionDetails:Array.isArray(payload?.corrections?.corrections)?payload.corrections.corrections:[],reviewCount:Number(payload?.corrections?.count)||0};
+  }catch(error){
+    if(error?.name==='AbortError')throw Error('修正数据读取超时，请重试');
+    throw error;
+  }finally{clearTimeout(timer)}
 }
 function render(record){
   const list=$('correctionList'),items=normalizeCorrections(record);
