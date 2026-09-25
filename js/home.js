@@ -199,6 +199,7 @@ function closeUploadHistoryGuard(){
   if(history.state&&history.state.zpeiUploadOverlay){history.back();}
 }
 let uploadFailureTimer=null;
+let uploadFailureReturning=false;
 function openUploadEntryAfterReload(){
   const overlay=$('uploadOverlay');
   if(!overlay)return;
@@ -209,22 +210,34 @@ function openUploadEntryAfterReload(){
   window.openUploadSource?.();
 }
 window.handleUploadProcessingFailure=(message='运单处理失败，请重新上传')=>{
+  // 失败只允许收口一次；旧异步任务迟到时不能重新触发返回流程。
+  if(uploadFailureReturning)return;
+  uploadFailureReturning=true;
   if(uploadFailureTimer)clearTimeout(uploadFailureTimer);
-  // P0失败收口：先立即失效当前上传任务并清空所有临时数据，再只停留极短时间显示失败态。
-  // 不等待OCR/解析资源释放，旧异步任务随后即使迟到也因taskId失效而不能写回页面。
+
+  // 第一优先级：立即失效本次上传任务，禁止任何迟到异步结果继续写回。
   try{window.invalidateUploadTask?.();}catch(_){}
-  try{window.clearManualInput?.();}catch(_){}
-  try{window.resetProcessingStatus?.();}catch(_){}
-  const target=new URL('./home.html',document.baseURI);
-  target.searchParams.set('upload','retry');
-  target.searchParams.set('t',String(Date.now()));
-  try{sessionStorage.setItem('zpeiUploadRetry','1');}catch(_){}
-  window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');
+  try{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}}catch(_){}
+  try{window.cancelConfirm?.();}catch(_){}
+
+  // 先建立返回定时器，再做UI/数据清理。即使某个清理函数异常，也绝不能阻断自动返回。
   uploadFailureTimer=setTimeout(()=>{
     uploadFailureTimer=null;
-    // URL必须带一次性时间戳，避免Cloudflare/浏览器继续命中旧的失败页状态。
-    window.location.replace(target.href);
+    try{window.clearManualInput?.();}catch(_){}
+    try{window.resetProcessingStatus?.();}catch(_){}
+    try{
+      const overlay=$('uploadOverlay');
+      const menu=$('uploadSourceMenu');
+      if(overlay)overlay.classList.add('active');
+      if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');}
+      openUploadHistoryGuard();
+      document.body.classList.remove('zpei-processing','is-leaving','navigating-to-order');
+    }catch(_){}
+    uploadFailureReturning=false;
   },650);
+
+  // 失败态仅停留一瞬；这里即使渲染异常也不影响上面的返回定时器。
+  try{window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');}catch(_){}
 };
 window.cancelUpload=()=>{
   const overlay=$('uploadOverlay');
@@ -295,14 +308,7 @@ async function refreshHomeOrder(){
 }
 document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');
 if(!(await Auth.checkAuth()))return;
-const autoOpenUpload=new URLSearchParams(location.search).get('upload')==='retry';const me=await Auth.getCurrentServerUser();if(me?.adminLevel==='primary'){location.replace('admin.html');return;}
-if(autoOpenUpload){
-  try{sessionStorage.removeItem('zpeiUploadRetry')}catch(_){ }
-  history.replaceState(history.state||{},'',location.pathname);
-  openUploadEntryAfterReload();
-}else{
-  try{if(sessionStorage.getItem('zpeiUploadRetry')==='1'){sessionStorage.removeItem('zpeiUploadRetry');openUploadEntryAfterReload();}}catch(_){ }
-}
+const me=await Auth.getCurrentServerUser();if(me?.adminLevel==='primary'){location.replace('admin.html');return;}
 await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const initialSeq=++homeOrderLoadSeq;const initialRoute=String(currentRoute()||'').trim();const loaded=await loadServerOrder(currentDate(),initialRoute);if(initialSeq===homeOrderLoadSeq&&String(currentRoute()||'').trim()===initialRoute){serverOrder=loaded;updateSummary()}$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
 window.addEventListener('pageshow',event=>{document.body.classList.remove('is-leaving');const menu=$('homeMenu');if(menu)menu.style.display='none';if(event.persisted){const overlay=$('uploadOverlay');window.clearManualInput?.();if(overlay)overlay.classList.remove('active');closeUploadSource();if(typeof Auth!=='undefined')refreshHomeOrder()}});
 })();
