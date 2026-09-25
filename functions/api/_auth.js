@@ -167,7 +167,8 @@ async function verifyToken(token, env, expectedClient) {
 export async function authRequired(request, env, options = {}) {
   const session = await verifySession(request, env);
   if (!session) return null;
-  if (session.adminLevel === 'primary' && !options.allowSystemAdmin) return null;
+  // 唯一管理员是纯管理身份：除明确允许的管理端 API 外，任何业务 API 都不得放行。
+  if (session.role === 'system_admin' && session.adminLevel === 'primary' && !options.allowSystemAdmin) return null;
   if (options.client && session.client !== options.client) return null;
   if (options.route && normalizeRoute(options.route) !== session.boundRouteId) {
     if (!options.allowAnyRoute) return null;
@@ -186,7 +187,7 @@ export async function requireSystemAdmin(request, env) {
 
 export async function requireRouteMaintainer(request, env, route) {
   const session = await authRequired(request, env, { allowAnyRoute: true });
-  if (!session) return null;
+  if (!session || (session.role === 'system_admin' && session.adminLevel === 'primary')) return null;
   if (normalizeRoute(session.boundRouteId) !== normalizeRoute(route)) return null;
   return session;
 }
