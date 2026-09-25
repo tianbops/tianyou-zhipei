@@ -213,7 +213,6 @@ function renderUploadDetail(){
   if(!view||!title||!body)return;
   uploadDetailMode='correction';
   const sheet=document.querySelector('.upload-sheet');
-  sheet?.classList.remove('detail-mode-recognition');
   sheet?.classList.add('detail-mode-correction');
   title.textContent='修正详情';
   body.textContent='';
@@ -383,7 +382,7 @@ if(parsedOrders.length){
   window.renderStatusDetail?.([...structuredStatus.details,'正在保存运单及修正记录']);
 }else{window.clearStatusDetail?.();correctionDetails=[];correctionStats={raw:0,corrected:0,merged:0};statusBaseDetails=[];pendingReviewCount=0;setCorrectionSummary(0);}
 if(parsedOrders.length){
-  // 规划成功后直接进入服务器入库，不再要求人工确认录入。
+  // 规划成功后直接进入服务器入库。
   // 未确定门店保留为“待定”状态，不阻断本次运单落库。
   setPrimaryActionMode('idle');
   if(typeof window.submitManualOrder==='function'){
