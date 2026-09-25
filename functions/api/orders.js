@@ -269,6 +269,38 @@ async function readOrder(request, env, session) {
 
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
+function historyRecordSignature(item) {
+  const batch = String(item?.orderBatchId || '').trim();
+  if (batch) return 'batch:' + batch;
+  const vehicle = String(item?.vehicle || '').trim().toLowerCase();
+  const weight = String(item?.totalWeight ?? item?.weight ?? '').trim();
+  const orders = Array.isArray(item?.orders) ? item.orders.map(order => {
+    const storeId = String(order?.storeId || order?.baseCode || '').trim();
+    const name = String(order?.name || order?.storeName || order?.shopName || '').trim().replace(/[\s\u3000（）()【】\[\]]/g, '').toLowerCase();
+    const identity = storeId ? 'id:' + storeId : (name ? 'name:' + name : '');
+    return identity ? { identity, weight: Number(order?.weight) || 0 } : null;
+  }).filter(Boolean).sort((a, b) => String(a.identity + '|' + a.weight).localeCompare(String(b.identity + '|' + b.weight))) : [];
+  return JSON.stringify({ vehicle, weight, orders });
+}
+function dedupeHistoryRecords(records) {
+  const map = new Map();
+  (Array.isArray(records) ? records : []).forEach(item => {
+    const signature = historyRecordSignature(item);
+    if (signature && !map.has(signature)) map.set(signature, item);
+  });
+  return [...map.values()];
+}
+function parseWeightToTons(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  const text = String(value).trim().replace(/,/g, '');
+  const match = text.match(/[\d]+(?:\.\d+)?/);
+  if (!match) return 0;
+  const n = Number(match[0]);
+  if (!Number.isFinite(n)) return 0;
+  if (/kg|千克|公斤/i.test(text)) return n / 1000;
+  if (/吨|\bt\b/i.test(text)) return n;
+  return n >= 1000 ? n / 1000 : n;
+}
 
 async function acquireLock(env, key, token, seconds) {
   const response = await redisFetch(env, `/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`, { method: 'POST' });
