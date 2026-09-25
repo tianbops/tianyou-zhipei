@@ -120,7 +120,6 @@ function render(status='idle',progress=0){
   node.setAttribute('aria-hidden','false');
   const title=node.querySelector('.zpei-processing-title');
   const stages=node.querySelector('.zpei-processing-stages');
-  const message=node.querySelector('.zpei-processing-message');
   const button=node.querySelector('.zpei-processing-failure-btn');
   if(stages)stages.style.display='flex';
   if(title)title.textContent=state==='success'?'处理完成':'正在处理运单';
