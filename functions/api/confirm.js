@@ -143,8 +143,15 @@ export async function onRequest({ request, env }) {
           todayData.uniqueStoreCount = orders.length;
           todayData.matchedCount = orders.filter(item => item.matched).length;
           todayData.newStoreCount = learned.learnedCount || 0;
+          // 基准库学习后重新整理订单，必须以最终订单中的 rawName/baseName 计算修正记录。
+          todayData.correctionDetails = buildCorrectionDetails(orders);
+          todayData.reviewCount = orders.filter(item => item?.needsReview === true).length;
         }
       }
+
+      // 无论是否发生新增门店学习，都以最终准备入库的订单重新生成修正记录。
+      // 这样自动化规划产生的 OCR 原名 -> 基准标准名修正不会因为中间排序/学习步骤丢失。
+      todayData.correctionDetails = buildCorrectionDetails(orders);
 
       // Redis SET 成功响应即表示命令已执行，不再额外 GET 三次验证，避免确认录入长时间等待。
       const saved = todayData;
