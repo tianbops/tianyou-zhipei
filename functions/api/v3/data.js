@@ -6,6 +6,9 @@ export function baseKey(route){return v3Key('route',normalizeRoute(route),'base'
 export function learningKey(route){return v3Key('route',normalizeRoute(route),'learning');}
 export function planKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'plan',date,taskId);}
 export function latestPlanKey(route){return v3Key('route',normalizeRoute(route),'latest-plan');}
+export function todayWaybillKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'today',date,'waybill',taskId);}
+export function todayCorrectionKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'today',date,'correction',taskId);}
+export function todayLatestKey(route,date){return v3Key('route',normalizeRoute(route),'today',date,'latest');}
 export function pendingKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'pending',date,taskId);}
 export function lockKey(route,date){return v3Key('lock','route-date',normalizeRoute(route),date);}
 export function normalizeRoute(v){const s=String(v||'').trim();const m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?String(parseInt(m[1]||m[2],10)).padStart(2,'0')+'号线':s;}
