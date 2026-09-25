@@ -38,8 +38,10 @@
 *{box-sizing:border-box;margin:0;padding:0}
 
 html,body{width:100%;min-height:100%;background:var(--bg)}
+html{overscroll-behavior-y:none;-webkit-text-size-adjust:100%}
+body{overscroll-behavior-y:none;touch-action:pan-y}
 body{color:var(--text);font-family:"Microsoft YaHei",Arial,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-button,input,textarea{font:inherit}button{-webkit-tap-highlight-color:transparent}
+button,input,textarea{font:inherit}button,input,textarea{-webkit-tap-highlight-color:transparent}button{touch-action:manipulation}
 .app-container,.page-container{width:100%;max-width:420px;min-height:100vh;margin:0 auto;padding:20px 16px calc(28px + env(safe-area-inset-bottom));background:var(--bg)}
 .top-bar{height:60px;display:flex;align-items:center;justify-content:space-between;position:relative;z-index:10}
 .brand-info{display:flex;flex-direction:column;line-height:1.2}.brand-name{font-size:20px;font-weight:700;color:#fff;letter-spacing:1px}.brand-sub{font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:2px}
