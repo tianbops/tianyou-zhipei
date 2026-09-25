@@ -1,6 +1,6 @@
 // V3 · 基准库匹配
 import { key, clean } from './extract.js';
-import { normalizeLearningKey } from './learning.js';
+import { normalizeLearningKey, getRouteLearning } from './learning.js';
 function storeName(s){return clean(s?.name||s?.storeName||s?.title||s?.customerName||s?.['门店名称']);}
 function storesOf(base){return Array.isArray(base?.stores)?base.stores:Array.isArray(base?.data?.stores)?base.data.stores:Array.isArray(base)?base:[];}
 function aliasesOf(learning){
@@ -31,15 +31,16 @@ function rankCandidate(original,store){
  const name=storeName(store),base=similarity(original,name),feature=identityFeatures(original,name);
  return Math.min(1,base+feature);
 }
-export function matchStores(candidates,base,learning){
- const stores=storesOf(base),aliases=aliasesOf(learning),out=[],pending=[],seen=new Set();
+export function matchStores(candidates,base,learning,context={}){
+ const stores=storesOf(base),routeLearning=getRouteLearning(learning,context.route),routeAliases=aliasesOf(routeLearning),aliases=aliasesOf(learning),out=[],pending=[],seen=new Set();
  for(const original of candidates){
-  const aid=aliases.get(normalizeLearningKey(original));
-  let found=aid?stores.find(s=>String(s?.storeId||'')===aid.storeId):null;
-  let score=found?Math.min(1,aid.confidence+Math.min(.08,Math.log10(aid.count+1)*.04)):0;
-  let via=found?'learned-alias':'';
+  const keyValue=normalizeLearningKey(original);
+  const raid=routeAliases.get(keyValue),aid=aliases.get(keyValue),evidence=raid||aid;
+  let found=evidence?stores.find(s=>String(s?.storeId||'')===evidence.storeId):null;
+  let score=found?Math.min(1,evidence.confidence+Math.min(.09,Math.log10(evidence.count+1)*.045)):0;
+  let via=found?(raid?'route-learned-alias':'learned-alias'):'';
   if(!found){
-   const ranked=stores.map(s=>({store:s,score:rankCandidate(original,s)})).sort((a,b)=>b.score-a.score);
+   const ranked=stores.map(s=>{const stat=routeLearning?.stats?.[String(s?.storeId||'')];const history=stat?.seenCount?Math.min(.08,Math.log10(Number(stat.seenCount)+1)*.025):0;return {store:s,score:Math.min(1,rankCandidate(original,s)+history)};}).sort((a,b)=>b.score-a.score);
    const best=ranked[0],second=ranked[1];
    if(best){
     const margin=best.score-(second?.score||0);
