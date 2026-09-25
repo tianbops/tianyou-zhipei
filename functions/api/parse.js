@@ -167,11 +167,13 @@ function extractStores(source) {
   }
 
   // 第四优先级：补充OCR使用竖线分隔的门店。
-  const pipeParts = preparedRouteText
-    .split(/[|｜]/)
-    .filter(part => !/->/.test(part))
-    .map(cleanPart)
-    .filter(isLikelyStore);
+  const pipeParts = /[|｜]/.test(preparedRouteText)
+    ? preparedRouteText
+      .split(/[|｜]/)
+      .filter(part => !/->/.test(part))
+      .map(cleanPart)
+      .filter(isLikelyStore)
+    : [];
   candidates.push(...pipeParts);
 
   return dedupeRawStores(candidates);
@@ -196,7 +198,13 @@ function extractRouteRegion(source) {
     return first ? `${first}${source.slice(firstArrow)}` : source.slice(firstArrow);
   }
 
-  const lines = source.split('\n');
+  // 统计字段与门店可能位于同一OCR行；先精确移除统计/订单元数据，再判断表头，
+  // 避免“总数量60 | 门店A | 门店B”整行被误判为表头而丢失所有门店。
+  const cleanedSource = source.split('\n')
+    .map(line => stripOrderMetadata(line))
+    .filter(Boolean)
+    .join('\n');
+  const lines = cleanedSource.split('\n');
   return lines.slice(findLastHeaderEnd(lines)).filter(line => !isHeaderLine(line)).join('\n');
 }
 
