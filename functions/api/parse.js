@@ -114,10 +114,10 @@ function mergeBrokenLineBreaks(value) {
 }
 
 function extractStores(source) {
-  const preparedRouteText = extractRouteRegion(source);
-  if (!preparedRouteText) return [];
+  const routeText = extractRouteRegion(source);
+  if (!routeText) return [];
 
-  const preparedRouteText = mergeBrokenLineBreaks(preparedRouteText);
+  const preparedRouteText = mergeBrokenLineBreaks(routeText);
   const cleanPart = value => cleanStoreName(stripOrderMetadata(value));
   const candidates = [];
 
