@@ -81,6 +81,7 @@
     try{localStorage.setItem(historyCacheKey(route),JSON.stringify({savedAt:Date.now(),data:Array.isArray(data)?data:[]}));}catch(_){}
   }
   function normalizeHistoryEntries(entries){return Array.isArray(entries)?entries.filter(entry=>entry?.date&&Array.isArray(entry.records)&&entry.records.length):[]}
+  function groupHistoryRecords(records){const groups=new Map();(Array.isArray(records)?records:[]).forEach(item=>{const date=String(item?.date||'').trim();if(!date)return;if(!groups.has(date))groups.set(date,[]);groups.get(date).push(item)});return [...groups.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([date,records])=>({date,records}))}
   async function validateDispatchRoute(force=false){
     const route=String(typeof Auth!=='undefined'?(Auth.getDispatchRoute?Auth.getDispatchRoute():''):'').trim();
     if(!route)throw new Error('当前未选择调度线路，请返回首页选择线路');
@@ -109,7 +110,7 @@
     const r=await fetch('/api/v3/history'+query,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
     if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);
     const payload=await r.json();
-    return Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);
+    return Array.isArray(payload?.history)?payload.history:(Array.isArray(payload?.records)?groupHistoryRecords(payload.records):Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]));
   }
   async function refreshHistoryDates(){
     if(historyRefreshPromise)return historyRefreshPromise;
@@ -260,7 +261,7 @@ function historySignature(item){const batch=String(item?.orderBatchId||'').trim(
     button.disabled=true;button.classList.add('deleting');
     try{
       const route=await validateDispatchRoute();
-      const r=await fetch('/api/history?date='+encodeURIComponent(date)+'&route='+encodeURIComponent(route)+'&orderBatchId='+encodeURIComponent(item.orderBatchId),{method:'DELETE',cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+      const r=await fetch('/api/v3/history?date='+encodeURIComponent(date)+'&route='+encodeURIComponent(route)+'&taskId='+encodeURIComponent(item.orderBatchId),{method:'DELETE',cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
       const payload=await r.json().catch(()=>({}));
       if(!r.ok||payload?.success!==true)throw new Error(payload?.error||'删除失败');
       try{localStorage.removeItem(historyCacheKey(route))}catch(_){}
