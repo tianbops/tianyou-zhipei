@@ -142,12 +142,14 @@ function extractStores(source) {
   const candidates = [];
 
   // 第一优先级：箭头是当前运单最可靠的门店边界。
-  const arrowParts = preparedRouteText
-    .replace(/\s+/g, ' ')
-    .replace(/\s*->\s*/g, '->')
-    .split('->')
-    .map(cleanPart)
-    .filter(isLikelyStore);
+  const arrowParts = /->/.test(preparedRouteText)
+    ? preparedRouteText
+      .replace(/\s+/g, ' ')
+      .replace(/\s*->\s*/g, '->')
+      .split('->')
+      .map(cleanPart)
+      .filter(isLikelyStore)
+    : [];
   candidates.push(...arrowParts);
 
   // 第二优先级：补充OCR把箭头吞掉后留下的独立行。
