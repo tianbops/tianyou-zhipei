@@ -45,7 +45,7 @@ export async function onRequest({request,env}){
    let nextOrder=stores.reduce((m,s)=>Math.max(m,Number(s.routeOrder)||0),0)+1;
    const confirmed=[];
    for(const item of items){
-    const raw=clean(item.rawName||item.name),targetId=clean(item.storeId),targetName=clean(item.baseName);
+    const raw=clean(item.rawName||item.name),targetId=clean(item.storeId),targetName=clean(item.baseName||item.name);
     const rawKey=matchKey(raw);
     if(!raw||!rawKey||confirmedKeys.has(rawKey))continue;
     let target=targetId?stores.find(s=>String(s.storeId)===targetId):targetName?stores.find(s=>matchKey(s.name)===matchKey(targetName)):null;
