@@ -23,8 +23,9 @@ export async function onRequest({ request, env }) {
     if (!routeRecord || routeRecord.status === 'disabled') return json({ success: false, error: '当前线路不存在或已停用', stage }, 404);
     if (!Array.isArray(body.orders) || !body.orders.length) return json({ success: false, error: '没有可确认的订单' }, 400);
 
+    const autoConfirm = body.autoConfirm === true;
     const pending = body.orders.filter(item => item?.needsReview === true || item?.matchType === 'review' || String(item?.candidate || '').trim());
-    if (pending.length) return json({
+    if (pending.length && !autoConfirm) return json({
       success: false,
       code: 'REVIEW_REQUIRED',
       error: `仍有 ${pending.length} 家疑似门店未确认`,
@@ -81,7 +82,7 @@ export async function onRequest({ request, env }) {
       uniqueStoreCount: orders.length,
       matchedCount: noBase ? 0 : orders.filter(item => item.matched).length,
       newStoreCount: noBase ? 0 : orders.filter(item => item.isNew).length,
-      reviewCount: 0,
+      reviewCount: orders.filter(item => item?.needsReview === true).length,
       duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
       recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount,
       rawOrderCount,
@@ -154,7 +155,7 @@ export async function onRequest({ request, env }) {
         orderBatchId: saved.orderBatchId, date, route, userId, vehicle: saved.vehicle,
         count: saved.count, uniqueStoreCount: saved.uniqueStoreCount ?? saved.count,
         weight: saved.totalWeight, totalWeight: saved.totalWeight, orders: saved.orders,
-        matchedCount: saved.matchedCount, newStoreCount: saved.newStoreCount, reviewCount: 0,
+        matchedCount: saved.matchedCount, newStoreCount: saved.newStoreCount, reviewCount: saved.orders.filter(item => item?.needsReview === true).length,
         duplicateCount: saved.duplicateCount || 0, recognizedCount: saved.recognizedCount,
         rawOrderCount: saved.rawOrderCount, baseDatabaseAvailable: saved.baseDatabaseAvailable !== false,
         source: saved.source, updatedAt: saved.updatedAt
@@ -380,16 +381,20 @@ function countDuplicates(items) {
 function sortOrders(orders, base) {
   const rank = new Map(base.map((store, index) => [store.index, Number(store.routeOrder) || index + 1]));
   const matched = [];
+  const pending = [];
   const news = [];
   for (const item of orders) {
     const routeOrder = item._baseIndex != null ? rank.get(item._baseIndex) : null;
-    if (routeOrder == null && item.matched !== true) news.push({ ...item, isNew: true, matched: false });
+    if (item.needsReview === true) pending.push({ ...item, isNew: false, matched: false, routeOrder: Number.MAX_SAFE_INTEGER });
+    else if (routeOrder == null && item.matched !== true) news.push({ ...item, isNew: true, matched: false });
     else matched.push({ ...item, routeOrder: routeOrder ?? Number.MAX_SAFE_INTEGER, isNew: false, matched: true });
   }
   matched.sort((a, b) => a.routeOrder - b.routeOrder);
+  pending.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
   matched.forEach((item, index) => { item.code = String(index + 1).padStart(2, '0'); });
+  pending.forEach((item, index) => { item.code = `P${String(index + 1).padStart(2, '0')}`; });
   news.forEach((item, index) => { item.code = `N${String(index + 1).padStart(2, '0')}`; });
-  return matched.concat(news).map(({ routeOrder, _baseIndex, ...item }) => item);
+  return matched.concat(pending, news).map(({ routeOrder, _baseIndex, ...item }) => item);
 }
 
 function normalizeRawOrderList(orders) {
