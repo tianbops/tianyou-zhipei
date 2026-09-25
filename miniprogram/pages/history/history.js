@@ -4,7 +4,16 @@ Page({
   data:{items:[],dispatchRoute:''},
   async onShow(){
     const user=app.globalData.user||wx.getStorageSync('zhipei_user')||{};
-    const route=String(app.globalData.dispatchRoute||wx.getStorageSync('zhipei_dispatch_route')||user.boundRouteId||'').trim();
+    let route=String(app.globalData.dispatchRoute||wx.getStorageSync('zhipei_dispatch_route')||'').trim();
+    // 未绑定用户也可以直接使用已有线路；首次进入历史页且尚无调度线路时，补充读取启用线路。
+    if(!route){
+      try{
+        const routeData=await request('/api/routes');
+        const routes=(Array.isArray(routeData?.routes)?routeData.routes:[]).filter(x=>x?.status!=='disabled');
+        route=String(routes[0]?.id||'').trim();
+        if(route){app.globalData.dispatchRoute=route;wx.setStorageSync('zhipei_dispatch_route',route);}
+      }catch(e){/* 保持空线路，交由后续登录/线路错误处理 */}
+    }
     this.setData({dispatchRoute:route});
     try{
       const url=route?'/api/v3/history?route='+encodeURIComponent(route):'/api/v3/history';
