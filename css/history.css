@@ -348,3 +348,54 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 .history-page .history-swipe-row.open .history-swipe-surface .history-view{
   border-radius:10px 0 0 10px!important;
 }
+
+
+/* 2026-09-25 历史运单：修改打开修正记录 */
+.history-page .correction-modal{
+  position:fixed!important;inset:0!important;z-index:10001!important;
+  display:none!important;align-items:center!important;justify-content:center!important;
+  padding:14px!important;box-sizing:border-box!important;
+  background:rgba(0,0,0,.70)!important;backdrop-filter:blur(5px)!important;
+}
+.history-page .correction-modal.active{display:flex!important}
+.history-page .correction-sheet{
+  width:min(100%,430px)!important;max-height:78vh!important;
+  overflow:hidden!important;box-sizing:border-box!important;
+  background:#151D26!important;border:1px solid rgba(255,255,255,.075)!important;
+  border-radius:18px!important;box-shadow:0 18px 50px rgba(0,0,0,.50)!important;
+}
+.history-page .correction-sheet-head{
+  height:50px!important;display:flex!important;align-items:center!important;
+  justify-content:space-between!important;padding:0 16px!important;
+  border-bottom:1px solid rgba(255,255,255,.075)!important;
+}
+.history-page .correction-sheet-head strong{font-size:16px!important;color:#F2F5F7!important}
+.history-page .correction-sheet-head button{
+  border:0!important;background:transparent!important;color:#9AA6B2!important;
+  font-size:14px!important;padding:8px 0!important;
+}
+.history-page .correction-list{
+  max-height:calc(78vh - 50px)!important;overflow:auto!important;padding:10px 12px 14px!important;
+}
+.history-page .correction-row{
+  display:flex!important;gap:10px!important;align-items:flex-start!important;
+  padding:11px 4px!important;border-bottom:1px solid rgba(255,255,255,.055)!important;
+}
+.history-page .correction-row:last-child{border-bottom:0!important}
+.history-page .correction-index{
+  flex:0 0 22px!important;width:22px!important;height:22px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  border-radius:50%!important;background:#202A34!important;color:#B8C2CC!important;
+  font-size:11px!important;
+}
+.history-page .correction-content{min-width:0!important;flex:1!important}
+.history-page .correction-from,.history-page .correction-to{
+  font-size:14px!important;line-height:22px!important;word-break:break-all!important;
+}
+.history-page .correction-from{color:#9AA6B2!important}
+.history-page .correction-to{color:#F2F5F7!important}
+.history-page .correction-arrow{font-size:12px!important;line-height:16px!important;color:#75818D!important}
+.history-page .correction-empty{
+  padding:36px 12px!important;text-align:center!important;color:#75818D!important;
+  font-size:14px!important;line-height:22px!important;
+}
