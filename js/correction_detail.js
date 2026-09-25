@@ -18,11 +18,27 @@ function normalizeCorrections(record){
   return saved.length?saved:fallbackCorrections(record);
 }
 async function loadRecord(){
-  const r=await fetch('/api/history?date='+encodeURIComponent(currentDate)+'&route='+encodeURIComponent(currentRoute),{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
-  if(!r.ok)throw Error('历史数据服务不可用（'+r.status+'）');
-  const payload=await r.json().catch(()=>[]);
-  const records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
-  return records.find(x=>String(x?.orderBatchId||'').trim()===currentBatch)||null;
+  const fetchRecords=async(includeRoute)=>{
+    const params=new URLSearchParams();
+    if(currentDate)params.set('date',currentDate);
+    if(includeRoute&&currentRoute)params.set('route',currentRoute);
+    const r=await fetch('/api/history?'+params.toString(),{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+    if(!r.ok)throw Error('历史数据服务不可用（'+r.status+'）');
+    const payload=await r.json().catch(()=>[]);
+    return Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
+  };
+  // 首先按历史列表点击时携带的线路读取，保证跨线路调度场景下不会串数据。
+  let records=await fetchRecords(true);
+  let record=records.find(x=>String(x?.orderBatchId||'').trim()===currentBatch)||null;
+  // 兼容旧历史记录缺少 route 字段、或历史页使用了旧线路编号格式的情况：
+  // API 本身会按当前登录会话校验权限，因此这里不猜线路，只在同一业务日期内再读取一次。
+  if(!record){
+    records=await fetchRecords(false);
+    record=records.find(x=>String(x?.orderBatchId||'').trim()===currentBatch)||null;
+  }
+  // 极旧数据可能没有 orderBatchId，但当天只有一笔记录；允许直接展示这笔记录。
+  if(!record&&records.length===1)record=records[0];
+  return record;
 }
 function render(record){
   const list=$('correctionList'),items=normalizeCorrections(record);
