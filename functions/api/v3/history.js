@@ -1,6 +1,6 @@
 // 天友智配One V3 · 统一历史数据出口
 import { authRequired } from '../_auth.js';
-import { canUseRoute, normalizeRoute } from './data.js';
+import { canUseRoute, normalizeRoute, getRoute } from './data.js';
 import { evalRedis, v3Key } from './_redis.js';
 
 const HISTORY_DAYS=100;
@@ -15,6 +15,8 @@ export async function onRequest({request,env}){
     const taskId=String(url.searchParams.get('taskId')||'').trim();
     if(!route)return json({success:false,error:'缺少线路'},400);
     if(!canUseRoute(session,route))return json({success:false,error:'无权使用该线路'},403);
+    const routeRecord=await getRoute(env,route);
+    if(!routeRecord||routeRecord.status==='disabled')return json({success:false,error:'当前线路不存在或已停用'},404);
     if(taskId){
       const key=v3Key('route',route,'plan',date,taskId);
       const one=await evalRedis(env,"local v=redis.call('GET',KEYS[1]); return v or ''",[key],[]);
