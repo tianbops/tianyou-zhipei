@@ -357,7 +357,7 @@
     }
     if (!results.length) throw failed[0]?.error || new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
     if (!isUploadTaskActive(taskId) || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
-    const combined = results.map(item => item.rawText).filter(Boolean).join('\\n\\n');
+    const combined = results.map(item => item.rawText).filter(Boolean).join('\n\n');
     putText(combined);
     const totalLines = results.reduce((sum, item) => sum + (Number(item.itemCount) || 0), 0);
     if (list.length > 1) {
