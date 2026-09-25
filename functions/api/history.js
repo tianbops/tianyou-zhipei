@@ -184,12 +184,11 @@ function recoverFromToday(today, userId, route, date) {
 }
 
 async function listAllHistory(env, userId, route, session, routeRecord = null) {
-  // 首页历史列表使用固定100天业务窗口，不再依赖 KEYS/SCAN 发现索引。
-  // 这样首页读取路径与“按日期查询”的精确 GET 路径一致，避免 Redis 索引扫描导致 503。
-  // Redis REST pipeline 分块读取；单批失败由 redisPipelineGet 降级为单键 GET。
+  // 首页历史列表只读取固定业务窗口，但使用 Redis MGET 一次批量取值。
+  // 不再使用 KEYS/SCAN，也不再逐日发起大量 GET，避免首页聚合请求超时返回 503。
   const dates = historyDateWindow();
   const historyKeys = dates.map(date => routeOrderKey(route, `history:${date}`));
-  const historyValues = await redisPipelineGet(env, historyKeys);
+  const historyValues = await redisMGet(env, historyKeys);
 
   const grouped = new Map();
   dates.forEach((date, index) => {
@@ -198,11 +197,11 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
     if (records.length) grouped.set(date, records);
   });
 
-  // 仅当对应日期没有 history 数据时，读取 today 作为旧版本/半成功数据恢复来源。
+  // 仅对没有 history 的日期读取 today，兼容历史迁移/半成功数据。
   const missingTodayDates = dates.filter(date => !grouped.has(date));
   if (missingTodayDates.length) {
     const todayKeys = missingTodayDates.map(date => routeOrderKey(route, `today:${date}`));
-    const todayValues = await redisPipelineGet(env, todayKeys);
+    const todayValues = await redisMGet(env, todayKeys);
     missingTodayDates.forEach((date, index) => {
       const raw = todayValues[index];
       if (!raw || !Array.isArray(raw.orders) || !raw.orders.length) return;
@@ -211,8 +210,7 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
     });
   }
 
-  // 旧版 user:* 数据只在线路级数据完全为空时兼容读取。
-  // 这里保留原迁移能力，但不让它成为正常线路首页的主读取路径。
+  // 只有线路级历史与 today 均为空时，才进入旧版 user:* 兼容迁移。
   if (!grouped.size && isBoundRoute(session, route)) {
     try {
       let userIds = Array.isArray(routeRecord?.boundUserIds)
@@ -231,7 +229,6 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
         ]);
         return { history: h, today: t };
       }));
-
       const legacyHistoryKeys = legacyResults.flatMap(item => item.history).filter(key => {
         const date = normalizeDate(String(key).split(':history:').pop());
         return date && isHistoryDateInWindow(date);
@@ -240,9 +237,8 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
         const date = normalizeDate(String(key).split(':today:').pop());
         return date && isHistoryDateInWindow(date);
       });
-
       const legacyKeys = [...new Set([...legacyHistoryKeys, ...legacyTodayKeys])];
-      const legacyValues = legacyKeys.length ? await redisPipelineGet(env, legacyKeys) : [];
+      const legacyValues = legacyKeys.length ? await redisMGet(env, legacyKeys) : [];
       const legacyMap = new Map(legacyKeys.map((key, index) => [key, legacyValues[index]]));
 
       legacyHistoryKeys.forEach(key => {
@@ -251,7 +247,6 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
         const records = Array.isArray(legacyMap.get(key)) ? dedupeHistory(legacyMap.get(key)).records : [];
         if (records.length) grouped.set(date, records);
       });
-
       legacyTodayKeys.forEach(key => {
         const date = normalizeDate(String(key).split(':today:').pop());
         if (!date || grouped.has(date)) return;
@@ -511,6 +506,24 @@ function compareUpdatedAt(a, b) { return (Date.parse(String(a?.updatedAt || a?.c
 function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId) === normalizeRoute(route); }
 function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
 function encodeKey(value) { return encodeURIComponent(String(value || '').trim()).replace(/%/g, '_'); }
+
+async function redisMGet(env, keys) {
+  if (!Array.isArray(keys) || !keys.length) return [];
+  const CHUNK_SIZE = 100;
+  const output = [];
+  for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
+    const chunk = keys.slice(i, i + CHUNK_SIZE);
+    const result = await redisCommand(env, ['MGET', ...chunk]);
+    if (!Array.isArray(result) || result.length !== chunk.length) {
+      throw new Error('Redis MGET 历史批量读取返回数量异常');
+    }
+    output.push(...result.map(value => {
+      if (value === null || value === undefined || value === '') return null;
+      try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
+    }));
+  }
+  return output;
+}
 
 async function redisPipeline(env, commands) {
   if (!Array.isArray(commands) || !commands.length) return [];
