@@ -35,7 +35,7 @@ export async function onRequest({ request, env }) {
     const extractionDoneAt = Date.now();
     const result = matchTodayStores(parsed.stores, base, learning);
     const planningDoneAt = Date.now();
-    if (!result.stores.length) return json({ success: false, error: '未识别到有效门店，请检查OCR文字后再处理运单' }, 422);
+    if (!result.stores.length) return json({ success: false, code: 'STORE_CANDIDATES_INVALID', stage: 'extract', error: '未提取到有效门店，请检查运单文字后再处理' }, 422);
 
     const diagnostics = buildDiagnostics(result, parsed.stores.length);
     const timings = {
@@ -70,7 +70,7 @@ export async function onRequest({ request, env }) {
       userId: normalizeUserId(session?.id),
       elapsedMs: Date.now() - startedAt
     });
-    return json({ success: false, error: error?.message || '运单文字解析失败' }, 503);
+    return json({ success: false, code: diagnosticCode, stage: diagnosticStage(diagnosticCode), error: error?.message || '运单文字解析失败' }, 503);
   }
 }
 
@@ -84,6 +84,19 @@ function classifyParseFailure(error) {
   if (/保存|入库/.test(message)) return 'SAVE_FAILED';
   if (/超时|timeout/i.test(message)) return 'TIMEOUT';
   return 'PARSE_FAILED';
+}
+
+function diagnosticStage(code) {
+  switch (String(code || '')) {
+    case 'OCR_INVALID': return 'recognize';
+    case 'STORE_CANDIDATES_INVALID': return 'extract';
+    case 'BASE_DATABASE_UNAVAILABLE': return 'match';
+    case 'MATCH_FAILED': return 'match';
+    case 'PLAN_FAILED': return 'plan';
+    case 'SAVE_FAILED': return 'save';
+    case 'TIMEOUT': return 'server';
+    default: return 'parse';
+  }
 }
 
 function buildDiagnostics(result, recognizedCount) {
