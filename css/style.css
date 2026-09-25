@@ -443,7 +443,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
 @media(max-width:380px){.dispatch-route-wrap{margin:7px 11px 9px!important}.dispatch-route-select{height:38px!important;min-height:38px!important;font-size:12px!important}
 }/* UI 2.6 · 弹窗视觉基线统一 2026-09-25 */
 .one-modal-surface,.dialog-box,.delete-sheet,.date-sheet,.upload-sheet{background:#151D26!important;border:1px solid rgba(255,255,255,.075)!important;color:#F2F5F7}.dialog,.delete-modal,.date-modal,.upload-overlay{background:rgba(0,0,0,.70)!important;backdrop-filter:blur(5px)!important}.dialog-box,.delete-sheet{border-radius:18px!important;box-shadow:0 18px 50px rgba(0,0,0,.50)!important}.dialog-btn button:last-child,.delete-confirm{background:#B8C1C8!important;color:#0B1015!important}
-/* UI 2.7 · 统一运单处理弹窗状态框 2026-09-25 */
+/* UI 2.8 · 统一运单处理弹窗状态框：单排横向 2026-09-25 */
 .zpei-processing-modal{
   position:fixed;
   inset:0;
@@ -451,7 +451,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
   display:none;
   align-items:center;
   justify-content:center;
-  padding:24px 18px calc(24px + env(safe-area-inset-bottom));
+  padding:24px 12px calc(24px + env(safe-area-inset-bottom));
 }
 .zpei-processing-modal.active{display:flex}
 .zpei-processing-backdrop{
@@ -463,9 +463,9 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
 .zpei-processing-box{
   position:relative;
   z-index:1;
-  width:min(84vw,360px);
-  min-height:330px;
-  padding:27px 26px 24px;
+  width:min(94vw,430px);
+  min-height:300px;
+  padding:28px 18px 24px;
   border:1px solid rgba(255,255,255,.09);
   border-radius:20px;
   background:#151D26;
@@ -481,43 +481,49 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
   line-height:28px;
   font-weight:700;
   letter-spacing:.2px;
-  margin-bottom:23px;
+  margin-bottom:26px;
 }
 .zpei-processing-stages{
   width:100%;
   display:flex;
-  flex-direction:column;
-  align-items:flex-start;
+  flex-direction:row;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:nowrap;
+  white-space:nowrap;
+  overflow:hidden;
 }
 .zpei-processing-stage{
-  min-height:28px;
-  display:flex;
+  min-height:30px;
+  display:inline-flex;
+  flex:0 0 auto;
   align-items:center;
-  gap:11px;
-  font-size:18px;
-  line-height:28px;
+  gap:7px;
+  font-size:17px;
+  line-height:30px;
   color:#596572;
   transition:color .2s ease,transform .2s ease,opacity .2s ease;
 }
 .zpei-processing-stage.done{color:#B8C2CC}
 .zpei-processing-stage.current{
   color:#F2F5F7;
-  transform:scale(1.035);
-  transform-origin:left center;
-  animation:zpeiStagePulse .95s ease-in-out infinite;
+  transform:scale(1.055);
+  transform-origin:center center;
+  animation:zpeiStagePulse .82s ease-in-out infinite;
 }
 .zpei-processing-node{
-  width:25px;
-  flex:0 0 25px;
+  width:22px;
+  flex:0 0 22px;
   text-align:center;
-  font-size:19px;
-  line-height:28px;
+  font-size:18px;
+  line-height:30px;
 }
 .zpei-processing-stage.current .zpei-processing-node{font-size:21px}
 .zpei-processing-stage-line{
-  width:1px;
-  height:14px;
-  margin-left:12px;
+  width:clamp(8px,2.5vw,16px);
+  height:1px;
+  flex:0 1 16px;
+  margin:0 5px;
   background:#29343E;
 }
 .zpei-processing-stage-line.done{
@@ -526,7 +532,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
 }
 .zpei-processing-message{
   min-height:22px;
-  margin-top:21px;
+  margin-top:22px;
   color:#B8C2CC;
   font-size:14px;
   line-height:22px;
@@ -557,19 +563,21 @@ body.zpei-processing .app-container{
   pointer-events:none;
 }
 @keyframes zpeiStagePulse{
-  0%,100%{opacity:.58}
+  0%,100%{opacity:.52}
   35%{opacity:1}
-  65%{opacity:.92}
+  65%{opacity:.94}
 }
 @media(max-width:380px){
   .zpei-processing-box{
-    width:min(88vw,340px);
-    min-height:318px;
-    padding:24px 22px 22px;
+    width:min(96vw,380px);
+    min-height:286px;
+    padding:24px 10px 21px;
   }
-  .zpei-processing-title{font-size:19px;margin-bottom:21px}
-  .zpei-processing-stage{font-size:17px}
-  .zpei-processing-node{width:23px;flex-basis:23px}
+  .zpei-processing-title{font-size:19px;margin-bottom:23px}
+  .zpei-processing-stage{font-size:15px;gap:4px}
+  .zpei-processing-node{width:19px;flex-basis:19px;font-size:17px}
+  .zpei-processing-stage.current .zpei-processing-node{font-size:20px}
+  .zpei-processing-stage-line{width:clamp(5px,1.8vw,10px);flex-basis:10px;margin:0 3px}
   .zpei-processing-message{font-size:13px}
 }
 .zpei-processing-modal.active.error .zpei-processing-box{min-height:250px}
