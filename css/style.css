@@ -419,8 +419,7 @@ body{color:var(--text-body)}
 /* 2026-09-22 详情入口最终交互：展开后仅显示另一详情入口 */
 .upload-sheet.detail-view-open .upload-detail-view{min-height:0}
 .upload-sheet.detail-view-open .sheet-footer{margin-top:0}
-.upload-sheet.detail-view-open.detail-mode-planning .review-summary,
-.upload-sheet.detail-view-open.detail-mode-correction .input-area{flex:0 0 40px;min-height:40px}
+.upload-sheet.detail-view-open.detail-mode-correction .input-area{display:none!important}
 
 
 /* 2026-09-22 产品UX最终优化：详情页可读性、关闭按钮、状态框与操作间距 */
@@ -600,11 +599,9 @@ body{color:var(--text-body)}
   display:none!important;
 }
 
-/* 当前详情打开时，只显示另一详情入口 */
-.upload-sheet.detail-view-open.detail-mode-planning .input-area{
-  display:none!important;
-}
-.upload-sheet.detail-view-open.detail-mode-correction .review-summary{
+/* 修正详情展开后不再显示旧的识别入口 */
+.upload-sheet.detail-view-open.detail-mode-correction .review-summary,
+.upload-sheet.detail-view-open.detail-mode-correction .input-area{
   display:none!important;
 }
 
@@ -713,11 +710,7 @@ body{color:var(--text-body)}
 .upload-sheet.detail-view-open .detail-entry-row{
   display:contents!important;
 }
-.upload-sheet.detail-view-open.detail-mode-planning .detail-entry-row .review-summary,
-.upload-sheet.detail-view-open.detail-mode-correction .detail-entry-row .input-area{
-  display:flex!important;
-}
-.upload-sheet.detail-view-open.detail-mode-planning .detail-entry-row .input-area,
+.upload-sheet.detail-view-open.detail-mode-correction .detail-entry-row .input-area,
 .upload-sheet.detail-view-open.detail-mode-correction .detail-entry-row .review-summary{
   display:none!important;
 }
