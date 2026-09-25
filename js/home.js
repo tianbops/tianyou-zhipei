@@ -247,7 +247,7 @@ window.parseManualInput=async(options={})=>{
   const body={route,date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight:parseWeightFromText(text),text};
   const planner=window.WaybillPlanner;
   if(!planner)throw Object.assign(new Error('自动规划模块未加载'),{code:'PLANNER_UNAVAILABLE'});
-  const plannerTask=await planner.run({ocrText:text,waybill:{route,date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight:parseWeightFromText(text)}});
+  const plannerTask=await planner.run({ocrText:text,waybill:{route,date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight:parseWeightFromText(text)},taskId:taskId||undefined});
   if(!plannerTask?.result)throw Object.assign(new Error('自动规划未返回结果'),{code:'PLAN_EMPTY'});
   const result=plannerTask.result;parsedOrders=Array.isArray(result.stores)?result.stores:[];
   if(!parsedOrders.length&&!Array.isArray(result.pendingStores))throw Object.assign(new Error('未识别到有效门店'),{code:'EXTRACT_FAILED'});
