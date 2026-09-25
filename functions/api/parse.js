@@ -93,15 +93,36 @@ function normalizeOcrText(value) {
     .split('\n').map(line => line.replace(/[ \t]+/g, ' ').trim()).filter(Boolean).join('\n').trim();
 }
 
-function extractStores(source) {
-  const routeText = extractRouteRegion(source);
-  if (!routeText) return [];
+function mergeBrokenLineBreaks(value) {
+  const lines = String(value || '').split('\n').map(line => line.trim()).filter(Boolean);
+  const merged = [];
+  for (let i = 0; i < lines.length; i++) {
+    let current = lines[i];
+    while (i + 1 < lines.length) {
+      const open = (current.match(/[（(\[【]/g) || []).length;
+      const close = (current.match(/[）)\]】]/g) || []).length;
+      const next = lines[i + 1];
+      const nextIsClosing = /^[）)\]】]/.test(next);
+      if (open <= close && !nextIsClosing) break;
+      current += next;
+      i++;
+      if (open <= close && nextIsClosing) break;
+    }
+    merged.push(current);
+  }
+  return merged.join('\n');
+}
 
+function extractStores(source) {
+  const preparedRouteText = extractRouteRegion(source);
+  if (!preparedRouteText) return [];
+
+  const preparedRouteText = mergeBrokenLineBreaks(preparedRouteText);
   const cleanPart = value => cleanStoreName(stripOrderMetadata(value));
   const candidates = [];
 
   // 第一优先级：箭头是当前运单最可靠的门店边界。
-  const arrowParts = routeText
+  const arrowParts = preparedRouteText
     .replace(/\s+/g, ' ')
     .replace(/\s*->\s*/g, '->')
     .split('->')
@@ -110,7 +131,7 @@ function extractStores(source) {
   candidates.push(...arrowParts);
 
   // 第二优先级：补充OCR把箭头吞掉后留下的独立行。
-  const normalLines = routeText
+  const normalLines = preparedRouteText
     .split('\n')
     .filter(line => !/->/.test(line))
     .map(cleanPart)
@@ -120,13 +141,13 @@ function extractStores(source) {
   // 第三优先级：补充被压缩到同一行的编号门店。
   const numberedPattern = /(?:^|\s|\|)(?:\d{1,3})\s*[、.．)）:-]\s*([^\d、.．)）:-][^\n|]*?)(?=\s+(?:\d{1,3})\s*[、.．)）:-]\s*|$)/g;
   let match;
-  while ((match = numberedPattern.exec(routeText)) !== null) {
+  while ((match = numberedPattern.exec(preparedRouteText)) !== null) {
     const name = cleanPart(match[1]);
     if (isLikelyStore(name)) candidates.push(name);
   }
 
   // 第四优先级：补充OCR使用竖线分隔的门店。
-  const pipeParts = routeText
+  const pipeParts = preparedRouteText
     .split(/[|｜]/)
     .filter(part => !/->/.test(part))
     .map(cleanPart)
