@@ -28,6 +28,7 @@ export async function onRequest({request,env}){
    ]);
    if(!plan)return json({success:false,error:'规划结果不存在或已失效'},404);
    if(!base)return json({success:false,error:'线路基准库不存在'},404);
+   const learningOriginal=learningValue;
    let learning=learningValue;
 
    if(confirmation?.requestIds?.includes(confirmRequestId)){
@@ -56,7 +57,7 @@ export async function onRequest({request,env}){
 
    stores.sort((a,b)=>Number(a.routeOrder)-Number(b.routeOrder));stores.forEach((s,i)=>s.routeOrder=i+1);
    const nextBase={...base,stores,dataVersion:Number(base.dataVersion||0)+1,updatedAt:new Date().toISOString(),updatedBy:session.id,schemaVersion:3};
-   const nextLearning={...learning,aliases,updatedAt:new Date().toISOString(),updatedBy:session.id,schemaVersion:3};
+   const nextLearning={...learning,updatedAt:new Date().toISOString(),updatedBy:session.id,schemaVersion:3};
    const nextPlan={...plan,pendingStores:Array.isArray(plan.pendingStores)?plan.pendingStores.map(p=>{const hit=confirmed.some(x=>String(x.storeId||'')===String(p.storeId||'')||matchKey(x.rawName)===matchKey(p.rawName||p.name));return hit?{...p,status:'resolved',resolved:true,resolvedAt:new Date().toISOString(),resolvedBy:session.id}:p;}):[],updatedAt:new Date().toISOString()};
    const nextConfirmation={
     route,date,taskId,schemaVersion:3,
@@ -65,7 +66,7 @@ export async function onRequest({request,env}){
     updatedAt:new Date().toISOString(),updatedBy:session.id
    };
    const script="if redis.call('GET',KEYS[1])~=ARGV[1] or redis.call('GET',KEYS[2])~=ARGV[2] or redis.call('GET',KEYS[3])~=ARGV[3] or redis.call('GET',KEYS[4])~=ARGV[4] then return 'CONFLICT' end redis.call('SET',KEYS[1],ARGV[5]) redis.call('SET',KEYS[2],ARGV[6]) redis.call('SET',KEYS[3],ARGV[7]) redis.call('SET',KEYS[4],ARGV[8]) return 'OK'";
-   const oldBase=JSON.stringify(base),oldLearning=JSON.stringify(learning),oldConfirmation=JSON.stringify(confirmation||null),oldPlan=JSON.stringify(plan);
+   const oldBase=JSON.stringify(base),oldLearning=JSON.stringify(learningOriginal),oldConfirmation=JSON.stringify(confirmation||null),oldPlan=JSON.stringify(plan);
    const outcome=await evalRedis(env,script,[baseKey(route),learningKey(route),confirmationKey(route,date,taskId),planKey(route,date,taskId)],[oldBase,oldLearning,oldConfirmation,oldPlan,JSON.stringify(nextBase),JSON.stringify(nextLearning),JSON.stringify(nextConfirmation),JSON.stringify(nextPlan)]);
    if(outcome==='CONFLICT')throw Object.assign(new Error('基准库刚刚发生变化，请刷新后重新确认'),{code:'CONFIRM_CONFLICT'});
    if(outcome!=='OK')throw Object.assign(new Error('门店确认保存未确认'),{code:'CONFIRM_SAVE_FAILED'});
