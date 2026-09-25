@@ -4,6 +4,7 @@ import {
   canUseRoute, encodeKey, getRoute, getUser, normalizeRoute, publicUser,
   redisCommand, redisGet, redisSet, routeRecordKey, atomicRouteBinding
 } from './_data.js';
+import { userProfileKey } from './v3/data.js';
 
 const REQUEST_PREFIX = 'route:binding-request:';
 const USER_REQUEST_PREFIX = 'route:binding-request:user:';
