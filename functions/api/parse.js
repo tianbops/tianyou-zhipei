@@ -61,9 +61,28 @@ export async function onRequest({ request, env }) {
       }
     });
   } catch (error) {
-    console.error('parse api error', error);
+    const diagnosticCode = classifyParseFailure(error);
+    console.error('[parse]', {
+      code: diagnosticCode,
+      message: error?.message || '运单文字解析失败',
+      route: normalizeRoute(body?.route || session?.boundRouteId),
+      userId: normalizeUserId(session?.id),
+      elapsedMs: Date.now() - startedAt
+    });
     return json({ success: false, error: error?.message || '运单文字解析失败' }, 503);
   }
+}
+
+function classifyParseFailure(error) {
+  const message = String(error?.message || '');
+  if (/OCR|识别/.test(message)) return 'OCR_INVALID';
+  if (/基准|数据库|Redis/.test(message)) return 'BASE_DATABASE_UNAVAILABLE';
+  if (/门店|有效门店/.test(message)) return 'STORE_CANDIDATES_INVALID';
+  if (/匹配/.test(message)) return 'MATCH_FAILED';
+  if (/规划|顺序/.test(message)) return 'PLAN_FAILED';
+  if (/保存|入库/.test(message)) return 'SAVE_FAILED';
+  if (/超时|timeout/i.test(message)) return 'TIMEOUT';
+  return 'PARSE_FAILED';
 }
 
 function buildDiagnostics(result, recognizedCount) {
