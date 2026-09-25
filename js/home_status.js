@@ -93,8 +93,15 @@ function reset(){
   }
 }
 
-function userFriendlyError(message){
+function userFriendlyError(message, code=''){
   const text=String(message||'').trim();
+  const failureCode=String(code||'').trim();
+  if(failureCode==='STORE_CANDIDATES_INVALID')return '运单文字提取失败，请重新上传清晰的运单图片。';
+  if(failureCode==='BASE_DATABASE_UNAVAILABLE')return '当前线路数据读取失败，请稍后重试。';
+  if(failureCode==='MATCH_FAILED')return '门店匹配未完成，请稍后重试。';
+  if(failureCode==='PLAN_FAILED')return '配送顺序生成失败，请稍后重试。';
+  if(failureCode==='OCR_INVALID')return '运单识别失败，请重新上传清晰的运单图片。';
+  if(failureCode==='TIMEOUT')return '网络或服务器处理超时，请稍后重试。';
   if(/基准|数据库|Redis/.test(text))return '当前线路数据读取失败，请稍后重试。';
   if(/OCR|识别|文字/.test(text))return '运单识别失败，请重新上传清晰的运单图片。';
   if(/超时|网络|请求/.test(text))return '网络或服务器处理超时，请稍后重试。';
@@ -102,7 +109,7 @@ function userFriendlyError(message){
   return '运单处理未完成，请重新上传。';
 }
 
-function showError(message=''){
+function showError(message='',code=''){
   if(successTimer){clearTimeout(successTimer);successTimer=null;}
   const node=ensureModal();
   node.classList.add('active','error');
@@ -114,7 +121,7 @@ function showError(message=''){
   const button=node.querySelector('.zpei-processing-failure-btn');
   const cancelButton=node.querySelector('.zpei-processing-cancel-btn');
   if(title)title.textContent='运单处理失败';
-  if(detail)detail.textContent=userFriendlyError(message);
+  if(detail)detail.textContent=userFriendlyError(message,code);
   if(stages)stages.style.display='none';
   if(button)button.style.display='inline-flex';
   if(cancelButton)cancelButton.style.display='none';
@@ -122,14 +129,14 @@ function showError(message=''){
   setVisible(true);
 }
 
-function render(status='idle',progress=0,message=''){
+function render(status='idle',progress=0,message='',code=''){
   const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';
   if(state==='idle'||state==='cancelled'){
     reset();
     return;
   }
   if(state==='error'){
-    showError(message);
+    showError(message,code);
     return;
   }
 
@@ -156,8 +163,8 @@ function render(status='idle',progress=0,message=''){
   }
 }
 
-window.renderUnifiedStatus=(status='idle',progress=0,message='')=>render(status,progress,message);
-window.handleUploadProcessingFailure=(message='')=>render('error',100,message);
+window.renderUnifiedStatus=(status='idle',progress=0,message='',code='')=>render(status,progress,message,code);
+window.handleUploadProcessingFailure=(message='',code='')=>render('error',100,message,code);
 window.resetProcessingStatus=reset;
 
 })();
