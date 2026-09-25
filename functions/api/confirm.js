@@ -446,7 +446,7 @@ function buildCorrectionDetails(orders) {
 function correctionCompareKey(value) {
   return String(value || '')
     .normalize('NFKC')
-    .replace(/[\\s\\u3000，,。；;：:（）()【】\\[\\]<>《》“”\\"'‘’·\\-_/]/g, '')
+    .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g, '')
     .toLowerCase();
 }
 
