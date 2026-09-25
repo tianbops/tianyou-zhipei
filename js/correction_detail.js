@@ -60,7 +60,7 @@ function render(record){
   list.innerHTML=items.map((x,i)=>'<div class="correction-detail-item"><div class="correction-detail-code">'+(String(x.code||'').trim()||String(i+1).padStart(2,'0'))+'</div><div class="correction-detail-name correction-detail-from">'+escapeHtml(x.from)+'</div><div class="correction-detail-arrow">↓</div><div class="correction-detail-name correction-detail-to">'+escapeHtml(x.to)+'</div></div>').join('');
 }
 function normalizeWeight(v){if(v===null||v===undefined||v==='')return '';const s=String(v).trim().replace(/,/g,''),m=s.match(/[0-9]+(?:\.\d+)?/);if(!m)return '';const n=Number(m[0]);if(!Number.isFinite(n))return '';const tons=/吨|\bt\b/i.test(s)?n:/kg|千克|公斤/i.test(s)?n/1000:n>=1000?n/1000:n;return Number.isFinite(tons)?tons.toFixed(2)+'t':''}
-function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])}
+function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'" :'&#39;','"':'&quot;'}[c]))}
 window.goBack=()=>{if(window.history.length>1)window.history.back();else location.replace('history.html')};
 document.addEventListener('DOMContentLoaded',async()=>{
   try{
