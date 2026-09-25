@@ -1,6 +1,6 @@
 // 天友智配One V3 · 确认后的门店学习
 import { authRequired } from './_auth.js';
-import { canManageRoute, getBase, getLearning, setLearning, normalizeRoute } from './v3/data.js';
+import { isRouteMaintainer, getBase, getLearning, setLearning, normalizeRoute } from './v3/data.js';
 const MAX_ALIASES=1000,MAX_BATCH=100;
 export async function onRequest({request,env}){
  if(request.method!=='POST')return json({success:false,error:'Method not allowed'},405);
@@ -9,7 +9,7 @@ export async function onRequest({request,env}){
  try{
   const body=await request.json().catch(()=>({}));
   const route=normalizeRoute(body.route||session.boundRouteId);
-  if(!route||!canManageRoute(session,route))return json({success:false,error:'只有绑定该线路的用户可以维护门店学习数据'},403);
+  if(!route||!isRouteMaintainer(session,route))return json({success:false,error:'只有绑定该线路的用户可以维护门店学习数据'},403);
   const input=Array.isArray(body.items)?body.items:[body];
   if(input.length>MAX_BATCH)return json({success:false,error:`单次最多学习 ${MAX_BATCH} 家门店`},400);
   const base=await getBase(env,route);
