@@ -259,3 +259,16 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 .history-page .delete-actions button{height:46px!important;border-radius:12px!important;font-size:14px!important;font-weight:600!important}
 .history-page .delete-cancel{background:#202A34!important;color:#E3E8ED!important;border:1px solid rgba(255,255,255,.075)!important}
 .history-page .delete-confirm{background:#B8C1C8!important;color:#0B1015!important}
+0
+
+/* 2026-09-25 历史运单：左滑操作取代长按删除 */
+.history-swipe-row{position:relative;width:100%;height:44px;min-height:44px;overflow:hidden;border-radius:10px;touch-action:pan-y;background:#202A34}
+.history-swipe-surface{position:relative;z-index:2;width:100%;height:44px;min-height:44px;background:#151D26;transform:translateX(0);will-change:transform;touch-action:pan-y}
+.history-swipe-surface .history-view{position:relative;width:100%!important;height:44px!important;min-height:44px!important;margin:0!important;border:1px solid rgba(255,255,255,.055)!important;border-radius:10px!important;background:#1B2530!important}
+.history-swipe-actions{position:absolute;z-index:1;inset:0 0 0 auto;width:156px;height:44px;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#10161D}
+.history-action{height:44px;min-height:44px;border:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:0 8px;font-size:13px;font-weight:600;white-space:nowrap;touch-action:manipulation}
+.history-edit{background:#313C47!important;color:#F2F5F7!important}
+.history-delete{background:#4A2D31!important;color:#F2F5F7!important}
+.history-action:active{filter:brightness(.9)}
+.history-swipe-row.open .history-swipe-surface{transform:translateX(-156px)}
+@media(prefers-reduced-motion:reduce){.history-swipe-surface{transition:none!important}}
