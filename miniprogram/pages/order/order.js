@@ -5,7 +5,19 @@ Page({
   onShow() { this.load(); },
   async load() {
     const user = app.globalData.user || wx.getStorageSync('zhipei_user') || {};
-    const route = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || user.boundRouteId || '').trim();
+    let route = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || '').trim();
+    // 未绑定用户也可以直接使用已有线路；若首次进入子页面还没有 dispatchRoute，补充读取启用线路。
+    if (!route) {
+      try {
+        const routeData = await request('/api/routes');
+        const routes = (Array.isArray(routeData?.routes) ? routeData.routes : []).filter(x => x?.status !== 'disabled');
+        route = String(routes[0]?.id || '').trim();
+        if (route) {
+          app.globalData.dispatchRoute = route;
+          wx.setStorageSync('zhipei_dispatch_route', route);
+        }
+      } catch (e) { /* 保持空线路，后续统一按登录/线路错误处理 */ }
+    }
     this.setData({ user, dispatchRoute: route });
     try {
       const date = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
