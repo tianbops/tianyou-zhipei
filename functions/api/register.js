@@ -53,7 +53,7 @@ if maxUses>0 and used>=maxUses then return 'EXHAUSTED' end
 if redis.call('EXISTS',usernameKey)==1 then return 'USERNAME_EXISTS' end
 invite.usedCount=used+1
 invite.lastUsedAt=ARGV[2]
-if maxUses>0 and invite.usedCount>=maxUses then invite.status='active' end
+if maxUses>0 and invite.usedCount>=maxUses then invite.status='exhausted' end
 redis.call('SET',usernameKey,ARGV[3])
 redis.call('SET',userKey,ARGV[1])
 redis.call('SET',inviteKey,cjson.encode(invite))
