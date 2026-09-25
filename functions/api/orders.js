@@ -22,7 +22,8 @@ export async function onRequest({ request, env }) {
 
 async function saveOrder(request, env, session) {
   const body = await request.json().catch(() => ({}));
-  const route = normalizeRoute(body.route || session.boundRouteId), userId = normalizeUserId(session.id);
+  const route = normalizeRoute(body.route), userId = normalizeUserId(session.id);
+  if (!route) return json({ error: '缺少调度线路' }, 400);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该线路' }, 403);
   const routeRecord = await getRoute(env, route);
   if (!routeRecord || routeRecord.status === 'disabled') return json({ error: '当前线路不存在或已停用' }, 404);
@@ -140,7 +141,8 @@ async function saveOrder(request, env, session) {
 
 async function readOrder(request, env, session) {
   const url = new URL(request.url), requestedDate = normalizeDate(url.searchParams.get('date'));
-  const route = normalizeRoute(url.searchParams.get('route') || session.boundRouteId), userId = normalizeUserId(session.id);
+  const route = normalizeRoute(url.searchParams.get('route')), userId = normalizeUserId(session.id);
+  if (!route) return json({ error: '缺少调度线路' }, 400);
   if (!canUseRoute(session.user || session, route)) return json({ error: '无权使用该线路' }, 403);
   const batch = String(url.searchParams.get('orderBatchId') || url.searchParams.get('batch') || '').trim();
 
