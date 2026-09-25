@@ -106,9 +106,11 @@ function showError(){
   node.classList.remove('success');
   node.setAttribute('aria-hidden','false');
   const title=node.querySelector('.zpei-processing-title');
+  const stages=node.querySelector('.zpei-processing-stages');
   const message=node.querySelector('.zpei-processing-message');
   const button=node.querySelector('.zpei-processing-failure-btn');
   if(title)title.textContent='运单处理失败';
+  if(stages)stages.style.display='none';
   if(message)message.textContent='运单处理未完成，请重新上传运单';
   if(button)button.style.display='inline-flex';
   renderStages(-1,'error');
@@ -131,8 +133,10 @@ function render(status='idle',progress=0){
   node.classList.remove('error','success');
   node.setAttribute('aria-hidden','false');
   const title=node.querySelector('.zpei-processing-title');
+  const stages=node.querySelector('.zpei-processing-stages');
   const message=node.querySelector('.zpei-processing-message');
   const button=node.querySelector('.zpei-processing-failure-btn');
+  if(stages)stages.style.display='flex';
   if(title)title.textContent=state==='success'?'处理完成':'正在处理运单';
   if(button)button.style.display='none';
 
