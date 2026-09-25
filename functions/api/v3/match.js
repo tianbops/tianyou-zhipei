@@ -22,7 +22,7 @@ function similarity(a,b){
  return Math.min(1,charScore+prefix+suffix);
 }
 function identityFeatures(a,b){
- const x=key(a),y=key(b),numbers=v=>[...String(v).matchAll(/[A-Z]{0,4}\\d{3,8}/gi)].map(m=>m[0].toLowerCase());
+ const x=key(a),y=key(b),numbers=v=>[...String(v).matchAll(/[A-Z]{0,4}\d{3,8}/gi)].map(m=>m[0].toLowerCase());
  const nx=numbers(a),ny=numbers(b),code=nx.length&&ny.length&&nx.some(v=>ny.includes(v))?0.12:0;
  const xEnd=x.slice(-4),yEnd=y.slice(-4),end=xEnd===yEnd&&xEnd.length>=2?.06:0;
  return code+end;
