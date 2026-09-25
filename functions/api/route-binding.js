@@ -4,10 +4,8 @@ import {
   canUseRoute, encodeKey, getUser, normalizeRoute, publicUser,
   redisCommand, redisGet, redisSet, atomicRouteBinding
 } from './_data.js';
-import { userProfileKey, routeKey as v3RouteKey, getRoute as getV3Route } from './v3/data.js';
+import { userProfileKey, routeKey as v3RouteKey, getRoute as getV3Route, bindingRequestKey, bindingRequestUserKey, bindingRequestIndexKey } from './v3/data.js';
 
-const REQUEST_PREFIX = 'route:binding-request:';
-const USER_REQUEST_PREFIX = 'route:binding-request:user:';
 const REVIEW_LOCK_TTL_SECONDS = 30;
 
 export async function onRequest({ request, env }) {
@@ -81,8 +79,9 @@ async function createRequest(env, user, request) {
       createdAt: now, updatedAt: now
     };
     const saved = await atomicCreateRequest(env, {
-      requestKey: REQUEST_PREFIX + encodeKey(id),
-      userRequestKey: USER_REQUEST_PREFIX + encodeKey(user.id),
+      requestKey: bindingRequestKey(id),
+      userRequestKey: bindingRequestUserKey(user.id),
+      indexKey: bindingRequestIndexKey(),
       record
     });
     if (!saved) return json({ success: false, error: '线路申请保存失败，请稍后重试' }, 503);
@@ -106,8 +105,9 @@ async function unbindSelf(env, user) {
       const pending = await findPendingForUser(env, user.id);
       if (pending) {
         const cancelled = await atomicCancelRequest(env, {
-          requestKey: REQUEST_PREFIX + encodeKey(pending.id),
-          userRequestKey: USER_REQUEST_PREFIX + encodeKey(user.id),
+          requestKey: bindingRequestKey(pending.id),
+          userRequestKey: bindingRequestUserKey(user.id),
+          indexKey: bindingRequestIndexKey(),
           requestId: pending.id
         });
         if (!cancelled) return json({ success: false, error: '线路申请状态已发生变化，请刷新后重试' }, 409);
@@ -182,23 +182,23 @@ async function unbindSelf(env, user) {
 }
 
 async function findPendingForUser(env, userId) {
-  const index = await redisGet(env, USER_REQUEST_PREFIX + encodeKey(userId));
+  const index = await redisGet(env, bindingRequestUserKey(userId));
   if (!index) return null;
-  const record = await redisGet(env, REQUEST_PREFIX + encodeKey(index));
+  const record = await redisGet(env, bindingRequestKey(index));
   if (!record) return null;
   if (record.status !== 'pending') return null;
   return record;
 }
 
-async function atomicCreateRequest(env, { requestKey, userRequestKey, record }) {
-  const script = "if redis.call('EXISTS', KEYS[1]) == 1 then return 'EXISTS' end if redis.call('EXISTS', KEYS[2]) == 1 then return 'USER_PENDING' end redis.call('SET', KEYS[1], ARGV[1]) redis.call('SET', KEYS[2], ARGV[2]) return 'OK'";
-  const result = await redisCommand(env, ['EVAL', script, '2', requestKey, userRequestKey, JSON.stringify(record), record.id]).catch(() => null);
+async function atomicCreateRequest(env, { requestKey, userRequestKey, indexKey, record }) {
+  const script = "if redis.call('EXISTS', KEYS[1]) == 1 then return 'EXISTS' end if redis.call('EXISTS', KEYS[2]) == 1 then return 'USER_PENDING' end redis.call('SET', KEYS[1], ARGV[1]) redis.call('SET', KEYS[2], ARGV[2]) redis.call('SADD', KEYS[3], ARGV[3]) return 'OK'";
+  const result = await redisCommand(env, ['EVAL', script, '3', requestKey, userRequestKey, indexKey, JSON.stringify(record), record.id]).catch(() => null);
   return result === 'OK';
 }
 
-async function atomicCancelRequest(env, { requestKey, userRequestKey, requestId }) {
-  const script = "local current = redis.call('GET', KEYS[1]) if not current then return 'MISSING' end local ok, obj = pcall(cjson.decode, current) if not ok or tostring(obj.id or '') ~= ARGV[1] or tostring(obj.status or '') ~= 'pending' then return 'CHANGED' end redis.call('DEL', KEYS[1]) if redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end return 'OK'";
-  const result = await redisCommand(env, ['EVAL', script, '2', requestKey, userRequestKey, requestId]).catch(() => null);
+async function atomicCancelRequest(env, { requestKey, userRequestKey, indexKey, requestId }) {
+  const script = "local current = redis.call('GET', KEYS[1]) if not current then return 'MISSING' end local ok, obj = pcall(cjson.decode, current) if not ok or tostring(obj.id or '') ~= ARGV[1] or tostring(obj.status or '') ~= 'pending' then return 'CHANGED' end redis.call('DEL', KEYS[1]) if redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end redis.call('SREM', KEYS[3], ARGV[1]) return 'OK'";
+  const result = await redisCommand(env, ['EVAL', script, '3', requestKey, userRequestKey, indexKey, requestId]).catch(() => null);
   return result === 'OK';
 }
 
