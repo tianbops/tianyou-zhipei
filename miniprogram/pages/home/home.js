@@ -47,6 +47,11 @@ Page({
 
   async loadToday() {
     const route = String(this.data.dispatchRoute || app.globalData.dispatchRoute || '').trim();
+    if (!route) {
+      this.setData({ order: { count: 0, weight: '0.00t', stores: [] } });
+      wx.showToast({ title: '当前未选择调度线路', icon: 'none' });
+      return;
+    }
     try {
       const date = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       const data = await request('/api/v3/today?route='+encodeURIComponent(route)+'&date='+encodeURIComponent(date));
