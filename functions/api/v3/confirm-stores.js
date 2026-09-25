@@ -58,7 +58,15 @@ export async function onRequest({request,env}){
    stores.sort((a,b)=>Number(a.routeOrder)-Number(b.routeOrder));stores.forEach((s,i)=>s.routeOrder=i+1);
    const nextBase={...base,stores,dataVersion:Number(base.dataVersion||0)+1,updatedAt:new Date().toISOString(),updatedBy:session.id,schemaVersion:3};
    const nextLearning={...learning,updatedAt:new Date().toISOString(),updatedBy:session.id,schemaVersion:3};
-   const nextPlan={...plan,pendingStores:Array.isArray(plan.pendingStores)?plan.pendingStores.map(p=>{const hit=confirmed.some(x=>String(x.storeId||'')===String(p.storeId||'')||matchKey(x.rawName)===matchKey(p.rawName||p.name));return hit?{...p,status:'resolved',resolved:true,resolvedAt:new Date().toISOString(),resolvedBy:session.id}:p;}):[],updatedAt:new Date().toISOString()};
+   const confirmedStoreIds=new Set(confirmed.map(x=>String(x.storeId||'')).filter(Boolean));
+   const confirmedRawKeys=new Set(confirmed.map(x=>matchKey(x.rawName)).filter(Boolean));
+   const isConfirmedPlanItem=p=>confirmedStoreIds.has(String(p?.storeId||''))||confirmedRawKeys.has(matchKey(p?.rawName||p?.name));
+   // 确认完成后从当前规划的待定/新增集合真正移除；确认历史由 confirmation 单独保存。
+   const nextPlan={...plan,
+    pendingStores:Array.isArray(plan.pendingStores)?plan.pendingStores.filter(p=>!isConfirmedPlanItem(p)):[],
+    newStores:Array.isArray(plan.newStores)?plan.newStores.filter(p=>!isConfirmedPlanItem(p)):[],
+    updatedAt:new Date().toISOString()
+   };
    const nextConfirmation={
     route,date,taskId,schemaVersion:3,
     requestIds:[...(Array.isArray(confirmation?.requestIds)?confirmation.requestIds:[]),confirmRequestId].slice(-50),
