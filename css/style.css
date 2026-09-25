@@ -643,3 +643,54 @@ body.zpei-processing .app-container{
     min-height:62px!important;
   }
 }
+
+/* UI 2.8 · 上传入口与处理中弹窗增加统一取消按钮 2026-09-25 */
+.upload-cancel-btn{
+  width:100%!important;
+  min-height:48px!important;
+  margin-top:12px!important;
+  padding:0 16px!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  border-radius:12px!important;
+  background:#1B2530!important;
+  color:#B8C2CC!important;
+  font-size:15px!important;
+  font-weight:650!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  cursor:pointer!important;
+}
+.upload-cancel-btn:active{
+  background:#202A34!important;
+  color:#F2F5F7!important;
+  transform:scale(.985);
+}
+.zpei-processing-cancel-btn{
+  display:none;
+  width:100%;
+  min-height:48px;
+  margin-top:20px;
+  padding:0 16px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  background:#1B2530;
+  color:#B8C2CC;
+  font-size:15px;
+  font-weight:650;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.zpei-processing-cancel-btn:active{
+  background:#202A34;
+  color:#F2F5F7;
+  transform:scale(.985);
+}
+@media(max-width:380px){
+  .upload-cancel-btn,
+  .zpei-processing-cancel-btn{
+    min-height:46px!important;
+    font-size:14px!important;
+  }
+}
