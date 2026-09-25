@@ -1,6 +1,6 @@
 // 天友智配One V3 · 一体化规划编排器
-import { getRoute } from '../_data.js';
-import { getBase, getLearning, normalizeRoute, canUseRoute } from './data.js';
+
+import { getRoute, getBase, getLearning, normalizeRoute, canUseRoute } from './data.js';
 import { extractStores } from './extract.js';
 import { matchStores } from './match.js';
 import { dedupeStores } from './dedupe.js';
