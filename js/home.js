@@ -251,7 +251,7 @@ window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;con
 window.addEventListener('popstate',()=>{
   const overlay=$('uploadOverlay');
   if(document.body.classList.contains('zpei-processing')){
-    // Android系统返回键/手势：处理中直接中止本次上传，并回到上传入口，不允许停在处理中。
+    uploadHistoryGuard=false;
     window.handleUploadProcessingFailure?.('已取消本次上传');
     return;
   }
