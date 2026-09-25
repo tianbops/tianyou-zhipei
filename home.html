@@ -45,9 +45,7 @@
         <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()" aria-label="选择运单文件"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v10H3z"/></svg></span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
       </div>
     </div>
-    <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon" aria-hidden="true"></span><span id="statusText" data-text="等待处理...">等待处理...</span></div><div id="statusDetail" class="status-detail" aria-live="polite"></div></div>
-      <div class="review-summary" id="reviewSummary" hidden role="button" tabindex="0" aria-expanded="false" onclick="openCorrectionDetails()">修正详情 <span>›</span></div>
-    </div>
+    <div class="parse-status" id="parseStatus"><div class="status-row"><span id="statusIcon" class="status-icon" aria-hidden="true"></span><span id="statusText" data-text="等待处理...">等待处理...</span></div><div id="statusDetail" class="status-detail" aria-live="polite"></div></div>    </div>
     <div class="sheet-footer">
 
       <button class="btn-cancel" type="button" onclick="cancelUpload()">取消</button>
