@@ -12,15 +12,43 @@ function aliasesOf(learning){
  return m;
 }
 function correctionKey(v){return clean(v).replace(/Ⅱl|ⅡI/gi,'II').replace(/[Ⅱ]/g,'II').replace(/[\s\u3000，,。.!！:：;；、（）()【】[\]{}“”\"'‘’·_\-/]/g,'').toLowerCase();}
-function similarity(a,b){const x=key(a),y=key(b);if(!x||!y)return 0;if(x===y)return 1;if(x.includes(y)||y.includes(x))return Math.min(x.length,y.length)/Math.max(x.length,y.length)*.96;let h=0;for(const c of new Set(x))if(y.includes(c))h++;return h/Math.max(new Set(x).size,new Set(y).size,1);}
+function similarity(a,b){
+ const x=key(a),y=key(b);if(!x||!y)return 0;if(x===y)return 1;
+ if(x.includes(y)||y.includes(x))return Math.min(x.length,y.length)/Math.max(x.length,y.length)*.96;
+ let same=0;const xs=new Set(x),ys=new Set(y);for(const ch of xs)if(ys.has(ch))same++;
+ const charScore=same/Math.max(xs.size,ys.size,1);
+ const prefix=x.slice(0,Math.min(4,x.length))===y.slice(0,Math.min(4,y.length))?.06:0;
+ const suffix=x.slice(-Math.min(4,x.length))===y.slice(-Math.min(4,y.length))?.08:0;
+ return Math.min(1,charScore+prefix+suffix);
+}
+function identityFeatures(a,b){
+ const x=key(a),y=key(b),numbers=v=>[...String(v).matchAll(/[A-Z]{0,4}\\d{3,8}/gi)].map(m=>m[0].toLowerCase());
+ const nx=numbers(a),ny=numbers(b),code=nx.length&&ny.length&&nx.some(v=>ny.includes(v))?0.12:0;
+ const xEnd=x.slice(-4),yEnd=y.slice(-4),end=xEnd===yEnd&&xEnd.length>=2?.06:0;
+ return code+end;
+}
+function rankCandidate(original,store){
+ const name=storeName(store),base=similarity(original,name),feature=identityFeatures(original,name);
+ return Math.min(1,base+feature);
+}
 export function matchStores(candidates,base,learning){
  const stores=storesOf(base),aliases=aliasesOf(learning),out=[],pending=[],seen=new Set();
  for(const original of candidates){
-  const aid=aliases.get(normalizeLearningKey(original));let found=aid?stores.find(s=>String(s?.storeId||'')===aid.storeId):null;let score=found?Math.min(1,aid.confidence+Math.min(.08,Math.log10(aid.count+1)*.04)):0;let via=found?'learned-alias':'';
-  if(!found){for(const s of stores){const n=similarity(original,storeName(s));if(!found||n>score){found=s;score=n;}}via=found&&score>=.72?'name':'';}
-  if(!found||score<.72){if(!pending.some(x=>key(x.name)===key(original)))pending.push({name:original});continue;}
+  const aid=aliases.get(normalizeLearningKey(original));
+  let found=aid?stores.find(s=>String(s?.storeId||'')===aid.storeId):null;
+  let score=found?Math.min(1,aid.confidence+Math.min(.08,Math.log10(aid.count+1)*.04)):0;
+  let via=found?'learned-alias':'';
+  if(!found){
+   const ranked=stores.map(s=>({store:s,score:rankCandidate(original,s)})).sort((a,b)=>b.score-a.score);
+   const best=ranked[0],second=ranked[1];
+   if(best){
+    const margin=best.score-(second?.score||0);
+    if(best.score>=.72 && (best.score>=.86 || margin>=.08)){found=best.store;score=best.score;via=best.score===1?'canonical':'name';}
+   }
+  }
+  if(!found||score<.72){if(!pending.some(x=>key(x.name)===key(original)))pending.push({name:original,reason:'low-confidence-or-ambiguous'});continue;}
   const id=String(found.storeId||'').trim();if(!id||seen.has(id))continue;seen.add(id);
-  out.push({storeId:id,name:storeName(found)||original,originalName:original,routeOrder:Number(found.routeOrder??found.order??999999),corrected:correctionKey(storeName(found))!==correctionKey(original),matchConfidence:score,matchVia:via,nav:found.nav||found.navigation||''});
+  out.push({storeId:id,name:storeName(found)||original,originalName:original,routeOrder:Number(found.routeOrder??found.order??999999),corrected:correctionKey(storeName(found))!==correctionKey(original),matchConfidence:Number(score.toFixed(4)),matchVia:via,nav:found.nav||found.navigation||''});
  }
  return {matched:out,pendingStores:pending};
 }
