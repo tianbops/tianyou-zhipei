@@ -190,68 +190,6 @@ window.cancelParse=async()=>{invalidateUploadTask();if(parseAbortController){par
 
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.add('waiting')}}
 window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
-let uploadDetailMode='';
-function getCorrectionDetailText(){
-  return Array.isArray(correctionDetails)&&correctionDetails.length?correctionDetails:[];
-}
-function renderUploadDetail(){
-  const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody');
-  if(!view||!title||!body)return;
-  uploadDetailMode='correction';
-  const sheet=document.querySelector('.upload-sheet');
-  sheet?.classList.add('detail-mode-correction');
-  title.textContent='修正详情';
-  body.textContent='';
-  const sectionTitle=document.createElement('div');
-  sectionTitle.className='detail-section-title';
-  sectionTitle.textContent='当日更改信息';
-  body.appendChild(sectionTitle);
-  const stats=document.createElement('div');
-  stats.className='correction-stats';
-  [['原始',correctionStats.raw],['更正',correctionStats.corrected],['合并',correctionStats.merged]].forEach(([label,value])=>{
-    const item=document.createElement('div');
-    item.className='correction-stat';
-    const text=document.createElement('span');
-    text.textContent=label+'：'+(Number(value)||0)+'家';
-    item.appendChild(text);
-    stats.appendChild(item);
-  });
-  body.appendChild(stats);
-  const detailTitle=document.createElement('div');
-  detailTitle.className='detail-subtitle';
-  detailTitle.textContent='更改明细';
-  body.appendChild(detailTitle);
-  const items=getCorrectionDetailText();
-  if(!items.length){
-    const empty=document.createElement('div');
-    empty.className='upload-detail-empty';
-    empty.textContent='暂无修正记录';
-    body.appendChild(empty);
-  }else{
-    items.forEach(item=>{
-      const row=document.createElement('div');
-      row.className='correction-item';
-      const parts=String(item).split(' → ');
-      const left=document.createElement('span');left.className='correction-left';left.textContent=parts[0]||'';
-      const arrow=document.createElement('span');arrow.className='correction-arrow';arrow.textContent='→';
-      const right=document.createElement('span');right.className='correction-right';right.textContent=parts.slice(1).join(' → ')||'';
-      row.append(left,arrow,right);
-      body.appendChild(row);
-    });
-  }
-  view.hidden=false;
-  view.setAttribute('aria-hidden','false');
-  sheet?.classList.add('detail-view-open');
-}
-function closeUploadDetail(){
-  const view=$('uploadDetailView');if(!view)return;
-  view.hidden=true;view.setAttribute('aria-hidden','true');
-  const sheet=document.querySelector('.upload-sheet');
-  sheet?.classList.remove('detail-view-open','detail-mode-correction');
-  uploadDetailMode='';
-}
-window.closeUploadDetail=closeUploadDetail;
-window.openCorrectionDetails=()=>renderUploadDetail();
 window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
 let uploadHistoryGuard=false;
 function openUploadHistoryGuard(){
