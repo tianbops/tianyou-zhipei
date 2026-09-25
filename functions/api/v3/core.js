@@ -7,6 +7,11 @@ import { dedupeStores } from './dedupe.js';
 import { routePlan } from './route-plan.js';
 import { savePlan } from './save.js';
 function dateValue(v){const s=String(v||'').trim();return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:'';}
+function businessDate(){
+ const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const getPart=t=>String(parts.find(p=>p.type===t)?.value||'').padStart(2,'0');
+ return `${getPart('year')}-${getPart('month')}-${getPart('day')}`;
+}
 export async function runPlan({env,session,route,date,vehicle,totalWeight,text,taskId}){
  route=normalizeRoute(route);
  const ocrVersion='PP-OCRv6',ocrModel='PP-OCRv6-small';
@@ -18,7 +23,7 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  if(!base)throw Object.assign(new Error('线路基准库不存在'),{code:'BASE_MISSING',stage:'matching'});
  const candidates=extractStores(text);
  if(!candidates.length)throw Object.assign(new Error('未提取到有效门店'),{code:'EXTRACT_FAILED',stage:'extracting'});
- const finalDate=dateValue(date)||new Date().toISOString().slice(0,10);
+ const finalDate=dateValue(date)||businessDate();
  const matched=matchStores(candidates,base,learning,{route,date:finalDate});
  const deduped=dedupeStores(matched.matched,candidates,matched.pendingStores);
  const planned=routePlan(deduped.stores,deduped.pendingStores);
