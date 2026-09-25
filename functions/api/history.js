@@ -527,7 +527,14 @@ async function redisMGet(env, keys) {
       const fallback = [];
       for (let j = 0; j < chunk.length; j += 5) {
         const small = chunk.slice(j, j + 5);
-        const values = await Promise.all(small.map(key => redisGet(env, key)));
+        const values = await Promise.all(small.map(async key => {
+          try {
+            return await redisGet(env, key);
+          } catch (error) {
+            console.warn('Redis单键历史读取失败，跳过该日期', key, error?.message || error);
+            return null;
+          }
+        }));
         fallback.push(...values);
       }
       output.push(...fallback);
