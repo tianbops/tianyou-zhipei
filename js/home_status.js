@@ -111,7 +111,7 @@ function showError(){
   const button=node.querySelector('.zpei-processing-failure-btn');
   if(title)title.textContent='运单处理失败';
   if(stages)stages.style.display='none';
-  if(message)message.textContent='运单处理未完成，请重新上传运单';
+  if(message)message.textContent='';
   if(button)button.style.display='inline-flex';
   renderStages(-1,'error');
   setVisible(false);
