@@ -54,5 +54,29 @@
 <script src="js/home.js?v=20260925-9"></script>
 <script src="js/home_confirm.js?v=20260925-7"></script>
 <script src="js/paddle_ocr.js?v=20260922-14"></script>
+<script>
+/* 首页基础交互保护：保证核心入口不因业务模块异常而失去点击响应 */
+(function(){
+  'use strict';
+  document.addEventListener('DOMContentLoaded',function(){
+    const byId=id=>document.getElementById(id);
+    const go=url=>window.location.assign(url);
+    const menuBtn=document.querySelector('.menu-btn');
+    const buttons=[...document.querySelectorAll('.function-btn')];
+    const uploadBtn=buttons.find(x=>String(x.textContent||'').includes('上传运单'));
+    const orderBtn=buttons.find(x=>String(x.textContent||'').includes('当日线路'));
+    const historyBtn=buttons.find(x=>String(x.textContent||'').includes('历史查询'));
+    if(menuBtn && typeof window.openHomeMenu!=='function')menuBtn.addEventListener('click',function(){
+      const menu=byId('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block';
+    });
+    if(uploadBtn && typeof window.toggleUpload!=='function')uploadBtn.addEventListener('click',function(){
+      const overlay=byId('uploadOverlay');if(overlay)overlay.classList.add('active');
+      const source=byId('uploadSourceMenu');if(source)source.classList.add('active');
+    });
+    if(orderBtn && typeof window.goToOrderDetail!=='function')orderBtn.addEventListener('click',function(){go('pages/order_detail.html');});
+    if(historyBtn && typeof window.goToHistory!=='function')historyBtn.addEventListener('click',function(){go('pages/history.html');});
+  });
+})();
+</script>
 </body>
 </html>
