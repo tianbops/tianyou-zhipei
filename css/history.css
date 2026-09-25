@@ -306,3 +306,18 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
   font-weight:550!important;
   letter-spacing:0!important;
 }
+
+/* 2026-09-25 历史运单行文字修正：仅处理重量超出边框，不调整字重 */
+.history-page .history-view{
+  grid-template-columns:54px minmax(0,1fr) 64px!important;
+  padding-left:10px!important;
+  padding-right:10px!important;
+}
+.history-page .history-view .history-weight{
+  min-width:0!important;
+  width:100%!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:clip!important;
+}
