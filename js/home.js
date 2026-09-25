@@ -286,11 +286,11 @@ if(!parsedOrders.length){
 window.renderUnifiedStatus('loading',86,'正在生成配送顺序…');
 // 规划成功后直接进入服务器入库；自动录入模块异常也必须进入统一失败出口。
 if(typeof window.submitManualOrder==='function'){
-  window.submitManualOrder({auto:true}).catch(error=>console.error('自动录入失败',error));
+  window.submitManualOrder({auto:true}).catch(error=>window.handleUploadProcessingFailure?.(error?.message||'运单保存失败，请重新上传'));
 }else{
   ensureConfirmModule().then(loaded=>{
     if(loaded&&typeof window.submitManualOrder==='function'){
-      window.submitManualOrder({auto:true}).catch(error=>console.error('自动录入失败',error));
+      window.submitManualOrder({auto:true}).catch(error=>window.handleUploadProcessingFailure?.(error?.message||'运单保存失败，请重新上传'));
     }else{
       window.handleUploadProcessingFailure?.('自动录入模块加载失败，请重新上传');
     }
@@ -298,7 +298,7 @@ if(typeof window.submitManualOrder==='function'){
     console.error('自动录入模块加载失败',error);
     window.handleUploadProcessingFailure?.(error?.message||'自动录入模块加载失败，请重新上传');
   });
-}return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'||/已取消|取消处理/.test(String(e?.message||''))){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.handleUploadProcessingFailure?.(e.message||'处理失败，请重试');return[]}};
+}return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'||/已取消|取消处理/.test(String(e?.message||''))){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.handleUploadProcessingFailure?.(e.message||'处理失败，请重新上传');if(auto)throw e;return[]}};
 async function refreshHomeOrder(){
   const seq=++homeOrderLoadSeq;
   const route=String(currentRoute()||'').trim();
