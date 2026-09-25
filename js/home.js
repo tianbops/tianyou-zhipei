@@ -167,33 +167,23 @@ function invalidateUploadTask(){return typeof window.invalidateUploadTask==='fun
 function isUploadTaskActive(taskId){return !taskId||typeof window.isUploadTaskActive!=='function'||window.isUploadTaskActive(taskId)}
 async function parseOrderText(text,taskId=0){
   const route=currentRoute();
-  const parseRoute=String(route||'').trim();
-  if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});if(!route)throw Error('未指定配送线路');
-  if(parseInFlight)throw Error('正在处理运单，请勿重复操作');
-  parseInFlight=true;parseCancelled=false;parseAbortController=new AbortController();
-  const PARSE_TIMEOUT_MS=120000; // 门店提取与基准库比对最多等待2分钟
-  const timer=setTimeout(()=>parseAbortController?.abort(),PARSE_TIMEOUT_MS);
+  if(!route)throw Error('未指定配送线路');
+  if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
+  if(!window.WaybillPlanner?.run)throw Error('智能规划模块未加载，请刷新页面后重试');
   try{
-    const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,route}),credentials:'same-origin',cache:'no-store',signal:parseAbortController.signal});
-    const data=await response.json().catch(()=>({}));
-    if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
-    if(String(currentRoute()||'').trim()!==parseRoute)throw Object.assign(new Error(`调度线路已从 ${parseRoute||'未选择'} 切换，当前运单已失效，请重新上传`),{code:'ROUTE_CHANGED'});
-    if(!response.ok||!data.success){
-      const message=String(data?.error||'');
-      if(/未找到.*独立基准数据库/.test(message)){if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});const fallback=fallbackParse(text);if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});return fallback;}
-      throw Object.assign(new Error(message||`运单处理接口错误（${response.status}）`),{code:String(data?.code||'PARSE_FAILED'),stage:String(data?.stage||'parse')});
-    }
-    return data.data;
+    const result=await window.WaybillPlanner.run({
+      route,
+      ocrText:String(text||'').trim(),
+      taskId:taskId||undefined
+    });
+    if(String(currentRoute()||'').trim()!==String(route).trim())throw Object.assign(new Error('调度线路已发生变化，当前运单已失效，请重新上传'),{code:'ROUTE_CHANGED'});
+    return result;
   }catch(e){
-    if(e?.name==='AbortError'){
-      if(parseCancelled)throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
-      throw Error('运单处理超过2分钟，请检查网络后重试');
-    }
+    if(e?.code==='CANCELLED'||e?.code==='PARSE_CANCELLED')throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
     throw e;
-  }finally{
-    clearTimeout(timer);parseAbortController=null;parseInFlight=false;
   }
 }
+
 window.cancelParse=async()=>{invalidateUploadTask();if(parseAbortController){parseCancelled=true;parseAbortController.abort();}window.WaybillPlanner?.cancel?.();const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')await cancelOCR().catch(()=>{});};
 
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');}};
