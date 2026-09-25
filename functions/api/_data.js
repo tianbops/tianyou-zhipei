@@ -153,9 +153,9 @@ function createStableStoreId(name) {
 }
 
 export async function listUsersByRoute(env, route) {
-  const users = await scanUsers(env);
-  const normalized = normalizeRoute(route);
-  return users.filter(user => normalizeRoute(user?.boundRouteId) === normalized);
+  // V3 已取消旧 user:* 业务数据迁移；该兼容查询保留为安全空实现，
+  // 防止旧订单/历史键重新进入正式业务链路。
+  return [];
 }
 
 
