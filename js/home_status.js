@@ -73,7 +73,7 @@ function reset(){
 }
 
 function showError(message){
-  const current=String(message||'运单处理失败，请重新上传').trim();
+  const current='运单处理失败，请重新上传';
   const node=ensureLayer();
   node.classList.add('active','error');
   node.setAttribute('aria-hidden','false');
