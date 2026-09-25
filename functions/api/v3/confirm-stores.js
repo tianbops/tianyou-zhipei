@@ -50,7 +50,7 @@ export async function onRequest({request,env}){
       target=stores.find(s=>String(s.storeId)===storeId);
       if(!target){target={storeId,name,routeOrder:nextOrder++,nav:'',note:''};stores.push(target);}
     }
-    learning=learnAlias(learning,raw,target);
+    learning=learnAlias(learning,raw,target,{route,date});
     confirmed.push({rawName:raw,storeId:target.storeId,name:target.name,routeOrder:target.routeOrder,confirmedAt:new Date().toISOString()});
    }
    if(!confirmed.length)return json({success:true,idempotent:false,route,date,taskId,confirmed:[],storeCount:stores.length});
