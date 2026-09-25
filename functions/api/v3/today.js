@@ -1,7 +1,7 @@
 // 天友智配One V3 · 今日运单/今日修正数据调用接口
 import { authRequired } from '../_auth.js';
-import { canUseRoute, normalizeRoute, todayWaybillKey, todayCorrectionKey, planKey, getRoute } from './data.js';
-import { get, evalRedis, v3Key } from './_redis.js';
+import { canUseRoute, normalizeRoute, todayWaybillKey, todayCorrectionKey, todayIndexKey, getRoute } from './data.js';
+import { get, evalRedis } from './_redis.js';
 import { waybillMetrics } from './metrics.js';
 
 export async function onRequest({request,env}){
@@ -25,8 +25,10 @@ export async function onRequest({request,env}){
       if(!waybill)return json({success:false,error:'今日运单数据不存在'},404);
       return json({success:true,route,date,taskId,waybill,corrections:corrections||{taskId,route,date,corrections:[],count:0,schemaVersion:3}});
     }
-    const pattern=v3Key('route',route,'today',date,'waybill','*');
-    const rows=await evalRedis(env,"local keys=redis.call('KEYS',ARGV[1]); local out={}; for _,k in ipairs(keys) do local v=redis.call('GET',k); if v then table.insert(out,v) end end; return cjson.encode(out)",[],[pattern]);
+    const index=await get(env,todayIndexKey(route,date));
+    const taskIds=Array.isArray(index)?index:[];
+    if(!taskIds.length)return json({success:true,route,date,waybills:[],todayWaybillCount:0,todaySummary:{storeCount:0,totalWeight:''}});
+    const rows=await evalRedis(env,"local out={}; for i,k in ipairs(KEYS) do local v=redis.call('GET',k); if v then table.insert(out,v) end end; return cjson.encode(out)",[...taskIds.map(id=>todayWaybillKey(route,date,id))],[]);
     const waybills=typeof rows==='string'?JSON.parse(rows):[];
     if(!waybills.length)return json({success:true,route,date,waybills:[],todayWaybillCount:0,todaySummary:{storeCount:0,totalWeight:''}});
     waybills.sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
