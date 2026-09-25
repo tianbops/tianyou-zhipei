@@ -2,6 +2,7 @@
 import { authRequired } from '../_auth.js';
 import { isRouteMaintainer, getBase, getLearning, normalizeRoute, acquireRouteDateLock, releaseRouteDateLock, planKey, confirmationKey, baseKey, learningKey } from './data.js';
 import { get, evalRedis } from './_redis.js';
+import { learnAlias } from './learning.js';
 
 export async function onRequest({request,env}){
  if(request.method!=='POST')return json({success:false,error:'Method not allowed'},405);
@@ -19,7 +20,7 @@ export async function onRequest({request,env}){
   const token=crypto.randomUUID();
   if(!(await acquireRouteDateLock(env,route,date,token,30)))return json({success:false,error:'当前线路当天正在处理另一项操作，请稍后重试'},409);
   try{
-   const [plan,base,learning,confirmation]=await Promise.all([
+   const [plan,base,learningValue,confirmation]=await Promise.all([
     get(env,planKey(route,date,taskId)),
     getBase(env,route),
     getLearning(env,route),
@@ -27,12 +28,13 @@ export async function onRequest({request,env}){
    ]);
    if(!plan)return json({success:false,error:'规划结果不存在或已失效'},404);
    if(!base)return json({success:false,error:'线路基准库不存在'},404);
+   let learning=learningValue;
 
    if(confirmation?.requestIds?.includes(confirmRequestId)){
     return json({success:true,idempotent:true,route,date,taskId,confirmed:Array.isArray(confirmation.confirmed)?confirmation.confirmed:[],storeCount:Array.isArray(base.stores)?base.stores.length:0});
    }
 
-   const stores=Array.isArray(base.stores)?base.stores.map(x=>({...x})):[],aliases={...(learning.aliases||{})};
+   let stores=Array.isArray(base.stores)?base.stores.map(x=>({...x})):[];
    const confirmedHistory=Array.isArray(confirmation?.confirmed)?confirmation.confirmed:[];
    const confirmedKeys=new Set(confirmedHistory.map(x=>matchKey(x.rawName)).filter(Boolean));
    let nextOrder=stores.reduce((m,s)=>Math.max(m,Number(s.routeOrder)||0),0)+1;
@@ -47,8 +49,7 @@ export async function onRequest({request,env}){
       target=stores.find(s=>String(s.storeId)===storeId);
       if(!target){target={storeId,name,routeOrder:nextOrder++,nav:'',note:''};stores.push(target);}
     }
-    const ak=rawKey,bk=matchKey(target.name);
-    if(ak&&bk&&ak!==bk)aliases[ak]={baseKey:bk,storeId:String(target.storeId),baseName:target.name,count:Math.max(1,Number(aliases[ak]?.count)||0)+1,updatedAt:new Date().toISOString(),rawExamples:[...new Set([...(aliases[ak]?.rawExamples||[]),raw])].slice(-3)};
+    learning=learnAlias(learning,raw,target);
     confirmed.push({rawName:raw,storeId:target.storeId,name:target.name,routeOrder:target.routeOrder,confirmedAt:new Date().toISOString()});
    }
    if(!confirmed.length)return json({success:true,idempotent:false,route,date,taskId,confirmed:[],storeCount:stores.length});
