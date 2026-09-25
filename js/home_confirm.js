@@ -168,11 +168,11 @@
     confirmStartedAt=Date.now();
     let timer=null;
     const confirmRequestId=metaState.confirmRequestId||(metaState.confirmRequestId=createClientRequestId());
-    window.renderUnifiedStatus?.('loading',15,'正在连接服务器确认录入…');
+    window.renderUnifiedStatus?.('loading',88,'正在保存运单及修正记录…');
     try{
       if(!parsedState.length){
         if(!String(input?.value||'').trim())throw Error('请先完成运单处理');
-        window.renderUnifiedStatus?.('loading',20,'正在应用修改…');
+        window.renderUnifiedStatus?.('loading',90,'正在应用修正并保存运单…');
         await reparseEditedText();
       }
 
@@ -259,7 +259,7 @@
       if(isDuplicate&&!savedBatch)throw Error('重复运单缺少原批次信息，请重试');
 
 
-      window.renderUnifiedStatus?.('loading',100,'录入成功，正在打开当日数据…');
+      window.renderUnifiedStatus?.('loading',98,'保存完成，正在打开当日数据…');
       document.body.classList.add('navigating-to-order');
 
       const handoffTitle=document.querySelector('.upload-sheet .sheet-title');
