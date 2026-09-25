@@ -2,6 +2,8 @@
 import { get as redisGet, set as redisSet, evalRedis, v3Key } from './_redis.js';
 export { v3Key };
 export function routeKey(route){return v3Key('route',normalizeRoute(route));}
+export async function getRoute(env,route){const v=await redisGet(env,routeKey(route));return v&&v.id?{...v,id:normalizeRoute(v.id),name:v.name||normalizeRoute(v.id)}:null;}
+export async function setRoute(env,route,value){return redisSet(env,routeKey(route),{...value,id:normalizeRoute(route),name:value?.name||normalizeRoute(route),schemaVersion:3});}
 export function baseKey(route){return v3Key('route',normalizeRoute(route),'base');}
 export function learningKey(route){return v3Key('route',normalizeRoute(route),'learning');}
 export function planKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'plan',date,taskId);}
