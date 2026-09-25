@@ -407,7 +407,7 @@ function normalizeOrder(item, index, batchId, date, route) {
   const name = String(item.name || '').trim();
   const rawName = String(item.rawName || (Array.isArray(item.rawNames) ? item.rawNames[0] : '') || '').trim();
   return {
-    id: String(item.id || \`\${batchId}-\${index + 1}\`),
+    id: String(item.id || `${batchId}-${index + 1}`),
     storeId: String(item.storeId || item.baseCode || '').trim(),
     baseCode: String(item.baseCode || '').trim(),
     orderBatchId: batchId,
