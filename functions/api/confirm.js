@@ -31,7 +31,10 @@ export async function onRequest({ request, env }) {
       review: pending.map(item => ({ name: item?.name || '', candidate: item?.candidate || '', matchScore: Number(item?.matchScore) || 0 }))
     }, 409);
 
-    const date = normalizeDate(body.date) || businessDate();
+    const date = normalizeDate(body.date);
+    // 运单业务日期必须来自运单本身/解析结果，禁止因“今天上传”而静默归档到今天。
+    // 缺少业务日期时直接拒绝确认，避免旧日期运单被错误写入当天记录。
+    if (!date) return json({ success: false, code: 'WAYBILL_DATE_MISSING', error: '未识别到运单日期，请核对运单日期后再确认录入', stage }, 422);
     // 基准库是否存在必须由服务器判定，不能信任客户端传入的 baseDatabaseAvailable。
     // 否则客户端可以伪造“无基准库”，跳过当前线路基准匹配直接写入原始门店。
     let noBase = false;
