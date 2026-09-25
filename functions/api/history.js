@@ -186,7 +186,7 @@ function recoverFromToday(today, userId, route, date) {
 async function listAllHistory(env, userId, route, session, routeRecord = null) {
   // 首页历史列表只需要“实际存在的历史 Key”。先扫描线路级索引，再按 Key 批量读取，
   // 避免为最近100天逐日 GET 大量不存在的 Key。单日查询仍走 readHistoryOrRecover。
-  const routeHistoryKeysAll = await scanKeys(env, routeOrderKey(route, 'history:*'));
+  const routeHistoryKeysAll = await redisCommand(env, ['KEYS', routeOrderKey(route, 'history:*')]);
   const routeHistoryKeys = routeHistoryKeysAll.filter(key => {
     const date = normalizeDate(String(key).split(':history:').pop());
     return date && isHistoryDateInWindow(date);
@@ -201,7 +201,7 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
 
   // 仅对没有 history Key 的日期读取 today，作为旧版本/半成功数据的恢复来源。
   // 通过 today:* 索引发现实际存在的 Key，避免再对100多个日期逐一 GET。
-  const routeTodayKeysAll = await scanKeys(env, routeOrderKey(route, 'today:*'));
+  const routeTodayKeysAll = await redisCommand(env, ['KEYS', routeOrderKey(route, 'today:*')]);
   const routeTodayKeys = routeTodayKeysAll.filter(key => {
     const date = normalizeDate(String(key).split(':today:').pop());
     return date && isHistoryDateInWindow(date) &&
