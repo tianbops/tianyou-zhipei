@@ -103,7 +103,8 @@ function userFriendlyError(message, code=''){
   if(failureCode==='OCR_INVALID')return '运单识别失败，请重新上传清晰的运单图片。';
   if(failureCode==='TIMEOUT')return '网络或服务器处理超时，请稍后重试。';
   if(/基准|数据库|Redis/.test(text))return '当前线路数据读取失败，请稍后重试。';
-  if(/OCR|识别|文字/.test(text))return '运单识别失败，请重新上传清晰的运单图片。';
+  if(/未提取到有效门店|未识别到有效门店|有效门店/.test(text))return '运单文字提取失败，请重新上传清晰的运单图片。';
+  if(/OCR|识别引擎|OCR文字|无法识别运单/.test(text))return '运单识别失败，请重新上传清晰的运单图片。';
   if(/超时|网络|请求/.test(text))return '网络或服务器处理超时，请稍后重试。';
   if(/线路/.test(text))return '当前线路发生变化，请重新上传运单。';
   return '运单处理未完成，请重新上传。';
