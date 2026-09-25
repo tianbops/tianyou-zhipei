@@ -5,7 +5,7 @@
 
   function create(input){
     return {
-      id:crypto.randomUUID(),
+      id:(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(input?.taskId||''))?String(input.taskId):crypto.randomUUID()),
       image:input?.image||null,
       ocrText:'',
       waybill:input?.waybill||{},
