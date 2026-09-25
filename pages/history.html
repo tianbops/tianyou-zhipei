@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#05070A">
   <title>历史查询 · 天友智配One</title>
   <link rel="stylesheet" href="../css/order.css?v=20260922-16">
-  <link rel="stylesheet" href="../css/history.css?v=20260922-19">
+  <link rel="stylesheet" href="../css/history.css?v=20260925-20">
   <link rel="stylesheet" href="../css/icons.css?v=20260921-1">
 </head>
 <body>
@@ -16,13 +16,13 @@
       <div class="app-title">历史查询</div>
       <div class="top-placeholder" aria-hidden="true"></div>
     </header>
-    <section class="task-card history-filter-card">
-      <button class="date-picker-btn" id="datePickerBtn" type="button">选择日期</button>
-    </section>
-    <section class="task-card history-record-card">
-      <div class="route-title icon-title"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>配送记录</div>
-      <div class="history-scroll" id="historyList"><div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>加载中...</div></div>
-    </section>
+    <div class="history-toolbar">
+      <button class="date-picker-btn" id="datePickerBtn" type="button" aria-label="按日期查询">
+        <span class="date-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16"/></svg></span>
+        <span>按日期查询</span>
+      </button>
+    </div>
+    <main class="history-scroll" id="historyList" aria-live="polite"><div class="empty-tip">加载中...</div></main>
   </div>
   <div class="delete-modal" id="deleteModal" aria-hidden="true">
     <div class="delete-sheet" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
@@ -157,7 +157,7 @@
   });
 
   months.forEach((monthEntries,month)=>{
-    const monthCard=document.createElement('div');
+    const monthCard=document.createElement('section');
     monthCard.className='history-month-item';
 
     const monthHead=document.createElement('button');
@@ -182,7 +182,7 @@
     },{stores:0,weight:0});
 
     const displayWeight=Math.trunc((monthStats.weight+Number.EPSILON)*100)/100;
-    monthHead.innerHTML='<span class="history-date">'+escapeHtml(monthLabel)+'</span><span class="history-month-summary">'+monthStats.stores+'家 · '+displayWeight.toFixed(2)+'t</span>';
+    monthHead.innerHTML='<span class="history-date">'+escapeHtml(monthLabel)+'</span><span class="history-month-summary">'+monthStats.stores+'家 · '+displayWeight.toFixed(2)+'t</span><span class="history-chevron" aria-hidden="true"></span>';
     monthCard.appendChild(monthHead);
 
     const days=document.createElement('div');
@@ -202,7 +202,7 @@
         dayHead.setAttribute('aria-expanded','false');
         const day=String(entry.date).slice(8,10);
         const dayCount=dedupeDateRecords(entry.records).length;
-        dayHead.innerHTML='<span class="history-date">'+escapeHtml(monthParts[1]+'月'+day+'日')+'</span><span class="history-count">'+dayCount+'笔</span>';
+        dayHead.innerHTML='<span class="history-date">'+escapeHtml(monthParts[1]+'月'+day+'日')+'</span><span class="history-day-meta"><span class="history-count">'+dayCount+'笔</span><span class="history-chevron" aria-hidden="true"></span></span>';
         dayCard.appendChild(dayHead);
 
         const list=document.createElement('div');
