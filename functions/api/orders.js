@@ -267,6 +267,11 @@ async function readOrder(request, env, session) {
   return json({ success: true, today: responseToday, history: dailyRecords, todayWaybillCount, todaySummary });
 }
 
+function positiveInt(value) { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : 0; }
+function normalizeUserId(value) { return String(value || '').trim().slice(0, 128); }
+function isBoundRoute(session, route) { return normalizeRoute(session?.boundRouteId) === normalizeRoute(route); }
+function createBatchId(date, route) { const stamp = new Date().toISOString().replace(/[-:.TZ]/g, ''); const suffix = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/gi, '').slice(0, 12); return date + '-' + String(route || '').replace(/\D/g, '') + '-' + stamp + '-' + suffix; }
+function normalizeWeight(value) { if (value === null || value === undefined || value === '') return ''; const s = String(value).trim().replace(/,/g, ''), m = s.match(/[\d]+(?:\.\d+)?/); if (!m) return ''; const n = Number(m[0]); if (!Number.isFinite(n) || n < 0) return ''; const tons = /吨|\bt\b/i.test(s) ? n : /kg|千克|公斤/i.test(s) ? n / 1000 : n >= 1000 ? n / 1000 : n; return String(Math.round((tons + Number.EPSILON) * 1000000) / 1000000) + 't'; }
 function businessDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function historyRecordSignature(item) {
