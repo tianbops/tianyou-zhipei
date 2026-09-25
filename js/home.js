@@ -88,48 +88,21 @@ async function loadServerOrder(date='',expectedRoute=''){
   const route=String(expectedRoute||currentRoute()||'').trim();
   if(!route)throw Error('未指定配送线路');
   if(expectedRoute&&String(currentRoute()||'').trim()!==route)return null;
-  const params=new URLSearchParams();
-  params.set('route',route);
+  const params=new URLSearchParams({route});
   if(date)params.set('date',date);
-  const query=params.toString();
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),10000);
   try{
-    const response=await fetch(`/api/orders${query?`?${query}`:''}`,{cache:'no-store',credentials:'same-origin',signal:controller.signal});
-    if(!response.ok)throw Error(response.status===401?'登录已失效，请重新登录':`当日订单读取失败（${response.status}）`);
+    const response=await fetch('/api/v3/today?'+params.toString(),{cache:'no-store',credentials:'same-origin',signal:controller.signal});
+    if(!response.ok)throw Error(response.status===401?'登录已失效，请重新登录':`当日数据读取失败（${response.status}）`);
     const data=await response.json();
     const incoming=data?.today;
-    const incomingValid=Boolean(incoming&&Array.isArray(incoming.orders)&&incoming.orders.length);
-    if(incomingValid){
-      const result={...incoming};
+    if(incoming&&Array.isArray(incoming.stores)){
+      const result={...incoming,orders:Array.isArray(incoming.stores)?incoming.stores:[]};
       result._todayWaybillCount=Math.max(0,Number(data?.todayWaybillCount)||0);
       result._todaySummary=data?.todaySummary||null;
       return result;
     }
-
-    // 兜底：历史查询与当日入口必须共享同一份线路级业务数据。
-    try{
-      const hp=new URLSearchParams({route});
-      if(date)hp.set('date',date);
-      const hr=await fetch(`/api/history?${hp.toString()}`,{cache:'no-store',credentials:'same-origin'});
-      if(hr.ok){
-        const payload=await hr.json().catch(()=>[]);
-        const records=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
-        const valid=records.filter(item=>item&&Array.isArray(item.orders)&&item.orders.length);
-        if(valid.length){
-          const recovered=valid.slice().sort((a,b)=>(Date.parse(String(b?.updatedAt||b?.createdAt||''))||0)-(Date.parse(String(a?.updatedAt||a?.createdAt||''))||0))[0];
-          const result={...recovered,date:date||recovered.date||currentDate(),route:recovered.route||route};
-          result._todayWaybillCount=valid.length;
-          const totalWeight=valid.reduce((sum,item)=>sum+parseWeight(item?.totalWeight??item?.weight),0);
-          const storeCount=valid.reduce((sum,item)=>sum+(Number(item?.uniqueStoreCount)||Number(item?.count)||item.orders.length),0);
-          result._todaySummary={
-            storeCount,
-            totalWeight:totalWeight>0?`${Math.round((totalWeight+Number.EPSILON)*1000000)/1000000}t`:''
-          };
-          return result;
-        }
-      }
-    }catch(fallbackError){console.warn('当日订单接口为空，历史兜底读取失败',fallbackError)}
     return null;
   }catch(error){
     if(error?.name==='AbortError')throw Error('当日任务读取超时，请稍后重试');
