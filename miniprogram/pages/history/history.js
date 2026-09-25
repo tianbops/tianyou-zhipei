@@ -7,7 +7,7 @@ Page({
     const route=String(app.globalData.dispatchRoute||wx.getStorageSync('zhipei_dispatch_route')||user.boundRouteId||'').trim();
     this.setData({dispatchRoute:route});
     try{
-      const url=route?'/api/history?route='+encodeURIComponent(route):'/api/history';
+      const url=route?'/api/v3/history?route='+encodeURIComponent(route):'/api/v3/history';
       const data=await request(url);
       const source=Array.isArray(data)?data:(data?.items||data?.history||data?.data||[]);
       const list=source.flatMap(group=>Array.isArray(group?.records)?group.records.map(record=>({...record,date:record?.date||group.date})): [group]);
