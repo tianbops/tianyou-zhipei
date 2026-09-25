@@ -14,9 +14,8 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  if(!canUseRoute(session,route))throw Object.assign(new Error('无权使用该线路'),{code:'ROUTE_FORBIDDEN',stage:'matching'});
  const routeRecord=await getRoute(env,route);
  if(!routeRecord||routeRecord.status==='disabled')throw Object.assign(new Error('线路不存在或已停用'),{code:'ROUTE_NOT_FOUND',stage:'matching'});
- const base=await getBase(env,route);
+ const [base,learning]=await Promise.all([getBase(env,route),getLearning(env,route)]);
  if(!base)throw Object.assign(new Error('线路基准库不存在'),{code:'BASE_MISSING',stage:'matching'});
- const learning=await getLearning(env,route);
  const candidates=extractStores(text);
  if(!candidates.length)throw Object.assign(new Error('未提取到有效门店'),{code:'EXTRACT_FAILED',stage:'extracting'});
  const finalDate=dateValue(date)||new Date().toISOString().slice(0,10);
