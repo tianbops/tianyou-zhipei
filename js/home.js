@@ -232,10 +232,6 @@ window.goToOrderDetail=async()=>{
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
 window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;const status=$('parseStatus');if(status){status.classList.remove('active','loading','success','error','cancelled');if($('statusIcon'))$('statusIcon').className='status-icon';if($('statusText'))$('statusText').textContent='等待处理...';if($('statusText')){$('statusText').setAttribute('data-text','等待处理...');$('statusText').style.setProperty('--status-progress','0%')}}window.renderReviewStores?.([]);window.clearStatusDetail?.();const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.();};
-let correctionDetails=[];let correctionStats={raw:0,corrected:0,merged:0};function setCorrectionSummary(count){
-  const row=$('reviewSummary');
-  if(row)row.hidden=count<=0;
-}
 function renderCurrentStatusDetails(){
   const details=[...statusBaseDetails];
   if(pendingReviewCount>0)details.push(`待定${pendingReviewCount}家`);
@@ -249,14 +245,13 @@ window.parseManualInput=async(options={})=>{const auto=options?.auto===true;cons
 if(parsedOrders.length){
   let mergeCount=0,correctionCount=0;
   const newStoreCount=Number(data?.newStoreCount)||parsedOrders.filter(item=>item?.isNew===true||item?.matchType==='new').length;
-  const mergeLines=[],correctionLines=[];
+  
   parsedOrders.forEach(item=>{
     const baseName=String(item?.baseName||item?.name||'').trim();
     const rawNames=[...new Set((Array.isArray(item?.rawNames)?item.rawNames:[]).map(value=>String(value).trim()).filter(Boolean))];
     if(item?.matched&&rawNames.length>1){
       mergeCount++;
-      mergeLines.push(`合并名称：${rawNames.join('、')} → ${baseName||item.name}`);
-    }
+          }
     // 已合并的多条原始名称只归入“合并”，不再重复计入“更正”。
     // 只统计实质名称变化；OCR换行、空格、括号/标点差异不计入“更正”。
     if(rawNames.length<=1&&item?.matched&&baseName&&rawNames.some(value=>value!==baseName)){
@@ -277,17 +272,13 @@ if(parsedOrders.length){
         correctionCount++;
         // 修正详情只清理OCR残留在名称末尾的连接符，不改变原始名称及匹配数据。
         const displayCorrectionNames=substantive.map(value=>String(value).trim().replace(/\\s*[-—–]+\\s*$/,'').trim()).filter(Boolean);
-        correctionLines.push(`更正名称：${(displayCorrectionNames.length?displayCorrectionNames:substantive).join('、')} → ${baseName}`);
-      }
+              }
     }
   });
   const rawWeight=String(data?.totalWeight||'').trim();
   const weightT=parseWeight(rawWeight);
   const resultWeight=weightT>0?`${(Math.round((weightT+Number.EPSILON)*100)/100).toFixed(2)}t`:'未识别';
   const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
-  correctionDetails=[...correctionLines,...mergeLines];
-  correctionStats={raw:rawCount,corrected:correctionCount,merged:mergeCount};
-  setCorrectionSummary(1);
   const statusDetails=[];
   if(newStoreCount>0)statusDetails.push(`新增${newStoreCount}家`);
   if(correctionCount>0)statusDetails.push(`更正${correctionCount}家`);
@@ -298,7 +289,7 @@ if(parsedOrders.length){
   // 规划完成后继续沿用同一个状态框进入自动保存阶段；最终成功由录入流程统一处理。
   window.renderUnifiedStatus('loading',86,'规划完成，正在保存运单及修正记录…');
   window.renderStatusDetail?.([...structuredStatus.details,'正在保存运单及修正记录']);
-}else{window.clearStatusDetail?.();correctionDetails=[];correctionStats={raw:0,corrected:0,merged:0};statusBaseDetails=[];pendingReviewCount=0;setCorrectionSummary(0);}
+}else{window.clearStatusDetail?.();statusBaseDetails=[];pendingReviewCount=0;}
 if(parsedOrders.length){
   // 规划成功后直接进入服务器入库。
   // 未确定门店保留为“待定”状态，不阻断本次运单落库。
