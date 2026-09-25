@@ -184,12 +184,21 @@ function recoverFromToday(today, userId, route, date) {
 }
 
 async function listAllHistory(env, userId, route, session, routeRecord = null) {
-  const historyPattern = routeOrderKey(route, 'history:*');
-  const todayPattern = routeOrderKey(route, 'today:*');
-  const [routeHistoryKeys, routeTodayKeys] = await Promise.all([
-    scanKeys(env, historyPattern),
-    scanKeys(env, todayPattern)
-  ]);
+  // 正常线路数据只读取最近100天+未来1天的固定窗口。一次 pipeline 获取全部日期，
+  // 避免 history:* / today:* 的 SCAN 随历史 Key 数量增长而变慢。
+  const dates = historyDateWindow();
+  const routeHistoryKeys = dates.map(date => routeOrderKey(route, 'history:' + date));
+  const routeTodayKeys = dates.map(date => routeOrderKey(route, 'today:' + date));
+  const routeValues = await redisPipelineGet(env, [...routeHistoryKeys, ...routeTodayKeys]);
+  const routeValueMap = new Map();
+  routeHistoryKeys.forEach((key, index) => {
+    const value = routeValues[index];
+    if (value !== null && value !== undefined) routeValueMap.set(key, value);
+  });
+  routeTodayKeys.forEach((key, index) => {
+    const value = routeValues[routeHistoryKeys.length + index];
+    if (value !== null && value !== undefined) routeValueMap.set(key, value);
+  });
 
   // 线路级数据与旧版 user 级数据可能处于“部分迁移”状态。
   // 绑定用户查询历史时必须同时发现两侧数据：
@@ -251,7 +260,7 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   const keys = [...keyMap.keys()];
   if (!keys.length) return json([]);
 
-  const values = await redisPipelineGet(env, keys);
+  const values = keys.map(key => routeValueMap.has(key) ? routeValueMap.get(key) : null);
   const grouped = new Map();
 
   // 路线级 history 优先；同日期的 legacy history 不参与，避免部分删除后旧数据复活。
@@ -456,6 +465,12 @@ function createLockToken() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function historyDateWindow() {
+  const today = businessDate();
+  const dates = [];
+  for (let offset = -(HISTORY_DAYS - 1); offset <= FUTURE_DAYS; offset += 1) dates.push(addDays(today, offset));
+  return dates.filter(Boolean);
+}
 function isHistoryDateInWindow(date) {
   const normalized = normalizeDate(date);
   if (!normalized) return false;
