@@ -95,7 +95,7 @@
     const sheet=document.querySelector('.upload-sheet');
     sheet?.classList.remove('detail-view-open','detail-mode-review');
     const button=$('primaryActionBtn'),cancel=$('.sheet-footer .btn-cancel');
-    if(button){button.textContent='确认录入';button.classList.add('ready');button.disabled=false;button.onclick=()=>window.handlePrimaryAction?.();}
+    if(button){button.textContent='';button.classList.remove('ready');button.disabled=false;button.hidden=true;button.setAttribute('aria-hidden','true');button.onclick=null;}
     if(cancel){cancel.textContent='取消';cancel.onclick=()=>window.cancelUpload?.();}
     window.__pendingReviewFooterMode=false;
   };
@@ -250,7 +250,7 @@
       if(!isDuplicate){
         const learningResult=await saveConfirmedLearning();
         if(learningResult&&!learningResult.success&&!learningResult.skipped){
-          console.warn('门店学习库更新失败，不影响确认录入',learningResult.error||'unknown');
+          console.warn('门店学习库更新失败，不影响运单保存',learningResult.error||'unknown');
         }
       }
 
@@ -273,12 +273,12 @@
       window.location.assign(targetUrl);
     }catch(error){
       if(error?.name==='AbortError'){
-        window.renderUnifiedStatus?.('error',100,'服务器确认录入超时，请检查网络后重试');
+        window.renderUnifiedStatus?.('error',100,'运单保存超时，请检查网络后重试');
       }else{
         const detail=error?.serverStage
           ?('录入失败：'+(error.message||'服务器错误')+'（'+error.serverStage+'）')
           :(error.message||'录入失败，请重试');
-        window.renderUnifiedStatus?.('error',100,detail);
+        window.renderUnifiedStatus?.('error',100,detail.replace(/^确认失败/, '保存失败').replace(/^录入失败/, '保存失败'));
         window.homeToast?.(detail,'error');
       }
       if(Array.isArray(error?.reviewRequired)&&error.reviewRequired.length){
@@ -291,8 +291,10 @@
       confirmStartedAt=0;
       if(button){
         button.disabled=false;
-        button.textContent='确认录入';
-        button.classList.add('ready');
+        button.textContent='';
+        button.classList.remove('ready');
+        button.hidden=true;
+        button.setAttribute('aria-hidden','true');
       }
     }
   }
