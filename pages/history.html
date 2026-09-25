@@ -275,8 +275,8 @@ function historySignature(item){const batch=String(item?.orderBatchId||'').trim(
   function closeSwipeRows(except){document.querySelectorAll('.history-swipe-row.open').forEach(row=>{if(row!==except){row.classList.remove('open');const surface=row.querySelector('.history-swipe-surface');if(surface)surface.style.transform='translateX(0)'}})}
 function bindSwipeRow(row,surface,date,item){
   let startX=0,startY=0,dragging=false,moved=false;
-  const actionWidth=156;
-  const reset=()=>{dragging=false;moved=false;surface.style.transition='transform .18s ease';surface.style.transform=row.classList.contains('open')?'translateX(-156px)':'translateX(0)'};
+  const actionWidth=144;
+  const reset=()=>{dragging=false;moved=false;surface.style.transition='transform .18s ease';surface.style.transform=row.classList.contains('open')?'translateX(-144px)':'translateX(0)'};
   surface.addEventListener('pointerdown',event=>{if(event.pointerType==='mouse'&&event.button!==0)return;startX=event.clientX;startY=event.clientY;dragging=true;moved=false;surface.style.transition='none';closeSwipeRows(row);surface.setPointerCapture?.(event.pointerId)});
   surface.addEventListener('pointermove',event=>{
     if(!dragging)return;
