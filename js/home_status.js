@@ -1,99 +1,124 @@
-/* 天友智配One - 统一处理状态UI */
+/* 天友智配One - 全屏智能处理状态层 */
 (() => {
 'use strict';
-const $=id=>document.getElementById(id);
-const MESSAGES={idle:'准备好开始今天的配送任务',loading:'正在处理…',success:'运单处理完成',error:'运单处理失败',cancelled:'已取消'};
-function setError(message){const text=String(message||'').trim();if($('statusText')&&text){$('statusText').textContent=text;$('statusText').setAttribute('data-text',text);}}
-function clearError(){setError('');}
-function render(status='idle',progress=0,message=''){
-  const box=$('parseStatus');
-  if(!box)return;
-  const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';
-  box.classList.add('active');
-  const sheet=box.closest('.upload-sheet');
-  if(sheet){sheet.classList.remove('waiting','processing','success','error','cancelled');sheet.classList.add(state==='idle'?'waiting':state==='loading'?'processing':state);}
-  box.classList.remove('loading','success','error','cancelled');
-  if(state!=='idle')box.classList.add(state);
-  const icon=$('statusIcon');
-  if(icon){
-    icon.className='status-icon';
-    if(state!=='idle')icon.classList.add(state);
-    icon.innerHTML=state==='loading'?'<span class="status-spinner" aria-hidden="true"></span>':'';
-  }
-  if($('statusText')){
-    const statusText=$('statusText');
-    const structured=message&&typeof message==='object'&&!Array.isArray(message);
-    if(structured){
-      statusText.textContent='';
-      statusText.removeAttribute('data-text');
-      const left=document.createElement('span'); left.className='status-content-left'; left.textContent=String(message.left||'');
-      const right=document.createElement('span'); right.className='status-content-right'; right.textContent=String(message.right||'');
-      statusText.append(left,right);
-      statusText.classList.add('structured-status');
-      statusText.classList.toggle('compact-result',message.compact===true);
-    }else{
-      const text=String(message||MESSAGES[state]).trim();
-      statusText.classList.remove('structured-status','compact-result');
-      statusText.textContent=text;
-      statusText.setAttribute('data-text',text);
-    }
-  }
-  if($('statusText'))$('statusText').style.setProperty('--status-progress',Math.max(0,Math.min(100,Number(progress)||0))+'%');
-  if(state==='error')setError(typeof message==='object'?'运单识别失败':message);else clearError();
-  if(state!=='success')renderDetail([]);
-}
-function renderDetail(details){
-  const row=$('statusDetail');
-  if(!row)return;
-  row.textContent='';
-  const items=Array.isArray(details)?details.filter(Boolean).map(value=>String(value)):[];
-  const compact=$('statusText')?.classList.contains('compact-result');
-  const groups=compact?Array.from({length:Math.ceil(items.length/3)},(_,index)=>items.slice(index*3,index*3+3)):items.length>=5?[items.slice(0,2),items.slice(2,5)]:items.length===3?[items]:items.length===2?[items]:[items];
-  groups.filter(group=>group.length).forEach(group=>{
-    const line=document.createElement('div');
-    line.className='detail-row';
-    group.forEach(item=>{
-      const cell=document.createElement('span');
-      cell.className='detail-line';
-      if(/^待定\\d+家$/.test(item)){
-        cell.classList.add('pending-detail-link');
-        cell.setAttribute('role','button');
-        cell.setAttribute('tabindex','0');
-        cell.textContent=item;
-        cell.onclick=()=>window.openPendingReview?.();
-        cell.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openPendingReview?.();}};
-      }else{
-        cell.textContent=item;
-      }
-      line.appendChild(cell);
-    });
-    row.appendChild(line);
-  });
-  row.classList.toggle('active',items.length>0);
-}
-window.renderStatusDetail=renderDetail;
-window.clearStatusDetail=()=>renderDetail([]);
+
+const STAGES=[
+  {key:'recognize',label:'识别'},
+  {key:'extract',label:'提取'},
+  {key:'match',label:'匹配'},
+  {key:'plan',label:'规划'},
+  {key:'complete',label:'完成'}
+];
+
+let layer=null;
 let progressTimer=null;
-function animateProgressTo(target){
-  const el=$('statusText');
-  if(!el)return;
-  const next=Math.max(0,Math.min(100,Number(target)||0));
-  const current=parseFloat(getComputedStyle(el).getPropertyValue('--status-progress'))||0;
-  if(progressTimer)cancelAnimationFrame(progressTimer);
-  const start=performance.now();
-  const duration=Math.max(700,Math.min(2200,Math.abs(next-current)*18));
-  const tick=now=>{
-    const p=Math.min(1,(now-start)/duration);
-    const eased=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
-    const value=current+(next-current)*eased;
-    el.style.setProperty('--status-progress',value.toFixed(2)+'%');
-    if(p<1)progressTimer=requestAnimationFrame(tick);
-  };
-  progressTimer=requestAnimationFrame(tick);
+
+function ensureLayer(){
+  if(layer&&document.body.contains(layer))return layer;
+  layer=document.createElement('div');
+  layer.id='zpeiProcessingLayer';
+  layer.className='zpei-processing-layer';
+  layer.setAttribute('aria-live','polite');
+  layer.setAttribute('aria-label','运单智能处理');
+  layer.innerHTML='<div class="zpei-processing-rail" role="status"></div>';
+  document.body.appendChild(layer);
+  return layer;
 }
+
+function stageIndex(progress,status){
+  if(status==='success')return STAGES.length-1;
+  if(status==='error'||status==='cancelled')return -1;
+  const value=Math.max(0,Math.min(100,Number(progress)||0));
+  if(value>=93)return 3;
+  if(value>=68)return 2;
+  if(value>=25)return 1;
+  return 0;
+}
+
+function renderRail(activeIndex,status){
+  const root=ensureLayer().querySelector('.zpei-processing-rail');
+  root.textContent='';
+  STAGES.forEach((stage,index)=>{
+    const node=document.createElement('span');
+    node.className='zpei-stage';
+    node.dataset.stage=stage.key;
+    if(index<activeIndex||status==='success')node.classList.add('done');
+    else if(index===activeIndex)node.classList.add('current');
+    else node.classList.add('pending');
+    node.textContent=(index<activeIndex||status==='success'?'●':index===activeIndex?'◉':'○')+stage.label;
+    root.appendChild(node);
+    if(index<STAGES.length-1){
+      const line=document.createElement('span');
+      line.className='zpei-stage-line'+(index<activeIndex||status==='success'?' done':'');
+      line.setAttribute('aria-hidden','true');
+      root.appendChild(line);
+    }
+  });
+}
+
+function setProcessing(active){
+  document.body.classList.toggle('zpei-processing',active);
+  const overlay=document.getElementById('uploadOverlay');
+  if(overlay)overlay.classList.toggle('zpei-processing-source',active);
+}
+
+function reset(){
+  if(progressTimer)cancelAnimationFrame(progressTimer);
+  progressTimer=null;
+  setProcessing(false);
+  if(layer){
+    layer.classList.remove('active','error');
+    layer.setAttribute('aria-hidden','true');
+  }
+}
+
+function showError(message){
+  const current=String(message||'运单处理失败，请重新上传').trim();
+  const node=ensureLayer();
+  node.classList.add('active','error');
+  node.setAttribute('aria-hidden','false');
+  const rail=node.querySelector('.zpei-processing-rail');
+  rail.textContent='';
+  const text=document.createElement('div');
+  text.className='zpei-processing-error';
+  text.textContent=current;
+  rail.appendChild(text);
+  setProcessing(false);
+}
+
+function render(status='idle',progress=0,message=''){
+  const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';
+  if(state==='idle'||state==='cancelled'){
+    reset();
+    return;
+  }
+  if(state==='error'){
+    showError(typeof message==='object'?'运单处理失败，请重新上传':message);
+    return;
+  }
+
+  const node=ensureLayer();
+  node.classList.add('active');
+  node.classList.remove('error');
+  node.setAttribute('aria-hidden','false');
+  setProcessing(true);
+
+  const activeIndex=stageIndex(progress,state);
+  renderRail(activeIndex,state);
+
+  if(state==='success'){
+    renderRail(STAGES.length-1,'success');
+    setProcessing(true);
+    window.setTimeout(()=>reset(),420);
+  }
+}
+
 window.renderUnifiedStatus=(status='idle',progress=0,message='')=>{
-  render(status,0,message);
-  animateProgressTo(progress);
+  render(status,progress,message);
 };
+
+window.renderStatusDetail=()=>{};
+window.clearStatusDetail=()=>{};
+window.resetProcessingStatus=reset;
 
 })();
