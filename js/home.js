@@ -144,7 +144,48 @@ function parseDateFromText(text){const match=String(text||'').match(/(20\d{2})\s
 function parseVehicleFromText(text){const match=String(text||'').match(/(?:车牌号\s*[:：]?\s*)?(渝\s*[A-Z0-9]{5,7})/i);return match?match[1].replace(/\s+/g,'').toUpperCase():''}
 function cleanFallbackStore(value){return String(value||'').replace(/^\s*[\d０-９]+\s*[、.．)）-]+\s*/,'').replace(/^\s*[|｜]+|[|｜]+\s*$/g,'').replace(/\s+/g,' ').trim()}
 function isFallbackStore(value){const text=cleanFallbackStore(value),compact=text.replace(/\s/g,'');if(!text||text.length<3||!/[\u4e00-\u9fff]/.test(text))return false;if(/^(?:运单列表|运输日期|车牌号|额定载重|额定装载|额定体积|主司机|送货员|承运订单|总数量|总重量|总体积|订单编号|运单编号|车辆信息|配送信息)/.test(compact))return false;if(/^(?:20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?|渝[A-Z0-9]{5,7})$/.test(compact))return false;return true}
-function fallbackStoresFromText(text){let source=String(text||'').replace(/\r\n?/g,'\n').replace(/[＞》➜➤⇒↦→]/g,'->').replace(/\s*->\s*/g,'->');const carrier=source.lastIndexOf('承运订单');if(carrier>=0)source=source.slice(carrier+'承运订单'.length);const parts=source.includes('->')?source.replace(/\s+/g,' ').split('->'):source.split('\n');const stores=[],seen=new Set();for(const part of parts){let name=cleanFallbackStore(part).replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/gi,' ').trim();if(!isFallbackStore(name))continue;const key=name.replace(/\s/g,'').toLowerCase();if(seen.has(key))continue;seen.add(key);stores.push({code:String(stores.length+1).padStart(2,'0'),name,nav:'',note:'',weight:0,isNew:false,matched:false,needsReview:false,matchType:'raw-order',matchScore:0,rawName:name,rawNames:[name]})}return stores}
+function fallbackStoresFromText(text){
+  let source=String(text||'').replace(/\r\n?/g,'\n')
+    .replace(/[＞》➜➤⇒↦→]/g,'->')
+    .replace(/[-﹣－—–]\s*\n?\s*[>＞]/g,'->')
+    .replace(/-\s*>/g,'->')
+    .replace(/(?<!-)\s*>\s*(?=[\u4e00-\u9fffA-Za-z0-9])/g,'->')
+    .replace(/\s*->\s*/g,'->')
+    .replace(/[｜]/g,'|');
+  const carrier=source.lastIndexOf('承运订单');
+  if(carrier>=0)source=source.slice(carrier+'承运订单'.length);
+  const lines=source.split('\n').map(line=>line.trim()).filter(Boolean);
+  const merged=[];
+  for(let i=0;i<lines.length;i++){
+    let current=lines[i];
+    while(i+1<lines.length){
+      const open=(current.match(/[（(\[【]/g)||[]).length;
+      const close=(current.match(/[）)\]】]/g)||[]).length;
+      const next=lines[i+1];
+      if(open<=close && !/^[）)\]】]/.test(next))break;
+      current+=next;i++;
+      if(open<=close)break;
+    }
+    merged.push(current);
+  }
+  const prepared=merged.join('\n');
+  const clean=value=>cleanFallbackStore(String(value||'')
+    .replace(/(?:总数量|总重量|总体积)\s*[:：]?\s*[\d,.]+\s*(?:kg|KG|千克|公斤|吨|t|m³|m3|m²|m2|立方米)?(?:\s*\([^)]*\))?/gi,' ')
+    .replace(/(?:订单编号|运单编号)\s*[:：]?\s*ZW[\w-]+/gi,' ')
+    .replace(/(?:车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?\s*[^|]+(?=\||$)/gi,' '));
+  const candidates=[];
+  candidates.push(...prepared.replace(/\s+/g,' ').split('->').map(clean).filter(isFallbackStore));
+  candidates.push(...prepared.split('\n').filter(line=>!/->/.test(line)).map(clean).filter(isFallbackStore));
+  candidates.push(...prepared.split(/[|｜]/).filter(part=>!/->/.test(part)).map(clean).filter(isFallbackStore));
+  const stores=[],seen=new Set();
+  for(const name of candidates){
+    const key=name.replace(/\s/g,'').toLowerCase();
+    if(seen.has(key))continue;
+    seen.add(key);
+    stores.push({code:String(stores.length+1).padStart(2,'0'),name,nav:'',note:'',weight:0,isNew:false,matched:false,needsReview:false,matchType:'raw-order',matchScore:0,rawName:name,rawNames:[name]});
+  }
+  return stores;
+}
 function fallbackParse(text){const stores=fallbackStoresFromText(text);if(!stores.length)throw Error('未识别到有效门店，请检查OCR文字后再解析');const totalWeight=parseWeightFromText(text);return{route:currentRoute(),date:parseDateFromText(text),vehicle:parseVehicleFromText(text),totalWeight,totalVolume:'',rawOrderCount:stores.length,recognizedCount:stores.length,uniqueStoreCount:stores.length,storeCount:stores.length,matchedCount:0,newStoreCount:0,reviewCount:0,duplicateCount:0,learnedCount:0,baseDatabaseAvailable:false,stores,warning:`未找到${currentRoute()}独立基准数据库，本次按运单识别顺序排列`}}
 let parseAbortController=null,parseInFlight=false,parseCancelled=false;
 function currentUploadTaskId(){return typeof window.getUploadTaskId==='function'?Number(window.getUploadTaskId())||0:0}
