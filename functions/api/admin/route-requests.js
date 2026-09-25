@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 管理员审核线路绑定申请
 import { requireSystemAdmin } from '../_auth.js';
-import { routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route, bindingRequestKey, bindingRequestUserKey, bindingRequestIndexKey } from '../v3/data.js';
+import { routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route, bindingRequestKey, bindingRequestUserKey, bindingRequestIndexKey, getUserProfile } from '../v3/data.js';
 import {
   atomicRouteBinding, atomicRouteSwitch, encodeKey, getUser, normalizeRoute, publicUser,
   redisCommand, redisGet, redisSet, recordAdminLog
@@ -69,11 +69,13 @@ async function reviewRequest(env, admin, request) {
   const current = await getV3Route(env, route);
   if (!current || current.status === 'disabled') return json({ success: false, error: '申请线路不存在或已停用' }, 409);
 
-  const currentBound = normalizeRoute(user.boundRouteId);
+  const profile = await getUserProfile(env, user.id);
+  const currentBound = normalizeRoute(profile?.boundRouteId || user.boundRouteId);
+  const currentDuty = String(profile?.routeDuty || user.routeDuty || '').trim().toLowerCase();
   const duty = pending.duty === 'delivery' ? 'delivery' : 'driver';
 
   // 同一线路同一岗位已经绑定本人：仅结束申请，不重复写绑定数据。
-  if (currentBound === route && user.routeDuty === duty) {
+  if (currentBound === route && currentDuty === duty) {
     return finishApprovedWithoutRewrite(env, admin, pending, key);
   }
 
