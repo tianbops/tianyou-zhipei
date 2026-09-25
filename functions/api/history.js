@@ -184,42 +184,36 @@ function recoverFromToday(today, userId, route, date) {
 }
 
 async function listAllHistory(env, userId, route, session, routeRecord = null) {
-  // 首页历史列表只需要“实际存在的历史 Key”。先扫描线路级索引，再按 Key 批量读取，
-  // 避免为最近100天逐日 GET 大量不存在的 Key。单日查询仍走 readHistoryOrRecover。
-  const routeHistoryKeysAll = await redisCommand(env, ['KEYS', routeOrderKey(route, 'history:*')]);
-  const routeHistoryKeys = routeHistoryKeysAll.filter(key => {
-    const date = normalizeDate(String(key).split(':history:').pop());
-    return date && isHistoryDateInWindow(date);
-  });
-  const routeHistoryValues = routeHistoryKeys.length ? await redisPipelineGet(env, routeHistoryKeys) : [];
-  const routeValueMap = new Map();
-  routeHistoryKeys.forEach((key, index) => {
-    const value = routeHistoryValues[index];
-    if (value !== null && value !== undefined) routeValueMap.set(key, value);
-  });
-  const existingRouteHistoryKeys = routeHistoryKeys.filter(key => routeValueMap.has(key));
+  // 首页历史列表使用固定100天业务窗口，不再依赖 KEYS/SCAN 发现索引。
+  // 这样首页读取路径与“按日期查询”的精确 GET 路径一致，避免 Redis 索引扫描导致 503。
+  // Redis REST pipeline 分块读取；单批失败由 redisPipelineGet 降级为单键 GET。
+  const dates = historyDateWindow();
+  const historyKeys = dates.map(date => routeOrderKey(route, `history:${date}`));
+  const historyValues = await redisPipelineGet(env, historyKeys);
 
-  // 仅对没有 history Key 的日期读取 today，作为旧版本/半成功数据的恢复来源。
-  // 通过 today:* 索引发现实际存在的 Key，避免再对100多个日期逐一 GET。
-  const routeTodayKeysAll = await redisCommand(env, ['KEYS', routeOrderKey(route, 'today:*')]);
-  const routeTodayKeys = routeTodayKeysAll.filter(key => {
-    const date = normalizeDate(String(key).split(':today:').pop());
-    return date && isHistoryDateInWindow(date) &&
-      !existingRouteHistoryKeys.some(historyKey => String(historyKey).endsWith(':history:' + date));
+  const grouped = new Map();
+  dates.forEach((date, index) => {
+    const raw = historyValues[index];
+    const records = Array.isArray(raw) ? dedupeHistory(raw).records : [];
+    if (records.length) grouped.set(date, records);
   });
-  const routeTodayValues = routeTodayKeys.length ? await redisPipelineGet(env, routeTodayKeys) : [];
-  routeTodayKeys.forEach((key, index) => {
-    const value = routeTodayValues[index];
-    if (value !== null && value !== undefined) routeValueMap.set(key, value);
-  });
-  const existingRouteTodayKeys = routeTodayKeys.filter(key => routeValueMap.has(key));
 
-  // 旧版 user:* 数据仅在线路级完全没有历史/今日数据时兼容读取。
-  // 正常线路不会扫描用户级历史，避免旧数据量拖慢首页。
-  let legacyHistoryKeys = [];
-  let legacyTodayKeys = [];
-  const hasRouteHistoryData = existingRouteHistoryKeys.length > 0 || existingRouteTodayKeys.length > 0;
-  if (isBoundRoute(session, route) && !hasRouteHistoryData) {
+  // 仅当对应日期没有 history 数据时，读取 today 作为旧版本/半成功数据恢复来源。
+  const missingTodayDates = dates.filter(date => !grouped.has(date));
+  if (missingTodayDates.length) {
+    const todayKeys = missingTodayDates.map(date => routeOrderKey(route, `today:${date}`));
+    const todayValues = await redisPipelineGet(env, todayKeys);
+    missingTodayDates.forEach((date, index) => {
+      const raw = todayValues[index];
+      if (!raw || !Array.isArray(raw.orders) || !raw.orders.length) return;
+      const recovered = recoverFromToday(raw, userId, route, date);
+      if (historySignature(recovered)) grouped.set(date, [recovered]);
+    });
+  }
+
+  // 旧版 user:* 数据只在线路级数据完全为空时兼容读取。
+  // 这里保留原迁移能力，但不让它成为正常线路首页的主读取路径。
+  if (!grouped.size && isBoundRoute(session, route)) {
     try {
       let userIds = Array.isArray(routeRecord?.boundUserIds)
         ? routeRecord.boundUserIds.map(id => String(id || '').trim()).filter(Boolean)
@@ -228,6 +222,7 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
         const users = await listUsersByRoute(env, route);
         userIds = users.map(user => String(user?.id || '').trim()).filter(Boolean);
       }
+
       const legacyResults = await Promise.all(userIds.map(async userIdValue => {
         const legacyPrefix = 'user:' + encodeKey(userIdValue) + ':route:' + encodeKey(route) + ':orders:';
         const [h, t] = await Promise.all([
@@ -236,74 +231,39 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
         ]);
         return { history: h, today: t };
       }));
-      legacyHistoryKeys = legacyResults.flatMap(item => item.history).filter(key => {
+
+      const legacyHistoryKeys = legacyResults.flatMap(item => item.history).filter(key => {
         const date = normalizeDate(String(key).split(':history:').pop());
         return date && isHistoryDateInWindow(date);
       });
-      legacyTodayKeys = legacyResults.flatMap(item => item.today).filter(key => {
+      const legacyTodayKeys = legacyResults.flatMap(item => item.today).filter(key => {
         const date = normalizeDate(String(key).split(':today:').pop());
         return date && isHistoryDateInWindow(date);
       });
+
+      const legacyKeys = [...new Set([...legacyHistoryKeys, ...legacyTodayKeys])];
+      const legacyValues = legacyKeys.length ? await redisPipelineGet(env, legacyKeys) : [];
+      const legacyMap = new Map(legacyKeys.map((key, index) => [key, legacyValues[index]]));
+
+      legacyHistoryKeys.forEach(key => {
+        const date = normalizeDate(String(key).split(':history:').pop());
+        if (!date || grouped.has(date)) return;
+        const records = Array.isArray(legacyMap.get(key)) ? dedupeHistory(legacyMap.get(key)).records : [];
+        if (records.length) grouped.set(date, records);
+      });
+
+      legacyTodayKeys.forEach(key => {
+        const date = normalizeDate(String(key).split(':today:').pop());
+        if (!date || grouped.has(date)) return;
+        const raw = legacyMap.get(key);
+        if (!raw || !Array.isArray(raw.orders) || !raw.orders.length) return;
+        const recovered = recoverFromToday(raw, userId, route, date);
+        if (historySignature(recovered)) grouped.set(date, [recovered]);
+      });
     } catch (error) {
-      console.warn('旧版历史索引读取失败，继续使用线路级历史', error?.message || error);
+      console.warn('旧版历史兼容读取失败，继续返回线路级历史', error?.message || error);
     }
   }
-
-  const routeTodaySet = new Set(existingRouteTodayKeys);
-  const keyMap = new Map();
-  existingRouteHistoryKeys.forEach(key => keyMap.set(key, { type: 'history', source: 'route' }));
-  existingRouteTodayKeys.forEach(key => keyMap.set(key, { type: 'today', source: 'route' }));
-
-  legacyHistoryKeys.forEach(key => {
-    const date = normalizeDate(String(key).split(':history:').pop());
-    if (!date || existingRouteHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
-    keyMap.set(key, { type: 'history', source: 'legacy' });
-  });
-  legacyTodayKeys.forEach(key => {
-    const date = normalizeDate(String(key).split(':today:').pop());
-    if (!date || existingRouteTodayKeys.some(routeKey => String(routeKey).endsWith(':today:' + date))) return;
-    keyMap.set(key, { type: 'today', source: 'legacy' });
-  });
-
-  const keys = [...keyMap.keys()];
-  if (!keys.length) return json([]);
-
-  const missingKeys = keys.filter(key => !routeValueMap.has(key));
-  const missingValues = missingKeys.length ? await redisPipelineGet(env, missingKeys) : [];
-  const missingValueMap = new Map(missingKeys.map((key, index) => [key, missingValues[index]]));
-  const values = keys.map(key => routeValueMap.has(key) ? routeValueMap.get(key) : missingValueMap.get(key));
-  const grouped = new Map();
-
-  keys.forEach((key, index) => {
-    const meta = keyMap.get(key);
-    const raw = values[index];
-    const type = meta.type;
-    const source = meta.source;
-
-    if (type === 'history') {
-      const date = normalizeDate(String(key).split(':history:').pop());
-      if (!date) return;
-      const records = Array.isArray(raw) ? raw : [];
-      if (source === 'route') {
-        grouped.set(date, records);
-        return;
-      }
-      if (routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
-      const existing = grouped.get(date) || [];
-      grouped.set(date, existing.concat(records));
-      return;
-    }
-
-    const date = normalizeDate(String(key).split(':today:').pop());
-    if (!date || !raw || !Array.isArray(raw.orders) || !raw.orders.length) return;
-    if (grouped.has(date)) return;
-    if (routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
-    if (source === 'legacy' && routeTodaySet.has(routeOrderKey(route, 'today:' + date))) return;
-
-    const recovered = recoverFromToday(raw, userId, route, date);
-    if (!historySignature(recovered)) return;
-    grouped.set(date, [recovered]);
-  });
 
   const entries = [];
   for (const [date, rawRecords] of grouped.entries()) {
@@ -314,7 +274,6 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   entries.sort((a, b) => b.date.localeCompare(a.date));
   return json(entries);
 }
-
 async function deleteHistoryRecord(env, route, date, batchId) {
   const key = routeOrderKey(route, `history:${date}`);
   const lockKey = routeOrderKey(route, `lock:${date}`);
