@@ -279,3 +279,10 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 .history-swipe-surface{position:absolute!important;z-index:2!important;inset:0!important;width:100%!important;height:44px!important;margin:0!important;background:#151D26!important;transform:translate3d(0,0,0)!important;will-change:transform}
 .history-swipe-surface .history-view{display:grid!important;position:relative!important;z-index:3!important;width:100%!important;height:44px!important;min-height:44px!important;margin:0!important;box-sizing:border-box!important}
 .history-swipe-row.open .history-swipe-surface{transform:translate3d(-156px,0,0)!important}
+
+/* 2026-09-25 左滑层级第二次修正：恢复运单行正常文档流，避免展开日期后记录被绝对定位脱离布局 */
+.history-swipe-row{position:relative!important;display:block!important;width:100%!important;height:44px!important;min-height:44px!important;overflow:hidden!important;isolation:isolate!important;background:#202A34!important}
+.history-swipe-actions{position:absolute!important;z-index:0!important;top:0!important;right:0!important;bottom:0!important;left:auto!important;width:156px!important;height:44px!important;margin:0!important;display:grid!important;grid-template-columns:1fr 1fr!important;pointer-events:auto!important}
+.history-swipe-surface{position:relative!important;z-index:2!important;inset:auto!important;width:100%!important;height:44px!important;min-height:44px!important;margin:0!important;background:#151D26!important;will-change:transform;touch-action:pan-y}
+.history-swipe-surface .history-view{display:grid!important;position:relative!important;z-index:3!important;width:100%!important;height:44px!important;min-height:44px!important;margin:0!important;box-sizing:border-box!important}
+.history-swipe-row.open .history-swipe-surface{transform:translate3d(-156px,0,0)!important}
