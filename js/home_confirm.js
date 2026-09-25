@@ -159,7 +159,8 @@
   let confirmAbortController=null;
   let confirmInFlight=false;
   let confirmStartedAt=0;
-  async function confirm(){
+  async function confirm(options={}){
+    const autoConfirm=options?.auto===true;
     const input=$('manualOrderInput');
     const button=$('primaryActionBtn');
     if(confirmInFlight)return;
@@ -184,7 +185,7 @@
       assertParseContext();
 
       const pending=parsedState.filter(item=>item?.needsReview);
-      if(pending.length){
+      if(pending.length&&!autoConfirm){
         window.renderUnifiedStatus?.('error',100,`还有 ${pending.length} 家门店待定`);
         renderReview(pending);
         window.openPendingReviewDetail?.(pending);
@@ -227,7 +228,8 @@
           recognizedCount:Number(metaState.recognizedCount)||parsedState.length,
           rawOrderCount:Number(metaState.rawOrderCount)||0,
           baseDatabaseAvailable:metaState.baseDatabaseAvailable!==false,
-          confirmRequestId
+          confirmRequestId,
+          autoConfirm
         })
       });
 
