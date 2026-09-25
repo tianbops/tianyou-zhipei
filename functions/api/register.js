@@ -19,9 +19,9 @@ export async function onRequest({ request, env }) {
     if(password.length<6||password.length>72) return json({success:false,error:'密码需为6-72位'},400);
     if(!inviteCode) return json({success:false,error:'请输入邀请码'},400);
 
+    // 用户名唯一性由下面的 Redis Lua 原子事务统一检查并写入。
+    // 不再先 GET 再进入 Lua，避免无意义的重复读取，并消除“检查后到原子提交前”的TOCTOU窗口。
     const usernameKey=`user:username:${encodeURIComponent(username)}`;
-    const existing=await redisCommand(env,['GET',usernameKey]);
-    if(existing) return json({success:false,error:'用户名已存在，请换一个用户名'},409);
 
     const id=crypto.randomUUID();
     const passwordHash=await hashPassword(password);
