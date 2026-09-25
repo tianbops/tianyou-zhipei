@@ -286,10 +286,10 @@ window.parseManualInput=async(options={})=>{
   if(!planner)throw Object.assign(new Error('自动规划模块未加载'),{code:'PLANNER_UNAVAILABLE'});
   const plannerTask=await planner.run({ocrText:text,waybill:{route,date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight:parseWeightFromText(text)}});
   if(!plannerTask?.result)throw Object.assign(new Error('自动规划未返回结果'),{code:'PLAN_EMPTY'});
-  const result=plannerTask.result;;parsedOrders=Array.isArray(result.stores)?result.stores:[];
+  const result=plannerTask.result;parsedOrders=Array.isArray(result.stores)?result.stores:[];
   if(!parsedOrders.length&&!Array.isArray(result.pendingStores))throw Object.assign(new Error('未识别到有效门店'),{code:'EXTRACT_FAILED'});
   const parsedRoute=String(result.route||route).trim();if(parsedRoute&&Auth.setDispatchRoute)Auth.setDispatchRoute(parsedRoute);
-  pendingMeta={parseContextId:data.taskId,userId:String(Auth.serverUser?.id||''),route:parsedRoute,date:result.date||body.date,vehicle:result.vehicle||body.vehicle,totalWeight:result.totalWeight||body.totalWeight,rawOrderCount:Number(result.rawCount)||0,matchedCount:parsedOrders.length,newStoreCount:Array.isArray(result.newStores)?result.newStores.length:0,reviewCount:Array.isArray(result.pendingStores)?result.pendingStores.length:0,duplicateCount:Number(result.merged)||0,recognizedCount:Number(result.rawCount)||0,uniqueStoreCount:Number(result.totalStores)||parsedOrders.length,baseDatabaseAvailable:true,source};
+  pendingMeta={parseContextId:plannerTask.id,userId:String(Auth.serverUser?.id||''),route:parsedRoute,date:result.date||body.date,vehicle:result.vehicle||body.vehicle,totalWeight:result.totalWeight||body.totalWeight,rawOrderCount:Number(result.rawCount)||0,matchedCount:parsedOrders.length,newStoreCount:Array.isArray(result.newStores)?result.newStores.length:0,reviewCount:Array.isArray(result.pendingStores)?result.pendingStores.length:0,duplicateCount:Number(result.merged)||0,recognizedCount:Number(result.rawCount)||0,uniqueStoreCount:Number(result.totalStores)||parsedOrders.length,baseDatabaseAvailable:true,source};
   window.__zspParseContext={...pendingMeta,stores:parsedOrders};
   reviewMode=true;window.renderUnifiedStatus('success',100,'规划完成');window.onOrderParsed?.({success:true,...result,stores:parsedOrders});
   return parsedOrders;
