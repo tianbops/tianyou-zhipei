@@ -204,13 +204,10 @@ window.handleUploadProcessingFailure=(message='运单处理失败，请重新上
   window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');
   uploadFailureTimer=setTimeout(()=>{
     uploadFailureTimer=null;
+    // 失败任务先彻底清理，再重新打开“上传运单”入口；不复用失败任务的任何状态。
     try{window.clearManualInput?.();}catch(e){console.warn('失败运单清理失败',e);}
-    const overlay=$('uploadOverlay');
-    if(overlay)overlay.classList.add('active');
-    openUploadHistoryGuard();
-    window.resetProcessingStatus?.();
-    window.openUploadSource?.();
-  },700);
+    window.restartUpload?.();
+  },900);
 };
 window.cancelUpload=()=>{
   const overlay=$('uploadOverlay');
