@@ -29,18 +29,21 @@ async function loadDispatchRoutes(){
       console.warn('线路列表读取失败',response.status,data?.error||'');
     }
   }catch(error){console.warn('线路列表请求失败',error)}
-  if(bound){
-    const normalizedBound=Auth.formatRouteCode?Auth.formatRouteCode(bound):String(bound).trim();
-    if(normalizedBound&&!available.includes(normalizedBound))available.unshift(normalizedBound);
-  }
+  // 线路选择器只展示当前仍启用、且由服务端真实存在的线路。
+  // boundRouteId 只代表维护权限，不能把已停用线路重新塞回调度列表；
+  // 同理，历史 session 中残留的 dispatchRoute 若已停用，也必须自动失效。
+  const normalizedBound=Auth.formatRouteCode?Auth.formatRouteCode(bound):String(bound||'').trim();
   const normalizedSelected=Auth.formatRouteCode?Auth.formatRouteCode(selected):String(selected||'').trim();
-  if(normalizedSelected&&!available.includes(normalizedSelected))available.unshift(normalizedSelected);
+  const validSelected=normalizedSelected&&available.includes(normalizedSelected)?normalizedSelected:'';
+  const initial=validSelected || (normalizedBound&&available.includes(normalizedBound)?normalizedBound:'') || available[0] || '';
   if(select){
     select.innerHTML=available.map(route=>`<option value="${route}">${route}</option>`).join('');
-    const initial=normalizedSelected|| (Auth.formatRouteCode?Auth.formatRouteCode(bound):String(bound||'').trim()) || available[0] || '';
     if(initial){
       Auth.setDispatchRoute?.(initial);
       select.value=initial;
+    }else{
+      Auth.clearDispatchRoute?.();
+      select.value='';
     }
     select.onchange=handleDispatchRouteChange;
   }
