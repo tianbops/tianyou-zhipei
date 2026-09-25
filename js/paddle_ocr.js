@@ -11,7 +11,10 @@
   // OCR单次提取最多等待2分钟，避免异常任务长期占用页面。
   const OCR_TIMEOUT_MS = 120000;
   const OCR_SDK_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
+  // V3 OCR基线：直接采用PP-OCRv6 small，不再保留旧版OCR模型切换。
   const OCR_WORKER_URL = '/api/paddleocr-worker';
+  const OCR_VERSION = 'PP-OCRv6';
+  const OCR_MODEL = 'PP-OCRv6-small';
 
   let enginePromise = null;
   let sdkPromise = null;
@@ -100,7 +103,7 @@
       lang: 'ch',
       // 2026-09：官方浏览器 SDK 0.4.2 已支持 PP-OCRv6。
       // 默认使用 v6 small，兼顾中文/英文/业务编码识别与浏览器端速度。
-      ocrVersion: 'PP-OCRv6',
+      ocrVersion: OCR_VERSION,
       worker: {
         createWorker: () => new Worker(OCR_WORKER_URL, { type: 'module' })
       },
@@ -275,7 +278,7 @@
         putText(text);
         setStatus('已读取运单文字', 60);
       }
-      return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
+      return { rawText: text, source: 'paddleocr-browser-v6', ocrVersion: OCR_VERSION, ocrModel: OCR_MODEL, itemCount: count, metrics: result?.metrics || null };
     };
 
     try {
@@ -344,7 +347,7 @@
       if (!isUploadTaskActive(taskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       await window.parseManualInput({ auto: true, source: 'ocr', taskId });
     }
-    return { rawText: combined, source: 'paddleocr-browser-batch', itemCount: totalLines, fileCount: list.length, successCount: results.length, failedCount: failed.length, failedFiles: failed.map(item => item.file?.name || '未命名图片') };
+    return { rawText: combined, source: 'paddleocr-browser-v6', ocrVersion: OCR_VERSION, ocrModel: OCR_MODEL, itemCount: totalLines, fileCount: list.length, successCount: results.length, failedCount: failed.length, failedFiles: failed.map(item => item.file?.name || '未命名图片') };
   }
 
   async function disposeEngine() {
