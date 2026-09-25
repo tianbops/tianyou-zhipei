@@ -1,6 +1,6 @@
 // 天友智配One V3 · 统一历史数据出口
 import { authRequired } from '../_auth.js';
-import { canUseRoute, isRouteMaintainer, normalizeRoute, getRoute, historyIndexKey, planKey, todayWaybillKey, todayCorrectionKey, todayIndexKey, latestPlanKey, acquireRouteDateLock, releaseRouteDateLock } from './data.js';
+import { canUseRoute, isRouteMaintainer, normalizeRoute, getRoute, historyIndexKey, planKey, todayWaybillKey, todayCorrectionKey, todayIndexKey, acquireRouteDateLock, releaseRouteDateLock } from './data.js';
 import { get, evalRedis } from './_redis.js';
 
 const HISTORY_DAYS=100;
@@ -64,8 +64,8 @@ async function deleteV3History(env,route,date,taskId){
  const token=crypto.randomUUID();
  if(!(await acquireRouteDateLock(env,route,date,token,30)))return json({success:false,error:'该日期数据正在处理中，请稍后重试'},409);
  try{
-  const key=planKey(route,date,taskId), waybillKey=todayWaybillKey(route,date,taskId), correctionKey=todayCorrectionKey(route,date,taskId), todayIdx=todayIndexKey(route,date), historyIdx=historyIndexKey(route,date), latestKey=latestPlanKey(route);
-  const script='local plan=redis.call("GET",KEYS[1]) if not plan then return "NOT_FOUND" end redis.call("DEL",KEYS[1],KEYS[2],KEYS[3]) redis.call("SREM",KEYS[4],ARGV[1]) redis.call("SREM",KEYS[5],ARGV[1]) local latest=redis.call("GET",KEYS[6]) if latest then redis.call("DEL",KEYS[6]) end return "OK"';
+  const key=planKey(route,date,taskId), waybillKey=todayWaybillKey(route,date,taskId), correctionKey=todayCorrectionKey(route,date,taskId), todayIdx=todayIndexKey(route,date), historyIdx=historyIndexKey(route,date);
+  const script='local plan=redis.call("GET",KEYS[1]) if not plan then return "NOT_FOUND" end redis.call("DEL",KEYS[1],KEYS[2],KEYS[3]) redis.call("SREM",KEYS[4],ARGV[1]) redis.call("SREM",KEYS[5],ARGV[1]) return "OK"';
   const outcome=await evalRedis(env,script,[key,waybillKey,correctionKey,todayIdx,historyIdx,latestKey],[taskId]);
   if(outcome==='NOT_FOUND')return json({success:false,error:'历史运单不存在'},404);
   if(outcome!=='OK')throw Error('历史记录原子删除未确认');
