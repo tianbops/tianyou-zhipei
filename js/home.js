@@ -66,7 +66,7 @@ async function handleDispatchRouteChange(){
 
   // 切换调用线路先彻底终止旧线路任务，再切换业务上下文。
   // 仅关闭上传弹层不够：后台 OCR / Auto-Plan 仍可能继续完成并回写旧线路状态。
-  await window.cancelParse?.().catch?.(()=>{});
+  if(typeof window.cancelParse==='function') await window.cancelParse().catch(()=>{});
   window.cancelUpload?.();
   serverOrder=null;
   parsedOrders=[];
