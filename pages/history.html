@@ -227,7 +227,7 @@ function bindRecordActions(row,date,item){
     const actions=document.createElement('div');actions.className='history-swipe-actions';
     const edit=document.createElement('button');edit.type='button';edit.className='history-action history-edit';edit.textContent='修改记录';
     const del=document.createElement('button');del.type='button';del.className='history-action history-delete';del.textContent='删除运单';
-    actions.append(edit,del);row.append(surface,actions);list.appendChild(row);
+    actions.append(edit,del);row.append(actions,surface);list.appendChild(row);
     bindSwipeRow(row,surface,date,item);bindRecordActions(row,date,item);
   });
 }
