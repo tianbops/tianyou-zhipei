@@ -157,11 +157,24 @@ async function unbindSelf(env, user) {
     boundUserIds: [driverUserId, deliveryUserId].filter(Boolean),
     updatedAt: now
   };
+  const profileUpdates = [{
+    key: userProfileKey(user.id),
+    profile: {
+      userId: String(user.id),
+      boundRouteId: '',
+      routeDuty: '',
+      status: String(user.status || 'active'),
+      approvedAt: user.approvedAt || '',
+      updatedAt: now,
+      schemaVersion: 3
+    }
+  }];
   await atomicRouteBinding(env, {
     routeKey: routeRecordKey(route),
     expectedRouteUpdatedAt: current.updatedAt || '',
     routeRecord: updatedRoute,
-    userUpdates: updates
+    userUpdates: updates,
+    profileUpdates
   });
 
   return json({ success: true, route, user: publicUser(updates.find(x => x.user?.id === user.id)?.user || user), message: '已解除线路绑定，可重新申请其他线路' });
