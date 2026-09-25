@@ -1,7 +1,7 @@
 // 天友智配One V3 · 待定/新增门店确认
 import { authRequired } from '../_auth.js';
-import { isRouteMaintainer, getBase, getLearning, normalizeRoute, acquireRouteDateLock, releaseRouteDateLock, planKey, confirmationKey, baseKey, learningKey } from './data.js';
-import { get, evalRedis } from './_redis.js';
+import { isRouteMaintainer, getBase, getLearning, normalizeRoute, acquireRouteDateLock, releaseRouteDateLock, planKey, todayWaybillKey, todayCorrectionKey, confirmationKey, baseKey, learningKey } from './data.js';
+import { get, set, evalRedis } from './_redis.js';
 import { learnAlias } from './learning.js';
 
 export async function onRequest({request,env}){
@@ -61,12 +61,26 @@ export async function onRequest({request,env}){
    const confirmedStoreIds=new Set(confirmed.map(x=>String(x.storeId||'')).filter(Boolean));
    const confirmedRawKeys=new Set(confirmed.map(x=>matchKey(x.rawName)).filter(Boolean));
    const isConfirmedPlanItem=p=>confirmedStoreIds.has(String(p?.storeId||''))||confirmedRawKeys.has(matchKey(p?.rawName||p?.name));
-   // 确认完成后从当前规划的待定/新增集合真正移除；确认历史由 confirmation 单独保存。
-   const nextPlan={...plan,
-    pendingStores:Array.isArray(plan.pendingStores)?plan.pendingStores.filter(p=>!isConfirmedPlanItem(p)):[],
-    newStores:Array.isArray(plan.newStores)?plan.newStores.filter(p=>!isConfirmedPlanItem(p)):[],
-    updatedAt:new Date().toISOString()
-   };
+   // 确认后的待定/新增门店必须转入当前规划的正式 stores。
+   const oldStores=Array.isArray(plan.stores)?plan.stores:[];
+   const pendingPlan=[...(Array.isArray(plan.pendingStores)?plan.pendingStores:[]),...(Array.isArray(plan.newStores)?plan.newStores:[])];
+   const promoted=[];
+   for(const c of confirmed){
+    const source=pendingPlan.find(p=>isConfirmedPlanItem(p)&&String(p?.storeId||'')===String(c.storeId||'')) || pendingPlan.find(p=>isConfirmedPlanItem(p)&&matchKey(p?.rawName||p?.name)===matchKey(c.rawName));
+    const baseStore=stores.find(s=>String(s.storeId)===String(c.storeId));
+    if(!baseStore)continue;
+    promoted.push({...((source&&typeof source==='object')?source:{}),...baseStore,storeId:baseStore.storeId,name:baseStore.name,originalName:clean(source?.originalName||source?.rawName||c.rawName)||c.rawName,rawName:clean(source?.rawName||c.rawName)||c.rawName,routeOrder:Number(baseStore.routeOrder)||0,corrected:matchKey(source?.rawName||source?.originalName||c.rawName)!==matchKey(baseStore.name),matchConfidence:Number(source?.matchConfidence)||1,matchVia:source?.matchVia||'confirmed'});
+   }
+   const byStoreId=new Map();
+   for(const s of oldStores)if(s?.storeId)byStoreId.set(String(s.storeId),{...s});
+   for(const s of promoted)if(s?.storeId)byStoreId.set(String(s.storeId),s);
+   const nextStores=[...byStoreId.values()].filter(s=>s?.storeId&&stores.some(b=>String(b.storeId)===String(s.storeId))).map(s=>{const b=stores.find(x=>String(x.storeId)===String(s.storeId));return {...s,routeOrder:Number(b?.routeOrder)||Number(s.routeOrder)||0,name:b?.name||s.name};}).sort((a,b)=>Number(a.routeOrder)-Number(b.routeOrder));
+   const nextPending=Array.isArray(plan.pendingStores)?plan.pendingStores.filter(p=>!isConfirmedPlanItem(p)):[];
+   const nextNew=Array.isArray(plan.newStores)?plan.newStores.filter(p=>!isConfirmedPlanItem(p)):[];
+   const nextCorrections=nextStores.filter(x=>x.corrected).length;
+   const nextCorrectionDetails=nextStores.filter(x=>x.corrected).map(x=>({storeId:x.storeId,originalName:x.originalName,name:x.name,routeOrder:x.routeOrder,matchConfidence:x.matchConfidence,matchVia:x.matchVia}));
+   const nextRawCount=Number(plan.rawCount)||nextStores.length+nextPending.length+Number(plan.merged)||0;
+   const nextPlan={...plan,stores:nextStores,pendingStores:nextPending,newStores:nextNew,rawCount:nextRawCount,totalStores:nextStores.length+nextPending.length,corrections:nextCorrections,merged:Math.max(0,nextRawCount-nextStores.length-nextPending.length),routeOrder:nextStores.map(x=>x.storeId),correctionDetails:nextCorrectionDetails,updatedAt:new Date().toISOString()};
    const nextConfirmation={
     route,date,taskId,schemaVersion:3,
     requestIds:[...(Array.isArray(confirmation?.requestIds)?confirmation.requestIds:[]),confirmRequestId].slice(-50),
@@ -78,6 +92,10 @@ export async function onRequest({request,env}){
    const outcome=await evalRedis(env,script,[baseKey(route),learningKey(route),confirmationKey(route,date,taskId),planKey(route,date,taskId)],[oldBase,oldLearning,oldConfirmation,oldPlan,JSON.stringify(nextBase),JSON.stringify(nextLearning),JSON.stringify(nextConfirmation),JSON.stringify(nextPlan)]);
    if(outcome==='CONFLICT')throw Object.assign(new Error('基准库刚刚发生变化，请刷新后重新确认'),{code:'CONFIRM_CONFLICT'});
    if(outcome!=='OK')throw Object.assign(new Error('门店确认保存未确认'),{code:'CONFIRM_SAVE_FAILED'});
+   // 同一确认操作持有线路-日期锁；保存成功后同步今日线路快照，避免规划与今日线路显示不一致。
+   const correctionData={taskId,route,date,orderBatchId:taskId,corrections:nextCorrectionDetails,count:nextCorrections,updatedAt:nextPlan.updatedAt,schemaVersion:3};
+   await set(env,todayWaybillKey(route,date,taskId),nextPlan);
+   await set(env,todayCorrectionKey(route,date,taskId),correctionData);
    return json({success:true,idempotent:false,route,date,taskId,confirmed,storeCount:stores.length,confirmedAt:nextConfirmation.updatedAt});
   }finally{await releaseRouteDateLock(env,route,date,token).catch(()=>{});}
  }catch(e){
