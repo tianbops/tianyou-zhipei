@@ -199,6 +199,8 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
     const value = routeValues[routeHistoryKeys.length + index];
     if (value !== null && value !== undefined) routeValueMap.set(key, value);
   });
+  const existingRouteHistoryKeys = routeHistoryKeys.filter(key => routeValueMap.has(key));
+  const existingRouteTodayKeys = routeTodayKeys.filter(key => routeValueMap.has(key));
 
   // 线路级数据与旧版 user 级数据可能处于“部分迁移”状态。
   // 绑定用户查询历史时必须同时发现两侧数据：
@@ -238,17 +240,17 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
     }
   }
 
-  const routeTodaySet = new Set(routeTodayKeys);
+  const routeTodaySet = new Set(existingRouteTodayKeys);
 
   // 先读取所有需要参与展示的 key；同一 key 只保留一次。
   const keyMap = new Map();
-  routeHistoryKeys.forEach(key => keyMap.set(key, { type: 'history', source: 'route' }));
-  routeTodayKeys.forEach(key => keyMap.set(key, { type: 'today', source: 'route' }));
+  existingRouteHistoryKeys.forEach(key => keyMap.set(key, { type: 'history', source: 'route' }));
+  existingRouteTodayKeys.forEach(key => keyMap.set(key, { type: 'today', source: 'route' }));
 
   // legacy key 不能直接覆盖线路级 key；后面按“日期”判断线路级 key 是否存在。
   legacyHistoryKeys.forEach(key => {
     const date = normalizeDate(String(key).split(':history:').pop());
-    if (!date || routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
+    if (!date || existingRouteHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
     keyMap.set(key, { type: 'history', source: 'legacy' });
   });
   legacyTodayKeys.forEach(key => {
