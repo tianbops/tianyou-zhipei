@@ -24,6 +24,15 @@
       <div class="history-scroll" id="historyList"><div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>加载中...</div></div>
     </section>
   </div>
+  <div class="correction-modal" id="correctionModal" aria-hidden="true">
+    <div class="correction-sheet" role="dialog" aria-modal="true" aria-labelledby="correctionTitle">
+      <div class="correction-sheet-head">
+        <strong id="correctionTitle">修正记录</strong>
+        <button type="button" id="closeCorrection" aria-label="关闭">关闭</button>
+      </div>
+      <div class="correction-list" id="correctionList"></div>
+    </div>
+  </div>
   <div class="delete-modal" id="deleteModal" aria-hidden="true">
     <div class="delete-sheet" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
       <div class="delete-icon" aria-hidden="true"><span class="z-icon"><svg viewBox="0 0 24 24"><path d="M6 7h12M9 7V5h6v2M8 10v7M12 10v7M16 10v7"/><path d="M7 7l1 13h8l1-13"/></svg></span></div>
@@ -209,7 +218,7 @@ function bindSwipeRow(row,surface,date,item){
   surface.addEventListener('click',event=>{if(moved){event.preventDefault();event.stopPropagation();moved=false;return}openRecord(date,item)});
 }
 function bindRecordActions(row,date,item){
-  row.querySelector('.history-edit')?.addEventListener('click',event=>{event.stopPropagation();closeSwipeRows();openRecord(date,item)});
+  row.querySelector('.history-edit')?.addEventListener('click',event=>{event.stopPropagation();closeSwipeRows();openCorrectionRecord(item)});
   row.querySelector('.history-delete')?.addEventListener('click',event=>{event.stopPropagation();closeSwipeRows();pendingDelete={date,item,button:row.querySelector('.history-view')};const modal=$('deleteModal');modal?.classList.add('active');modal?.setAttribute('aria-hidden','false')});
 }
   function renderDateRecords(records,list,countEl,date){
@@ -232,11 +241,28 @@ function bindRecordActions(row,date,item){
   });
 }
   async function openDateHistory(date){const box=$('historyList');box.innerHTML='<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>正在读取记录...</div>';try{const records=await requestHistory(date);if(!records.length){box.innerHTML='<div class="empty-tip"><span class=\"z-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"6\" width=\"16\" height=\"13\" rx=\"2\"/><path d=\"m7 10 3 3 2-2 5 5\"/></svg></span>'+escapeHtml(date)+' 暂无配送记录</div>';return}renderDates([{date,records}]);const head=box.querySelector('.history-head');head?.click()}catch(e){console.error(e);box.innerHTML='<div class="empty-tip">🌐 '+escapeHtml(e.message)+'<br><small>请联网后重试</small></div>'}}
+function correctionCompareKey(value){return String(value||'').normalize('NFKC').replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"‘’·\-_/]/g,'').toLowerCase()}
+function getCorrectionRecords(item){
+  if(Array.isArray(item?.correctionDetails)) return item.correctionDetails.filter(x=>String(x?.from||'').trim()&&String(x?.to||'').trim());
+  return (Array.isArray(item?.orders)?item.orders:[]).map(order=>{
+    const from=String(order?.rawName||'').trim(),to=String(order?.baseName||order?.name||'').trim();
+    return from&&to&&from!==to&&correctionCompareKey(from)!==correctionCompareKey(to)?{storeId:String(order?.storeId||''),code:String(order?.code||''),from,to}:null;
+  }).filter(Boolean);
+}
+function openCorrectionRecord(item){
+  const modal=$('correctionModal'),list=$('correctionList');if(!modal||!list)return;
+  const records=getCorrectionRecords(item);
+  list.innerHTML=records.length?records.map((x,index)=>'<div class="correction-row"><span class="correction-index">'+(index+1)+'</span><div class="correction-content"><div class="correction-from">'+escapeHtml(x.from)+'</div><div class="correction-arrow">↓</div><div class="correction-to">'+escapeHtml(x.to)+'</div></div></div>').join(''):'<div class="correction-empty">暂无修正记录</div>';
+  modal.classList.add('active');modal.setAttribute('aria-hidden','false');
+}
+function closeCorrectionRecord(){const modal=$('correctionModal');modal?.classList.remove('active');modal?.setAttribute('aria-hidden','true')}
 function openRecord(date,item){if(!item?.orderBatchId){OneModal.notice('该记录缺少运单批次，无法打开详情',{title:'无法打开记录'});return}window.location.href='order_detail.html?mode=history&date='+encodeURIComponent(date)+'&orderBatchId='+encodeURIComponent(item.orderBatchId)}
   function goBack(){closeDatePicker();location.replace('../home.html')}
   $('datePickerBtn')?.addEventListener('click',openDatePicker);
   function closeDeleteConfirm(){pendingDelete=null;$('deleteModal')?.classList.remove('active');$('deleteModal')?.setAttribute('aria-hidden','true')}
   $('cancelDelete')?.addEventListener('click',closeDeleteConfirm);
+  $('closeCorrection')?.addEventListener('click',closeCorrectionRecord);
+  $('correctionModal')?.addEventListener('click',e=>{if(e.target===$('correctionModal'))closeCorrectionRecord()});
   $('deleteModal')?.addEventListener('click',e=>{if(e.target===$('deleteModal'))closeDeleteConfirm()});
   $('confirmDelete')?.addEventListener('click',async()=>{const p=pendingDelete;if(!p)return;closeDeleteConfirm();await deleteRecord(p.date,p.item,p.button)});$('cancelDate')?.addEventListener('click',closeDatePicker);$('confirmDate')?.addEventListener('click',confirmDate);$('dateModal')?.addEventListener('click',e=>{if(e.target===$('dateModal'))closeDatePicker()});
   ['yearWheel','monthWheel','dayWheel'].forEach(id=>$(id)?.addEventListener('scroll',()=>{const box=$(id);clearTimeout(box._timer);box._timer=setTimeout(()=>{const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=wheelValue('dayWheel');if(id==='yearWheel'||id==='monthWheel')buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day')},90)}));
@@ -244,8 +270,8 @@ function openRecord(date,item){if(!item?.orderBatchId){OneModal.notice('该记�
   async function initHistory(force=false){if(historyInitialized&&!force)return;historyInitialized=true;try{closeDatePicker();if(!(await Auth.checkAuth())){historyInitialized=false;return}await validateDispatchRoute();await loadHistoryDates()}catch(e){historyInitialized=false;const box=$('historyList');if(box)box.innerHTML='<div class="empty-tip">'+escapeHtml(e?.message||'历史记录读取失败')+'<br><small>请返回首页重新选择有效线路</small></div>';console.error(e)}}
   document.addEventListener('DOMContentLoaded',()=>initHistory(false));
   window.addEventListener('pageshow',event=>{if(event.persisted)initHistory(true)});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDatePicker();closeDeleteConfirm()}});
-  window.addEventListener('pagehide',()=>{closeDatePicker();closeDeleteConfirm()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDatePicker();closeDeleteConfirm();closeCorrectionRecord()}});
+  window.addEventListener('pagehide',()=>{closeDatePicker();closeDeleteConfirm();closeCorrectionRecord()});
   function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
   </script>
 </body>
