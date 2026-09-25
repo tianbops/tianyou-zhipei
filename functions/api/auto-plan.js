@@ -14,7 +14,7 @@ export async function onRequest({request,env}){
   try{body=await request.json();}catch{return json({success:false,taskId,stage:'start',code:'INVALID_JSON',message:'请求数据无效'},400);}
   const started=Date.now();
   try{
-    const result=await runPlan({env,session,route:body.route,date:body.date,vehicle:body.vehicle,totalWeight:body.totalWeight,text:body.text,taskId});
+    const result=await runPlan({env,session,route:body.route,date:body.date,vehicle:body.vehicle,totalWeight:body.totalWeight,text:body.text,ocrVersion:body.ocrVersion||'PP-OCRv6',ocrModel:body.ocrModel||'PP-OCRv6-small',taskId});
     return json({success:true,taskId,stage:'complete',elapsedMs:Date.now()-started,result});
   }catch(error){
     const stage=String(error?.stage||'planning'), code=String(error?.code||'PLAN_FAILED');
