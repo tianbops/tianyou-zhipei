@@ -24,7 +24,6 @@ function ensureModal(){
     <section class="zpei-processing-box" role="dialog" aria-modal="true" aria-labelledby="zpeiProcessingTitle">
       <div class="zpei-processing-title" id="zpeiProcessingTitle">正在处理运单</div>
       <div class="zpei-processing-stages" role="status" aria-live="polite"></div>
-      <div class="zpei-processing-message"></div>
       <button type="button" class="zpei-processing-failure-btn">返回上传</button>
     </section>`;
   document.body.appendChild(modal);
@@ -46,17 +45,6 @@ function stageIndex(progress,status){
   if(value>=60)return 2;
   if(value>=25)return 1;
   return 0;
-}
-
-function stageMessage(index,status){
-  if(status==='success')return '处理完成';
-  return [
-    '正在识别运单…',
-    '正在提取门店…',
-    '正在匹配基准库…',
-    '正在生成配送顺序…',
-    '处理完成'
-  ][Math.max(0,Math.min(STAGES.length-1,index))];
 }
 
 function renderStages(activeIndex,status){
@@ -107,11 +95,9 @@ function showError(){
   node.setAttribute('aria-hidden','false');
   const title=node.querySelector('.zpei-processing-title');
   const stages=node.querySelector('.zpei-processing-stages');
-  const message=node.querySelector('.zpei-processing-message');
   const button=node.querySelector('.zpei-processing-failure-btn');
   if(title)title.textContent='运单处理失败';
   if(stages)stages.style.display='none';
-  if(message)message.textContent='';
   if(button)button.style.display='inline-flex';
   renderStages(-1,'error');
   setVisible(false);
@@ -142,7 +128,6 @@ function render(status='idle',progress=0){
 
   const activeIndex=stageIndex(progress,state);
   renderStages(activeIndex,state);
-  if(message)message.textContent=stageMessage(activeIndex,state);
   setVisible(true);
 
   if(state==='success'){
