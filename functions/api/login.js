@@ -26,15 +26,17 @@ export async function onRequest({ request, env }) {
     if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
       return json({ success: false, error: '用户名或密码错误' }, 401);
     }
+    const normalizedRole = normalizeRole(user.role);
+    const isPrimaryAdmin = normalizedRole === 'system_admin' && String(user.adminLevel || '') === 'primary';
     // 主系统管理员是纯系统管理身份：Web 可进入管理端，业务客户端不得签发业务 Token。
-    if (user.role === 'system_admin' && user.adminLevel === 'primary' && client !== 'web') {
+    if (isPrimaryAdmin && client !== 'web') {
       return json({ success: false, error: '主系统管理员仅可使用系统管理端登录' }, 403);
     }
 
     // 登录只读取用户资料并签发当前版本 Token，不回写整份用户对象。
     // 避免登录与管理员绑定/停用等并发更新时发生“整对象覆盖”而丢失最新业务状态。
     const normalizedBoundRoute = normalizeRoute(user.boundRouteId);
-    const updatedUser = { ...user, role: normalizeRole(user.role), boundRouteId: normalizedBoundRoute, route: normalizedBoundRoute };
+    const updatedUser = { ...user, role: normalizedRole, boundRouteId: normalizedBoundRoute, route: normalizedBoundRoute };
     const safeUser = publicUser(updatedUser);
     if (client === 'miniprogram') {
       const token = await createMiniToken(env, updatedUser);
