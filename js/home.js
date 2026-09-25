@@ -15,10 +15,12 @@ async function loadDispatchRoutes(){
   const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();
   const selected=currentRoute();
   let available=[];
+  let routesLoaded=false;
   try{
     const response=await fetch('/api/routes',{cache:'no-store',credentials:'same-origin'});
     const data=await response.json().catch(()=>({}));
     if(response.ok&&data.success){
+      routesLoaded=true;
       // 业务调度只允许使用启用中的真实线路；停用线路保留给系统管理端查看。
       available=(Array.isArray(data.routes)?data.routes:[])
         .filter(x=>x?.status!=='disabled')
@@ -34,8 +36,9 @@ async function loadDispatchRoutes(){
   // 同理，历史 session 中残留的 dispatchRoute 若已停用，也必须自动失效。
   const normalizedBound=Auth.formatRouteCode?Auth.formatRouteCode(bound):String(bound||'').trim();
   const normalizedSelected=Auth.formatRouteCode?Auth.formatRouteCode(selected):String(selected||'').trim();
-  const validSelected=normalizedSelected&&available.includes(normalizedSelected)?normalizedSelected:'';
-  const initial=validSelected || (normalizedBound&&available.includes(normalizedBound)?normalizedBound:'') || available[0] || '';
+  const validSelected=routesLoaded ? (normalizedSelected&&available.includes(normalizedSelected)?normalizedSelected:'') : normalizedSelected;
+  const validBound=routesLoaded ? (normalizedBound&&available.includes(normalizedBound)?normalizedBound:'') : normalizedBound;
+  const initial=validSelected || validBound || available[0] || '';
   if(select){
     select.innerHTML=available.map(route=>`<option value="${route}">${route}</option>`).join('');
     if(initial){
