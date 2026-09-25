@@ -47,7 +47,8 @@ Page({
   async loadToday() {
     const route = String(this.data.dispatchRoute || app.globalData.dispatchRoute || '').trim();
     try {
-      const data = await request(route ? `/api/orders?route=${encodeURIComponent(route)}` : '/api/orders');
+      const date = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      const data = await request('/api/v3/today?route='+encodeURIComponent(route)+'&date='+encodeURIComponent(date));
       const order = data?.today || data?.order || data || {};
       const stores = Array.isArray(order.orders) ? order.orders : (Array.isArray(order.stores) ? order.stores : []);
       const rawWeight = order.totalWeight ?? order.weight ?? '0kg';
