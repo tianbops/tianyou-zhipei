@@ -416,7 +416,19 @@ if(parsedOrders.length){
   window.renderUnifiedStatus('success',100,structuredStatus);
   window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();correctionDetails=[];correctionStats={raw:0,corrected:0,merged:0};statusBaseDetails=[];pendingReviewCount=0;setCorrectionSummary(0);}
-if(parsedOrders.length){setPrimaryActionMode('confirm');if(pendingReviewCount>0){const reviewButton=$('primaryActionBtn');if(reviewButton){reviewButton.hidden=false;reviewButton.setAttribute('aria-hidden','false');reviewButton.textContent=`确认待定门店（${pendingReviewCount}）`;reviewButton.classList.add('ready');reviewButton.onclick=()=>window.openPendingReview?.();}}}return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
+if(parsedOrders.length){
+  // 规划成功后直接进入服务器入库；不再要求用户点击“确认录入”。
+  // 未确定门店保留为“待定”状态，不阻断本次运单落库。
+  setPrimaryActionMode('idle');
+  if(typeof window.submitManualOrder==='function'){
+    window.submitManualOrder({auto:true}).catch(error=>console.error('自动录入失败',error));
+  }else{
+    ensureConfirmModule().then(loaded=>{
+      if(loaded&&typeof window.submitManualOrder==='function')window.submitManualOrder({auto:true}).catch(error=>console.error('自动录入失败',error));
+      else window.renderUnifiedStatus?.('error',100,'自动录入模块加载失败，请重试');
+    }).catch(error=>console.error('自动录入模块加载失败',error));
+  }
+}return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;setPrimaryActionMode('error');window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
 async function refreshHomeOrder(){
   const seq=++homeOrderLoadSeq;
   const route=String(currentRoute()||'').trim();
