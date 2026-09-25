@@ -32,6 +32,10 @@ export async function onRequest({request,env}){
    let learning=learningValue;
 
    if(confirmation?.requestIds?.includes(confirmRequestId)){
+    // 重试同一确认请求时，补齐可能因网络/Redis瞬时失败而未完成的今日快照同步。
+    const correctionData={taskId,route,date,orderBatchId:taskId,corrections:Array.isArray(plan.correctionDetails)?plan.correctionDetails:[],count:Number(plan.corrections)||0,updatedAt:plan.updatedAt||new Date().toISOString(),schemaVersion:3};
+    await set(env,todayWaybillKey(route,date,taskId),plan);
+    await set(env,todayCorrectionKey(route,date,taskId),correctionData);
     return json({success:true,idempotent:true,route,date,taskId,confirmed:Array.isArray(confirmation.confirmed)?confirmation.confirmed:[],storeCount:Array.isArray(base.stores)?base.stores.length:0});
    }
 
