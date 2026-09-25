@@ -83,6 +83,7 @@ export async function onRequest({ request, env }) {
       matchedCount: noBase ? 0 : orders.filter(item => item.matched).length,
       newStoreCount: noBase ? 0 : orders.filter(item => item.isNew).length,
       reviewCount: orders.filter(item => item?.needsReview === true).length,
+      correctionDetails: buildCorrectionDetails(orders),
       duplicateCount: Math.max(Number(body.duplicateCount) || 0, duplicateCount),
       recognizedCount: positiveInt(body.recognizedCount) || rawOrderCount,
       rawOrderCount,
@@ -156,6 +157,7 @@ export async function onRequest({ request, env }) {
         count: saved.count, uniqueStoreCount: saved.uniqueStoreCount ?? saved.count,
         weight: saved.totalWeight, totalWeight: saved.totalWeight, orders: saved.orders,
         matchedCount: saved.matchedCount, newStoreCount: saved.newStoreCount, reviewCount: saved.orders.filter(item => item?.needsReview === true).length,
+        correctionDetails: Array.isArray(saved.correctionDetails) ? saved.correctionDetails : buildCorrectionDetails(saved.orders),
         duplicateCount: saved.duplicateCount || 0, recognizedCount: saved.recognizedCount,
         rawOrderCount: saved.rawOrderCount, baseDatabaseAvailable: saved.baseDatabaseAvailable !== false,
         source: saved.source, updatedAt: saved.updatedAt
@@ -402,22 +404,54 @@ function normalizeRawOrderList(orders) {
 }
 
 function normalizeOrder(item, index, batchId, date, route) {
+  const name = String(item.name || '').trim();
+  const rawName = String(item.rawName || (Array.isArray(item.rawNames) ? item.rawNames[0] : '') || '').trim();
   return {
-    id: String(item.id || `${batchId}-${index + 1}`),
+    id: String(item.id || \`\${batchId}-\${index + 1}\`),
     storeId: String(item.storeId || item.baseCode || '').trim(),
     baseCode: String(item.baseCode || '').trim(),
     orderBatchId: batchId,
     code: String(item.code || index + 1).padStart(2, '0'),
-    name: String(item.name || '').trim(),
+    name,
+    rawName,
+    baseName: String(item.baseName || name).trim(),
     nav: String(item.nav || '').trim(),
     weight: Number(item.weight) || 0,
     note: String(item.note || '').trim(),
     matched: item.matched === true,
     isNew: item.isNew === true,
+    needsReview: item.needsReview === true,
     status: String(item.status || '待配送'),
     route, date,
     matchType: String(item.matchType || '').trim()
   };
+}
+
+function buildCorrectionDetails(orders) {
+  return (Array.isArray(orders) ? orders : [])
+    .map(item => {
+      const from = String(item?.rawName || '').trim();
+      const to = String(item?.baseName || item?.name || '').trim();
+      if (!from || !to || from === to || !isTrueNameCorrection(from, to)) return null;
+      return {
+        storeId: String(item?.storeId || '').trim(),
+        code: String(item?.code || '').trim(),
+        from,
+        to
+      };
+    })
+    .filter(Boolean);
+}
+
+function correctionCompareKey(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\\s\\u3000，,。；;：:（）()【】\\[\\]<>《》“”\\"'‘’·\\-_/]/g, '')
+    .toLowerCase();
+}
+
+function isTrueNameCorrection(from, to) {
+  return correctionCompareKey(from) !== correctionCompareKey(to);
 }
 
 async function findDuplicateOrder(env, userId, route, date, candidate, boundRouteId) {
@@ -467,6 +501,7 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest, loc
     count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count,
     weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders,
     matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: today.reviewCount || today.orders.filter(item => item?.needsReview === true).length,
+    correctionDetails: Array.isArray(today.correctionDetails) ? today.correctionDetails : buildCorrectionDetails(today.orders),
     duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount,
     rawOrderCount: today.rawOrderCount, baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
     source: today.source, updatedAt: today.updatedAt
