@@ -8,7 +8,8 @@ Page({
     const route = String(app.globalData.dispatchRoute || wx.getStorageSync('zhipei_dispatch_route') || user.boundRouteId || '').trim();
     this.setData({ user, dispatchRoute: route });
     try {
-      const data = await request(route ? `/api/orders?route=${encodeURIComponent(route)}` : '/api/orders');
+      const date = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      const data = await request('/api/v3/today?route='+encodeURIComponent(route)+'&date='+encodeURIComponent(date));
       const order = data?.today || data?.order || data || {};
       const stores = Array.isArray(order.orders) ? order.orders : (Array.isArray(order.stores) ? order.stores : []);
       this.setData({ stores, vehicle: String(order.vehicle || '') });
