@@ -112,94 +112,16 @@ export async function saveRoute(env, route, record) {
   return value;
 }
 
-export async function loadRouteBase(env, route, options = {}) {
+export async function loadRouteBase(env, route) {
   const normalized = normalizeRoute(route);
   if (!normalized) return null;
-
-  // 基准库属于正式线路实体；不存在的线路不得通过历史用户基准数据被隐式“复活”。
   const routeRecord = await getRoute(env, normalized);
   if (!routeRecord || routeRecord.status === 'disabled') return null;
-
-  let current = await redisGet(env, routeBaseKey(normalized));
-  if (current && Array.isArray(current.stores)) {
-    return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
-  }
-
-  const lockKey = `lock:route-base:${encodeURIComponent(normalized)}`;
-  const lockToken = createLockToken();
-  const lockAlreadyHeld = options.lockAlreadyHeld === true;
-  const heldLockToken = String(options.lockToken || '').trim();
-  if (lockAlreadyHeld && !heldLockToken) throw new Error('线路基准库锁上下文缺失，请重新操作');
-  const effectiveLockToken = lockAlreadyHeld ? heldLockToken : lockToken;
-  const migrationLockAcquired = lockAlreadyHeld || await acquireMigrationLock(env, lockKey, lockToken, 20);
-  if (migrationLockAcquired) {
-    try {
-      current = await redisGet(env, routeBaseKey(normalized));
-      if (current && Array.isArray(current.stores)) {
-        return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
-      }
-
-      const boundUsers = await listUsersByRoute(env, normalized);
-      for (const user of boundUsers) {
-        const userId = String(user?.id || '').trim();
-        if (!userId) continue;
-        const legacy = await redisGet(env, legacyUserBaseKey(userId, normalized));
-        if (!legacy || !Array.isArray(legacy.stores) || !legacy.stores.length) continue;
-        const migrated = {
-          schemaVersion: 1, route: normalized, stores: normalizeStores(legacy.stores),
-          dataVersion: Math.max(1, Number(legacy.dataVersion) || 1),
-          updatedAt: legacy.updatedAt || new Date().toISOString(),
-          source: 'route-migration', migratedFromUserId: userId
-        };
-        if (!(await atomicMigrateRouteBase(env, lockKey, effectiveLockToken, routeBaseKey(normalized), migrated))) continue;
-        return { ...migrated, source: 'route-migration' };
-      }
-
-      if (options.allowLegacyUserId) {
-        const legacy = await redisGet(env, legacyUserBaseKey(options.allowLegacyUserId, normalized));
-        if (legacy && Array.isArray(legacy.stores) && legacy.stores.length) {
-          const migrated = {
-            schemaVersion: 1, route: normalized, stores: normalizeStores(legacy.stores),
-            dataVersion: Math.max(1, Number(legacy.dataVersion) || 1),
-            updatedAt: legacy.updatedAt || new Date().toISOString(),
-            source: 'route-migration', migratedFromUserId: options.allowLegacyUserId
-          };
-          if (await atomicMigrateRouteBase(env, lockKey, effectiveLockToken, routeBaseKey(normalized), migrated)) return { ...migrated, source: 'route-migration' };
-        }
-      }
-    } finally {
-      if (!lockAlreadyHeld) await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
-    }
-  }
-
-  current = await redisGet(env, routeBaseKey(normalized));
+  const current = await redisGet(env, routeBaseKey(normalized));
   if (current && Array.isArray(current.stores)) {
     return { ...current, route: normalized, stores: normalizeStores(current.stores), source: 'route' };
   }
   return null;
-}
-
-async function atomicMigrateRouteBase(env, lockKey, lockToken, baseKey, value) {
-  const script = "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 'LOCK_LOST' end if redis.call('EXISTS', KEYS[2]) == 1 then return 'BASE_EXISTS' end redis.call('SET', KEYS[2], ARGV[2]) return 'OK'";
-  const result = await redisCommand(env, ['EVAL', script, '2', lockKey, baseKey, lockToken, JSON.stringify(value)]);
-  if (result === 'LOCK_LOST') throw new Error('线路基准库锁已失效，请重新加载');
-  return result === 'OK';
-}
-
-async function acquireMigrationLock(env, key, token, seconds) {
-  const response = await redisFetch(env, `/set/${encodeURIComponent(key)}/${encodeURIComponent(token)}/NX/EX/${seconds}`);
-  if (!response.ok) return false;
-  const data = await response.json().catch(() => ({}));
-  return data.result === 'OK';
-}
-
-async function releaseMigrationLock(env, key, token) {
-  const script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
-  await redisFetch(env, '/eval', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify([script, 1, key, token])
-  });
 }
 
 export function normalizeStores(stores) {
