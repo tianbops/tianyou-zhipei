@@ -264,18 +264,9 @@ function historySignature(item){const batch=String(item?.orderBatchId||'').trim(
       const payload=await r.json().catch(()=>({}));
       if(!r.ok||payload?.success!==true)throw new Error(payload?.error||'删除失败');
       try{localStorage.removeItem(historyCacheKey(route))}catch(_){}
-      // 从历史首页删除时，保持在历史首页并刷新日期列表；
-      // 只有通过“按日期查询”进入的页面，删除后才显示该日期暂无配送记录。
-      if(historyView==='home'){
-        await refreshHistoryDates();
-      }else{
-        const records=await requestHistory(date);
-        if(date){
-          const box=$('historyList');
-          if(records.length){renderDates([{date,records}]);const head=box.querySelector('.history-head');head?.click();}
-          else box.innerHTML='<div class="empty-tip">'+escapeHtml(date)+' 暂无配送记录</div>';
-        }
-      }
+      // 删除完成后统一返回历史首页，避免把删除结果停留在某个日期的空状态页。
+      historyView='home';
+      await refreshHistoryDates();
     }catch(e){console.error(e);OneModal.notice(e.message||'删除失败',{title:'删除失败'});button.disabled=false;button.classList.remove('deleting')}
   }
   function closeSwipeRows(except){document.querySelectorAll('.history-swipe-row.open').forEach(row=>{if(row!==except){row.classList.remove('open');const surface=row.querySelector('.history-swipe-surface');if(surface)surface.style.transform='translateX(0)'}})}
