@@ -37,8 +37,27 @@ export async function onRequest({ request, env }) {
     const key = routeOrderKey(route, `history:${date}`);
     let records = await readHistoryOrRecover(env, userId, route, date, key, session);
     const { records: cleaned, changed } = dedupeHistory(records);
-    if (changed || cleaned.length !== records.length) await redisSet(env, key, cleaned);
-    return json(cleaned);
+    if (changed || cleaned.length !== records.length) {
+      // 历史查询的自清理不能绕过订单日期锁，否则会与确认入库的原子写入发生“预期历史版本冲突”。
+      const lockKey = routeOrderKey(route, `lock:${date}`);
+      const lockToken = createLockToken();
+      if (await acquireMigrationLock(env, lockKey, lockToken, 30)) {
+        try {
+          const latest = await redisGet(env, key);
+          const latestCleaned = dedupeHistory(Array.isArray(latest) ? latest : []).records;
+          if (JSON.stringify(latestCleaned) !== JSON.stringify(latest ?? [])) {
+            await redisSet(env, key, latestCleaned);
+          }
+          records = latestCleaned;
+        } finally {
+          await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
+        }
+      } else {
+        // 确认入库正在持有日期锁时，不抢写历史，只返回当前读取结果。
+        records = Array.isArray(records) ? records : [];
+      }
+    }
+    return json(records);
   } catch (error) {
     console.error('history api error', error);
     return json({ error: request.method === 'DELETE' ? '历史记录删除失败' : '历史数据服务异常' }, 503);
@@ -74,8 +93,17 @@ async function readHistoryOrRecover(env, userId, route, date, key, session) {
   if (today && Array.isArray(today.orders) && today.orders.length && normalizeDate(today.date) === date) {
     const recovered = recoverFromToday(today, userId, route, date);
     if (historySignature(recovered)) {
-      await redisSet(env, key, [recovered]);
-      if (todayFromLegacy) await redisSet(env, todayKey, today);
+      const lockKey = routeOrderKey(route, `lock:${date}`);
+      const lockToken = createLockToken();
+      if (await acquireMigrationLock(env, lockKey, lockToken, 30)) {
+        try {
+          const latest = await redisGet(env, key);
+          if (!Array.isArray(latest) || !latest.length) await redisSet(env, key, [recovered]);
+          if (todayFromLegacy) await redisSet(env, todayKey, today);
+        } finally {
+          await releaseMigrationLock(env, lockKey, lockToken).catch(() => {});
+        }
+      }
       return [recovered];
     }
   }
@@ -83,7 +111,8 @@ async function readHistoryOrRecover(env, userId, route, date, key, session) {
 }
 
 async function migrateLegacyHistory(env, route, date, key) {
-  const lockKey = `lock:history-migration:${encodeKey(route)}:${date}`;
+  // 历史迁移与确认/删除必须共用同一“线路+日期”业务锁，禁止迁移写入绕过订单原子提交。
+  const lockKey = routeOrderKey(route, `lock:${date}`);
   const token = createLockToken();
   if (!(await acquireMigrationLock(env, lockKey, token, 10))) {
     const current = await redisGet(env, key);
