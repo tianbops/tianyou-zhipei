@@ -68,9 +68,9 @@ button,input,textarea{font:inherit}button,input,textarea{-webkit-tap-highlight-c
 .status-detail .detail-row:nth-child(3) .detail-line:nth-child(1){text-align:left}
 .status-detail .detail-row:nth-child(3) .detail-line:nth-child(2){text-align:center}
 .status-detail .detail-row:nth-child(3) .detail-line:nth-child(3){text-align:right}
-.pending-detail-link{cursor:pointer;text-decoration:underline;text-underline-offset:2px}.pending-detail-link:active{opacity:.7}.review-name-button{border:0;background:transparent;padding:0;text-align:left;cursor:pointer}.review-name-button:active{opacity:.7}.review-detail{display:block;max-height:78px;overflow-y:auto;overscroll-behavior:contain}.review-hint{color:#FFB020;font-size:11px;line-height:18px;margin-bottom:6px}.review-list{display:flex;flex-direction:column;gap:7px}.review-item{display:grid;grid-template-columns:minmax(0,1fr) 138px;gap:7px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)}.review-name{min-width:0;color:#E7EDF3;font-size:11px;line-height:16px;overflow-wrap:anywhere}.review-select{width:100%;height:34px;border:1px solid rgba(255,255,255,.1);border-radius:9px;background:#10161D;color:#fff;padding:0 7px;font-size:11px;outline:none}.review-apply{width:100%;height:34px;margin-top:7px;border:0;border-radius:9px;background:var(--blue);color:#fff;font-size:12px;font-weight:600}.sheet-footer{display:flex;gap:10px}.sheet-footer button{height:48px;border-radius:15px;border:0;font-size:15px;cursor:pointer}.btn-cancel{flex:1;background:rgba(255,255,255,.04);color:#8A98A6}.btn-primary-action{flex:3;background:var(--blue);color:#fff;font-weight:700;letter-spacing:.2px}.sheet-footer button:disabled{opacity:.55;cursor:wait}.upload-source-menu{display:none;margin-top:10px;padding:14px;border-radius:18px;background:#111820;border:1px solid rgba(255,255,255,.07)}.upload-source-menu.active{display:block}.source-menu-title{text-align:center;font-size:15px;font-weight:600;margin-bottom:12px}.source-menu-options{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.source-option{position:relative;min-height:72px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#C7D0D9;cursor:pointer}.source-option input{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:auto;cursor:pointer}.source-option span{font-size:21px;line-height:1}.source-option strong{font-size:12px;font-weight:500}.source-menu-cancel{width:100%;height:38px;margin-top:9px;border:0;border-radius:11px;background:rgba(255,255,255,.03);color:#8F9CAA;font-size:13px}
+.pending-detail-link{cursor:pointer;text-decoration:underline;text-underline-offset:2px}.pending-detail-link:active{opacity:.7}.review-name-button{border:0;background:transparent;padding:0;text-align:left;cursor:pointer}.review-name-button:active{opacity:.7}.review-detail{display:block;max-height:78px;overflow-y:auto;overscroll-behavior:contain}.review-hint{color:#FFB020;font-size:11px;line-height:18px;margin-bottom:6px}.review-list{display:flex;flex-direction:column;gap:7px}.review-item{display:grid;grid-template-columns:minmax(0,1fr) 138px;gap:7px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)}.review-name{min-width:0;color:#E7EDF3;font-size:11px;line-height:16px;overflow-wrap:anywhere}.review-select{width:100%;height:34px;border:1px solid rgba(255,255,255,.1);border-radius:9px;background:#10161D;color:#fff;padding:0 7px;font-size:11px;outline:none}.review-apply{width:100%;height:34px;margin-top:7px;border:0;border-radius:9px;background:var(--blue);color:#fff;font-size:12px;font-weight:600}.sheet-footer{display:flex;gap:10px}.sheet-footer button{height:48px;border-radius:15px;border:0;font-size:15px;cursor:pointer}.btn-cancel{flex:1;background:rgba(255,255,255,.04);color:#8A98A6}.obsolete-primary-action{flex:3;background:var(--blue);color:#fff;font-weight:700;letter-spacing:.2px}.sheet-footer button:disabled{opacity:.55;cursor:wait}.upload-source-menu{display:none;margin-top:10px;padding:14px;border-radius:18px;background:#111820;border:1px solid rgba(255,255,255,.07)}.upload-source-menu.active{display:block}.source-menu-title{text-align:center;font-size:15px;font-weight:600;margin-bottom:12px}.source-menu-options{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.source-option{position:relative;min-height:72px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#C7D0D9;cursor:pointer}.source-option input{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:auto;cursor:pointer}.source-option span{font-size:21px;line-height:1}.source-option strong{font-size:12px;font-weight:500}.source-menu-cancel{width:100%;height:38px;margin-top:9px;border:0;border-radius:11px;background:rgba(255,255,255,.03);color:#8F9CAA;font-size:13px}
 .function-list{display:flex;flex-direction:column;gap:16px;margin-top:28px}.function-btn{margin-bottom:0}.upload-source-menu{margin-top:10px}.source-menu-options{gap:12px}.source-menu-cancel{margin-top:14px}.sheet-footer{margin-top:14px}.detail-toggle{margin-top:12px}.review-summary{margin-top:12px}
-.upload-sheet.waiting .parse-status{display:none}.upload-sheet.waiting .sheet-footer{display:none!important}.upload-sheet.waiting .detail-entry-row{display:none!important}.review-summary{cursor:pointer}.review-summary[hidden]{display:none!important}.upload-sheet.waiting .upload-source-menu{display:block}.upload-sheet.processing .upload-source-menu{display:none}.upload-sheet.processing .sheet-footer{display:flex}.upload-sheet.processing .btn-primary-action{visibility:hidden}.upload-sheet.success .upload-source-menu,.upload-sheet.error .upload-source-menu{display:none}.upload-sheet.success .sheet-footer,.upload-sheet.error .sheet-footer{display:flex}.upload-sheet.success .btn-primary-action,.upload-sheet.error .btn-primary-action{visibility:visible}.upload-sheet.cancelled .sheet-footer{display:flex}.upload-sheet.cancelled .upload-source-menu{display:none}
+.upload-sheet.waiting .parse-status{display:none}.upload-sheet.waiting .sheet-footer{display:none!important}.upload-sheet.waiting .detail-entry-row{display:none!important}.review-summary{cursor:pointer}.review-summary[hidden]{display:none!important}.upload-sheet.waiting .upload-source-menu{display:block}.upload-sheet.processing .upload-source-menu{display:none}.upload-sheet.processing .sheet-footer{display:flex}.upload-sheet.processing .obsolete-primary-action{visibility:hidden}.upload-sheet.success .upload-source-menu,.upload-sheet.error .upload-source-menu{display:none}.upload-sheet.success .sheet-footer,.upload-sheet.error .sheet-footer{display:flex}.upload-sheet.success .obsolete-primary-action,.upload-sheet.error .obsolete-primary-action{visibility:visible}.upload-sheet.cancelled .sheet-footer{display:flex}.upload-sheet.cancelled .upload-source-menu{display:none}
 @media(max-width:430px){.app-container,.page-container{padding-left:14px;padding-right:14px}.source-menu-options{gap:7px}.status-detail .detail-row{gap:0}.status-detail .detail-row .detail-line{font-size:11px}}
 @media(max-height:700px){.app-container,.page-container{padding-top:12px}.top-bar{height:50px}.task-card{margin-top:30px;padding:17px}.function-list{margin-top:20px}.function-btn{height:58px}.upload-sheet{max-height:94vh}.parse-status{max-height:70px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
@@ -101,7 +101,7 @@ button,input,textarea{font:inherit}button,input,textarea{-webkit-tap-highlight-c
 .parse-status.success .status-detail.active{display:flex!important;max-height:none;overflow:visible}
 .parse-status.success .status-detail .detail-row{min-height:18px}
 .upload-sheet.success .sheet-footer,.upload-sheet.error .sheet-footer{position:relative;z-index:3}
-.upload-sheet.success .btn-primary-action,.upload-sheet.error .btn-primary-action{display:block!important;visibility:visible!important}
+.upload-sheet.success .obsolete-primary-action,.upload-sheet.error .obsolete-primary-action{display:block!important;visibility:visible!important}
 @media(max-width:430px){
   .upload-source-menu .source-option{height:62px;min-height:62px}
   .upload-source-menu .source-option span{font-size:27px}
@@ -116,7 +116,7 @@ button,input,textarea{font:inherit}button,input,textarea{-webkit-tap-highlight-c
 .upload-sheet #manualOrderInput{display:none}
 /* 解析失败时明确显示“重新上传”主按钮 */
 .upload-sheet.error .sheet-footer{display:flex!important;visibility:visible!important}
-.upload-sheet.error .btn-primary-action{display:block!important;visibility:visible!important;opacity:1!important}
+.upload-sheet.error .obsolete-primary-action{display:block!important;visibility:visible!important;opacity:1!important}
 
 /* 修正详情：与规划详情统一为隐藏入口；弹窗文字左右对齐；隐藏右上角叉 */
 .review-summary{display:flex;align-items:center;justify-content:flex-start;gap:6px;width:100%;min-height:40px;padding:0 2px;color:#AAB6C2;font-size:13px;line-height:20px}.review-summary #reviewCount{margin-left:0;color:#fff;font-size:13px}.review-summary span:last-child{margin-left:0;font-size:18px;color:#7F8B98;line-height:1}
@@ -163,10 +163,10 @@ button,input,textarea{font:inherit}button,input,textarea{-webkit-tap-highlight-c
 
 /* 2026-09-21 全局按钮色彩统一：弱化/取消业务蓝，仅调整颜色，不改变布局与尺寸 */
 
-button.primary,.primary-btn,.btn-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
+button.primary,.primary-btn,.obsolete-primary-action,.save-btn,.add-btn,.dialog-btn button:last-child,.review-apply{background:var(--primary-action)!important;color:var(--primary-action-text)!important}
 button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{background:var(--control-dark)!important;color:#E3E8ED!important}
 button:hover,.primary-btn:hover,.secondary-btn:hover,.danger-btn:hover{filter:brightness(1.04)}
-button:active,.primary-btn:active,.secondary-btn:active,.btn-primary-action:active,.save-btn:active,.add-btn:active{background:var(--control-pressed)!important;color:#fff!important}
+button:active,.primary-btn:active,.secondary-btn:active,.obsolete-primary-action:active,.save-btn:active,.add-btn:active{background:var(--control-pressed)!important;color:#fff!important}
 input:focus,textarea:focus,.dialog-box input:focus,.edit-textarea:focus{border-color:rgba(220,227,232,.45)!important;box-shadow:0 0 0 3px var(--focus-neutral)!important}
 
 
@@ -233,7 +233,7 @@ body{color:var(--text-body)}
   line-height:1!important;
   position:static!important;
 }
-.upload-sheet.processing .sheet-footer .btn-primary-action{
+.upload-sheet.processing .sheet-footer .obsolete-primary-action{
   display:none!important;
 }
 
@@ -731,7 +731,7 @@ body{color:var(--text-body)}
 .sheet-footer{display:flex!important;gap:10px!important;align-items:center!important;width:100%!important}
 .sheet-footer button{height:48px!important;min-height:48px!important;margin:0!important;border-radius:14px!important;padding:0 14px!important;display:flex!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;font-size:15px!important;line-height:20px!important;touch-action:manipulation!important}
 .btn-cancel{flex:1 1 0!important;min-width:0!important}
-.btn-primary-action{flex:3 1 0!important;min-width:0!important}
+.obsolete-primary-action{flex:3 1 0!important;min-width:0!important}
 /* 详情入口与底部按钮保持同一视觉尺寸体系 */
 .upload-sheet.success:not(.detail-view-open) .detail-entry-row .detail-toggle,
 .upload-sheet.success:not(.detail-view-open) .detail-entry-row .review-summary{height:44px!important;min-height:44px!important;border-radius:12px!important;font-size:14px!important;line-height:20px!important}
@@ -875,7 +875,7 @@ body{color:var(--text-body)}
   min-height:46px!important;
   border-radius:12px!important;
 }
-.btn-primary-action{
+.obsolete-primary-action{
   background:var(--blue)!important;
   box-shadow:0 5px 14px rgba(36,87,166,.18)!important;
 }
@@ -931,16 +931,16 @@ body{color:var(--text-body)}
 
 /* 2026-09-22 产品UX：主要按钮跟随全局按钮色
    已取消业务蓝作为按钮主色；上传弹窗主按钮与全局 primary-action 保持一致。 */
-.upload-sheet.success .btn-primary-action{
+.upload-sheet.success .obsolete-primary-action{
   background:var(--primary-action)!important;
   color:var(--primary-action-text)!important;
   box-shadow:none!important;
 }
-.upload-sheet.success .btn-primary-action:hover{
+.upload-sheet.success .obsolete-primary-action:hover{
   background:var(--primary-action)!important;
   filter:brightness(1.04)!important;
 }
-.upload-sheet.success .btn-primary-action:active{
+.upload-sheet.success .obsolete-primary-action:active{
   background:var(--control-pressed)!important;
   color:#fff!important;
 }
@@ -1100,8 +1100,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .back-btn:hover{background:var(--one-surface-3)}.back-btn:active{background:var(--one-pressed);color:var(--one-primary-text);transform:scale(.97)}
 .parse-status{background:#0E141B;border:1px solid var(--one-line);border-radius:13px}
 .sheet-footer button{height:46px;min-height:46px;border-radius:12px;font-size:14px;font-weight:600}
-.btn-primary-action{background:var(--one-primary)!important;color:var(--one-primary-text)!important;flex:3}
-.btn-primary-action:active{background:var(--one-pressed)!important;color:var(--one-primary-text)!important}
+.obsolete-primary-action{background:var(--one-primary)!important;color:var(--one-primary-text)!important;flex:3}
+.obsolete-primary-action:active{background:var(--one-pressed)!important;color:var(--one-primary-text)!important}
 .btn-cancel{background:var(--one-surface-3)!important;color:var(--one-body)!important;flex:1}
 .btn-cancel:active{background:#313C47!important;color:#fff!important}
 .source-option{min-height:68px;border-radius:13px;background:rgba(255,255,255,.035);border:1px solid var(--one-line)}
@@ -1422,7 +1422,7 @@ input:focus,textarea:focus,select:focus{
   border-top:1px solid rgba(255,255,255,.055)!important;
   background:rgba(21,29,38,.98)!important;
 }
-.sheet-footer .btn-primary-action{min-width:0}
+.sheet-footer .obsolete-primary-action{min-width:0}
 .sheet-footer .btn-cancel{min-width:0}
 
 /* 处理状态时只保留取消操作，保持视觉中心 */
@@ -1451,15 +1451,15 @@ input:focus,textarea:focus,select:focus{
 html{scroll-behavior:smooth}
 button,a,[role="button"]{touch-action:manipulation}
 button:disabled{filter:none!important}
-.function-btn:focus-visible,.menu-btn:focus-visible,.source-option:focus-within,.btn-primary-action:focus-visible,.btn-cancel:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:2px!important}
+.function-btn:focus-visible,.menu-btn:focus-visible,.source-option:focus-within,.obsolete-primary-action:focus-visible,.btn-cancel:focus-visible{outline:2px solid rgba(208,215,220,.48)!important;outline-offset:2px!important}
 .function-btn:hover{border-color:rgba(255,255,255,.09)!important;background:#1B2530!important}
 .function-btn:active{background:#202A34!important;transform:scale(.985)}
 .task-card{box-shadow:0 10px 28px rgba(0,0,0,.16)!important}
 .function-btn{box-shadow:none!important}
 .source-option:active{background:#202A34!important;transform:scale(.98)}
 .source-menu-cancel:active{background:#313C47!important;transform:scale(.99)}
-.sheet-footer .btn-primary-action,.sheet-footer .btn-cancel{border-radius:12px!important}
-.sheet-footer .btn-primary-action{font-weight:650!important}
+.sheet-footer .obsolete-primary-action,.sheet-footer .btn-cancel{border-radius:12px!important}
+.sheet-footer .obsolete-primary-action{font-weight:650!important}
 .parse-status.success{background:#10161D!important;border:1px solid rgba(255,255,255,.055)!important}
 .parse-status.success .status-row #statusText.structured-status{font-weight:600!important;color:#F2F5F7!important}
 .detail-toggle,.review-summary{border-radius:12px!important;background:#151D26!important;border:1px solid rgba(255,255,255,.055)!important}
@@ -1492,7 +1492,7 @@ a:focus-visible,
 .function-btn:focus-visible,
 .menu-btn:focus-visible,
 .source-option:focus-within,
-.btn-primary-action:focus-visible,
+.obsolete-primary-action:focus-visible,
 .btn-cancel:focus-visible{
   outline:none!important;
   box-shadow:0 0 0 2px rgba(208,215,220,.48)!important;
@@ -1552,11 +1552,11 @@ a:focus-visible,
   box-shadow:none!important;
 }
 /* 确认录入保持单一圆角按钮；取消按钮同样只保留自身形状 */
-.upload-sheet.success .sheet-footer .btn-primary-action,
+.upload-sheet.success .sheet-footer .obsolete-primary-action,
 .upload-sheet.success .sheet-footer .btn-cancel,
-.upload-sheet.error .sheet-footer .btn-primary-action,
+.upload-sheet.error .sheet-footer .obsolete-primary-action,
 .upload-sheet.error .sheet-footer .btn-cancel,
-.upload-sheet.cancelled .sheet-footer .btn-primary-action,
+.upload-sheet.cancelled .sheet-footer .obsolete-primary-action,
 .upload-sheet.cancelled .sheet-footer .btn-cancel{
   border-radius:11px!important;
   border:0!important;
@@ -1755,13 +1755,13 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 
 /* 2026-09-24 上传流程：确认录入只允许在自动规划完成后出现 */
 /* 默认及等待/OCR/解析阶段彻底隐藏主操作按钮，避免任何中间状态闪现“确认录入”。 */
-#primaryActionBtn[hidden],
-.upload-sheet:not(.success):not(.error) #primaryActionBtn{
+#obsoletePrimaryActionBtn[hidden],
+.upload-sheet:not(.success):not(.error) #obsoletePrimaryActionBtn{
   display:none!important;
   visibility:hidden!important;
 }
 /* 成功态是否显示由 home.js 根据“自动规划已完成且存在解析结果”统一决定。 */
-.upload-sheet.success #primaryActionBtn[hidden]{
+.upload-sheet.success #obsoletePrimaryActionBtn[hidden]{
   display:none!important;
   visibility:hidden!important;
 }
@@ -1788,7 +1788,7 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 .upload-sheet.detail-view-open.detail-mode-review .pending-review-select:focus{border-color:rgba(255,255,255,.22)}
 .upload-sheet.detail-view-open.detail-mode-review .pending-review-choice-hint{margin-top:6px;color:#75818D;font-size:11px;line-height:16px}
 .upload-sheet.detail-view-open.detail-mode-review .sheet-footer{padding-top:10px}
-.upload-sheet.detail-view-open.detail-mode-review .sheet-footer .btn-primary-action{flex:3;height:46px;border-radius:14px;background:var(--blue);color:#fff}
+.upload-sheet.detail-view-open.detail-mode-review .sheet-footer .obsolete-primary-action{flex:3;height:46px;border-radius:14px;background:var(--blue);color:#fff}
 .upload-sheet.detail-view-open.detail-mode-review .sheet-footer .btn-cancel{flex:1;height:46px;border-radius:14px;background:rgba(255,255,255,.04);color:#9AA6B2}
 @media(max-width:380px){
   .upload-sheet.detail-view-open.detail-mode-review .pending-review-card-top{gap:7px}
@@ -1854,7 +1854,7 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
   height:48px!important;
   min-height:48px!important;
 }
-.upload-sheet.detail-view-open.detail-mode-review .sheet-footer .btn-primary-action{
+.upload-sheet.detail-view-open.detail-mode-review .sheet-footer .obsolete-primary-action{
   background:var(--primary-action)!important;
   color:var(--primary-action-text)!important;
 }
@@ -1878,7 +1878,7 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
   justify-content:center!important;
   align-items:center!important;
 }
-.upload-sheet.waiting .sheet-footer .btn-primary-action{
+.upload-sheet.waiting .sheet-footer .obsolete-primary-action{
   display:none!important;
   visibility:hidden!important;
 }
@@ -1926,19 +1926,6 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 .dialog-box,.delete-sheet{border-radius:18px!important;box-shadow:0 18px 50px rgba(0,0,0,.50)!important}
 .dialog-btn button,.delete-actions button,.sheet-footer button{height:46px!important;border-radius:12px!important;font-size:14px!important;font-weight:600!important}
 .dialog-btn button:first-child,.delete-cancel,.btn-cancel{background:#202A34!important;color:#E3E8ED!important;border:1px solid rgba(255,255,255,.075)!important}
-.dialog-btn button:last-child,.delete-confirm,.btn-primary-action{background:#B8C1C8!important;color:#0B1015!important}
+.dialog-btn button:last-child,.delete-confirm,.obsolete-primary-action{background:#B8C1C8!important;color:#0B1015!important}
 
 
-/* 2026-09-25 自动保存流程：规划完成后不再显示旧的主确认按钮。 */
-#primaryActionBtn{
-  display:none!important;
-  visibility:hidden!important;
-}
-.upload-sheet.error #primaryActionBtn{
-  display:block!important;
-  visibility:visible!important;
-}
-.upload-sheet.detail-mode-review #primaryActionBtn{
-  display:flex!important;
-  visibility:visible!important;
-}
