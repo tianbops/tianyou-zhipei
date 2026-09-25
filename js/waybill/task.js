@@ -17,7 +17,7 @@
       const ocr=input.ocrText?{text:input.ocrText}:await input.ocr();
       if(!ocr?.text)throw Object.assign(Error('运单识别失败'),{code:'OCR_INVALID'});
       task.ocrText=ocr.text;setStage('EXTRACTING');setStage('MATCHING');
-      const r=await fetch('/api/auto-plan',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',signal:controller.signal,body:JSON.stringify({...input.waybill,text:ocr.text})});
+      const r=await fetch('/api/auto-plan',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',signal:controller.signal,body:JSON.stringify({...input.waybill,text:ocr.text,taskId:task.id})});
       const data=await r.json().catch(()=>({}));
       if(!r.ok||!data.success)throw Object.assign(Error(data.message||'自动规划未完成'),{code:data.code,stage:data.stage});
       setStage('PLANNING',{result:data.result,plannedStores:data.result?.stores||[]});
