@@ -33,6 +33,8 @@ export async function onRequest({request,env}){
       const t=Date.parse(String(x.date||'')); 
       return !t || now-t<=HISTORY_DAYS*86400000;
     }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+    const normalized=records.map(x=>({...x,orderBatchId:String(x.orderBatchId||x.taskId||'').trim(),orders:Array.isArray(x.orders)?x.orders:(Array.isArray(x.stores)?x.stores:[]),uniqueStoreCount:Number(x.uniqueStoreCount)||Number(x.totalStores)||((Array.isArray(x.stores)?x.stores.length:0)),count:Number(x.count)||Number(x.totalStores)||((Array.isArray(x.stores)?x.stores.length:0)),totalWeight:x.totalWeight??x.weight??'',correctionDetails:Array.isArray(x.correctionDetails)?x.correctionDetails:[],reviewCount:Number(x.reviewCount)||Number(x.pendingStores?.length)||0,newStoreCount:Number(x.newStoreCount)||Number(x.newStores?.length)||0,duplicateCount:Number(x.duplicateCount)||Number(x.merged)||0}));
+    records.splice(0,records.length,...normalized);
     const groups=new Map();
     for(const x of records){
       const d=String(x.date||'');
