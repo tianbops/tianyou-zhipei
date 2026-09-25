@@ -98,33 +98,39 @@ function extractStores(source) {
   if (!routeText) return [];
 
   const cleanPart = value => cleanStoreName(stripOrderMetadata(value));
-  const normalLines = routeText
-    .split('\n')
-    .map(cleanPart)
-    .filter(isLikelyStore);
+  const candidates = [];
+
+  // 第一优先级：箭头是当前运单最可靠的门店边界。
   const arrowParts = routeText
     .replace(/\s+/g, ' ')
     .replace(/\s*->\s*/g, '->')
     .split('->')
     .map(cleanPart)
     .filter(isLikelyStore);
+  candidates.push(...arrowParts);
 
-  // OCR 常把编号门店压成一行，或把换行吞掉；优先恢复“01、门店 / 1.门店 / 1)门店”结构。
-  const numbered = [];
+  // 第二优先级：补充OCR把箭头吞掉后留下的独立行。
+  const normalLines = routeText
+    .split('\n')
+    .map(cleanPart)
+    .filter(isLikelyStore);
+  candidates.push(...normalLines);
+
+  // 第三优先级：补充被压缩到同一行的编号门店。
   const numberedPattern = /(?:^|\s|\|)(?:\d{1,3})\s*[、.．)）:-]\s*([^\d、.．)）:-][^\n|]*?)(?=\s+(?:\d{1,3})\s*[、.．)）:-]\s*|$)/g;
   let match;
   while ((match = numberedPattern.exec(routeText)) !== null) {
     const name = cleanPart(match[1]);
-    if (isLikelyStore(name)) numbered.push(name);
+    if (isLikelyStore(name)) candidates.push(name);
   }
 
-  // OCR 可能使用竖线分隔门店；只在常规换行/箭头没有提取到结果时启用。
+  // 第四优先级：补充OCR使用竖线分隔的门店。
   const pipeParts = routeText
     .split(/[|｜]/)
     .map(cleanPart)
     .filter(isLikelyStore);
+  candidates.push(...pipeParts);
 
-  const candidates = arrowParts.length ? arrowParts : normalLines.length ? normalLines : numbered.length ? numbered : pipeParts;
   return dedupeRawStores(candidates);
 }
 
@@ -134,12 +140,19 @@ function extractRouteRegion(source) {
     const cleaned = removeHeaderFields(source.slice(carrierIndex + 4));
     if (cleaned) return cleaned;
   }
+
   const firstArrow = source.indexOf('->');
   if (firstArrow >= 0) {
-    const candidates = source.slice(0, firstArrow).split('\n').map(line => cleanStoreName(stripOrderMetadata(line))).filter(isLikelyStore);
+    // 首箭头前可能与统计字段位于同一OCR行，必须先清理统计字段，再保留该行末尾的第一家门店。
+    const prefix = source.slice(0, firstArrow);
+    const candidates = prefix
+      .split('\n')
+      .map(line => cleanStoreName(stripOrderMetadata(line)))
+      .filter(isLikelyStore);
     const first = candidates.at(-1) || '';
     return first ? `${first}${source.slice(firstArrow)}` : source.slice(firstArrow);
   }
+
   const lines = source.split('\n');
   return lines.slice(findLastHeaderEnd(lines)).filter(line => !isHeaderLine(line)).join('\n');
 }
@@ -174,8 +187,11 @@ function isHeaderLine(value) {
 }
 
 function stripOrderMetadata(value) {
-  return String(value || '').replace(/(?:总数量|总重量|总体积|订单编号|运单编号|车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?[^\n]*/gi, ' ')
-    .replace(/(?:总数量|总重量|总体积)\s*[:：]?\s*[\d.]+\s*(?:kg|KG|千克|公斤|吨|t)?(?:\s*\([^\)]*\))?/gi, ' ')
+  return String(value || '')
+    // 统计字段可能与第一家门店处于同一OCR行；只删除字段本身，不删除同一行后面的门店。
+    .replace(/(?:总数量|总重量|总体积)\s*[:：]?\s*[\d,.]+\s*(?:kg|KG|千克|公斤|吨|t|m³|m3|m²|m2|立方米)?(?:\s*\([^)]*\))?/gi, ' ')
+    .replace(/(?:订单编号|运单编号)\s*[:：]?\s*ZW[\w-]+/gi, ' ')
+    .replace(/(?:车牌号|运输日期|主司机|送货员|额定载重|额定体积)\s*[:：]?\s*[^|]+(?=\||$)/gi, ' ')
     .replace(/^\s*\|\s*/, '').replace(/\s+/g, ' ').trim();
 }
 
