@@ -198,6 +198,20 @@ function closeUploadHistoryGuard(){
   uploadHistoryGuard=false;
   if(history.state&&history.state.zpeiUploadOverlay){history.back();}
 }
+let uploadFailureTimer=null;
+window.handleUploadProcessingFailure=(message='运单处理失败，请重新上传')=>{
+  if(uploadFailureTimer)clearTimeout(uploadFailureTimer);
+  window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');
+  uploadFailureTimer=setTimeout(()=>{
+    uploadFailureTimer=null;
+    try{window.clearManualInput?.();}catch(e){console.warn('失败运单清理失败',e);}
+    const overlay=$('uploadOverlay');
+    if(overlay)overlay.classList.add('active');
+    openUploadHistoryGuard();
+    window.resetProcessingStatus?.();
+    window.openUploadSource?.();
+  },700);
+};
 window.cancelUpload=()=>{
   const overlay=$('uploadOverlay');
   if(overlay)overlay.classList.remove('active');
@@ -251,7 +265,7 @@ if(parsedOrders.length){
       else window.renderUnifiedStatus?.('error',100,'自动录入模块加载失败，请重试');
     }).catch(error=>console.error('自动录入模块加载失败',error));
   }
-}return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.renderUnifiedStatus('error',0,e.message||'处理失败，请重试');return[]}};
+}return parsedOrders}catch(e){if(taskId&&!isUploadTaskActive(taskId))return[];parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.handleUploadProcessingFailure?.(e.message||'处理失败，请重试');return[]}};
 async function refreshHomeOrder(){
   const seq=++homeOrderLoadSeq;
   const route=String(currentRoute()||'').trim();
