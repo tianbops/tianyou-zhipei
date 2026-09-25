@@ -13,6 +13,8 @@ export function planKey(route,date,taskId){return v3Key('route',normalizeRoute(r
 export function latestPlanKey(route){return v3Key('route',normalizeRoute(route),'latest-plan');}
 export function todayWaybillKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'today',date,'waybill',taskId);}
 export function todayCorrectionKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'today',date,'correction',taskId);}
+export function todayIndexKey(route,date){return v3Key('route',normalizeRoute(route),'today',date,'index');}
+export function historyIndexKey(route,date){return v3Key('route',normalizeRoute(route),'history',date,'index');}
 export function todayLatestKey(route,date){return v3Key('route',normalizeRoute(route),'today',date,'latest');}
 export function pendingKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'pending',date,taskId);}
 export function confirmationKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'confirmation',date,taskId);}
