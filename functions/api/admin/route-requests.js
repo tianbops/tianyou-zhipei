@@ -1,8 +1,9 @@
 // 天友智配One V1.0 - 管理员审核线路绑定申请
 import { requireSystemAdmin } from '../_auth.js';
+import { routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route } from '../v3/data.js';
 import {
-  atomicRouteBinding, atomicRouteSwitch, encodeKey, getRoute, getUser, normalizeRoute, publicUser,
-  redisCommand, redisGet, redisSet, routeRecordKey, recordAdminLog
+  atomicRouteBinding, atomicRouteSwitch, encodeKey, getUser, normalizeRoute, publicUser,
+  redisCommand, redisGet, redisSet, recordAdminLog
 } from '../_data.js';
 
 const REQUEST_PREFIX = 'route:binding-request:';
@@ -73,7 +74,7 @@ async function reviewRequest(env, admin, request) {
     const user = await getUser(env, pending.userId);
   if (!user || user.status === 'disabled') return json({ success: false, error: '申请用户不存在或已停用' }, 409);
   const route = normalizeRoute(pending.route);
-  const current = await getRoute(env, route);
+  const current = await getV3Route(env, route);
   if (!current || current.status === 'disabled') return json({ success: false, error: '申请线路不存在或已停用' }, 409);
 
   const currentBound = normalizeRoute(user.boundRouteId);
@@ -122,7 +123,7 @@ async function reviewRequest(env, admin, request) {
 
   if (!currentBound) {
     await atomicRouteBinding(env, {
-      routeKey: routeRecordKey(route),
+      routeKey: v3RouteKey(route),
       expectedRouteUpdatedAt: current.updatedAt || '',
       routeRecord: updatedTargetRoute,
       userUpdates: [{
@@ -133,7 +134,7 @@ async function reviewRequest(env, admin, request) {
     });
   } else {
     // 已绑定旧线路时，进入新线路与退出旧线路必须一次性提交，禁止出现双线路绑定。
-    const oldRoute = await getRoute(env, currentBound);
+    const oldRoute = await getV3Route(env, currentBound);
     if (!oldRoute || oldRoute.status === 'disabled') {
       return json({ success: false, error: '原绑定线路不存在或已停用，请先处理原线路绑定状态' }, 409);
     }
@@ -153,10 +154,10 @@ async function reviewRequest(env, admin, request) {
     };
 
     await atomicRouteSwitch(env, {
-      fromRouteKey: routeRecordKey(currentBound),
+      fromRouteKey: v3RouteKey(currentBound),
       fromExpectedRouteUpdatedAt: oldRoute.updatedAt || '',
       fromRouteRecord: updatedOldRoute,
-      toRouteKey: routeRecordKey(route),
+      toRouteKey: v3RouteKey(route),
       toExpectedRouteUpdatedAt: current.updatedAt || '',
       toRouteRecord: updatedTargetRoute,
       userUpdates: [{
