@@ -321,3 +321,30 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
   overflow:hidden!important;
   text-overflow:clip!important;
 }
+
+/* 2026-09-25 历史运单左滑操作统一为两字，并与主运单按钮无缝一体呈现 */
+.history-page .history-swipe-row{border-radius:10px!important;background:#202A34!important}
+.history-page .history-swipe-actions{
+  width:156px!important;
+  grid-template-columns:78px 78px!important;
+  gap:0!important;
+  background:#202A34!important;
+  border-radius:0 10px 10px 0!important;
+  overflow:hidden!important;
+}
+.history-page .history-action{
+  width:78px!important;
+  height:44px!important;
+  min-height:44px!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  box-sizing:border-box!important;
+}
+.history-page .history-swipe-surface .history-view{
+  border-radius:10px!important;
+}
+.history-page .history-swipe-row.open .history-swipe-surface .history-view{
+  border-radius:10px 0 0 10px!important;
+}
