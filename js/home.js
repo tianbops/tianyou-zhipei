@@ -199,47 +199,24 @@ function closeUploadHistoryGuard(){
   if(history.state&&history.state.zpeiUploadOverlay){history.back();}
 }
 let uploadFailureTimer=null;
+function openUploadEntryAfterReload(){
+  const overlay=$('uploadOverlay');
+  if(!overlay)return;
+  overlay.classList.add('active');
+  window.resetProcessingStatus?.();
+  openUploadHistoryGuard();
+  window.closeUploadSource?.();
+  window.openUploadSource?.();
+}
 window.handleUploadProcessingFailure=(message='运单处理失败，请重新上传')=>{
   if(uploadFailureTimer)clearTimeout(uploadFailureTimer);
   window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');
-  uploadFailureTimer=setTimeout(async()=>{
+  uploadFailureTimer=setTimeout(()=>{
     uploadFailureTimer=null;
-    // 失败处理必须形成单向收口：先让旧任务立即失效，再清理输入/解析上下文，
-    // 等OCR资源释放完成后，最后一次性恢复“上传运单”入口，避免异步清理把入口再次关闭。
-    try{
-      invalidateUploadTask();
-      if(parseAbortController){parseCancelled=true;parseAbortController.abort();}
-      parsedOrders=[];
-      pendingMeta={};
-      correctionDetails=[];
-      setCorrectionSummary(0);
-      reviewMode=false;
-      window.__zspParseContext=null;
-      const input=$('manualOrderInput');
-      if(input){
-        input.value='';
-        input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。');
-      }
-      ['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{
-        const fileInput=$(id);
-        if(fileInput)fileInput.value='';
-      });
-      window.onOrderParsed?.({stores:[]});
-      window.renderReviewStores?.([]);
-      closeUploadDetail?.();
-      if(typeof window.cancelConfirm==='function')window.cancelConfirm();
-      if(typeof window.cancelOCR==='function')await window.cancelOCR().catch(()=>{});
-    }catch(e){
-      console.warn('失败运单资源清理失败',e);
-    }finally{
-      window.resetProcessingStatus?.();
-      const overlay=$('uploadOverlay');
-      if(overlay)overlay.classList.add('active');
-      openUploadHistoryGuard();
-      window.closeUploadSource?.();
-      window.openUploadSource?.();
-    }
-  },900);
+    // 失败返回采用“整页硬重置”：不在旧页面里等待OCR/解析异步清理。
+    // 浏览器导航会直接销毁旧任务和临时状态，重新加载后再打开上传入口。
+    location.replace('home.html?upload=retry');
+  },700);
 };
 window.cancelUpload=()=>{
   const overlay=$('uploadOverlay');
@@ -309,6 +286,7 @@ async function refreshHomeOrder(){
   }
 }
 document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='undefined')throw Error('Auth 未加载');
-if(!(await Auth.checkAuth()))return;const me=await Auth.getCurrentServerUser();if(me?.adminLevel==='primary'){location.replace('admin.html');return;}await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const initialSeq=++homeOrderLoadSeq;const initialRoute=String(currentRoute()||'').trim();const loaded=await loadServerOrder(currentDate(),initialRoute);if(initialSeq===homeOrderLoadSeq&&String(currentRoute()||'').trim()===initialRoute){serverOrder=loaded;updateSummary()}$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];statusBaseDetails=[];pendingReviewCount=0;window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
+if(!(await Auth.checkAuth()))return;
+const autoOpenUpload=new URLSearchParams(location.search).get('upload')==='retry';const me=await Auth.getCurrentServerUser();if(me?.adminLevel==='primary'){location.replace('admin.html');return;}await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const initialSeq=++homeOrderLoadSeq;const initialRoute=String(currentRoute()||'').trim();const loaded=await loadServerOrder(currentDate(),initialRoute);if(initialSeq===homeOrderLoadSeq&&String(currentRoute()||'').trim()===initialRoute){serverOrder=loaded;updateSummary()}$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});if(autoOpenUpload)openUploadEntryAfterReload();document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
 window.addEventListener('pageshow',event=>{document.body.classList.remove('is-leaving');const menu=$('homeMenu');if(menu)menu.style.display='none';const overlay=$('uploadOverlay');if(event.persisted)window.clearManualInput?.();if(overlay)overlay.classList.remove('active');closeUploadSource();if(event.persisted&&typeof Auth!=='undefined')refreshHomeOrder()});
 })();
