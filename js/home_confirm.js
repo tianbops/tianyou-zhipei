@@ -112,6 +112,8 @@
     let timer=null;
     const confirmRequestId=metaState.confirmRequestId||(metaState.confirmRequestId=createClientRequestId());
     window.renderUnifiedStatus?.('loading',88,'正在保存运单及修正记录…');
+    // 保存阶段继续沿用规划结果的统计顺序，不把“保存中”混入统计明细。
+    window.renderStatusDetail?.(Array.isArray(window.__zspStatusDetails)?window.__zspStatusDetails:[]);
     try{
       if(!parsedState.length){
         if(!String(input?.value||'').trim())throw Error('请先完成运单处理');
