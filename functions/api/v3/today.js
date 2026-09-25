@@ -30,7 +30,9 @@ export async function onRequest({request,env}){
     const waybills=typeof rows==='string'?JSON.parse(rows):[];
     if(!waybills.length)return json({success:true,route,date,waybills:[],todayWaybillCount:0,todaySummary:{storeCount:0,totalWeight:''}});
     waybills.sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
-    const metrics=waybillMetrics(waybills);\n    return json({success:true,route,date,waybills,today:waybills[0],todayWaybillCount:metrics.waybillCount,todaySummary:metrics});\n  }catch(e){
+    const metrics=waybillMetrics(waybills);
+    return json({success:true,route,date,waybills,today:waybills[0],todayWaybillCount:metrics.waybillCount,todaySummary:metrics});
+  }catch(e){
     console.error('V3 today data error',e);
     return json({success:false,error:e?.message||'今日数据读取失败'},503);
   }
