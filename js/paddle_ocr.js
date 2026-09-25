@@ -243,7 +243,7 @@
       setStatus(options.batch ? ('正在读取第 ' + options.index + '/' + options.total + ' 张运单…') : '正在读取运单文字…', 55);
 
       const remaining = Math.max(1, deadline - Date.now());
-      const [result] = await Promise.race([
+      let [result] = await Promise.race([
         ocr.predict(blob, { textRecScoreThresh: OCR_SCORE }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('读取运单时间较长，请重新尝试')), remaining))
       ]);
