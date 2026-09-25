@@ -122,7 +122,7 @@ function showError(message=''){
   setVisible(true);
 }
 
-function render(status='idle',progress=0){
+function render(status='idle',progress=0,message=''){
   const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';
   if(state==='idle'||state==='cancelled'){
     reset();
