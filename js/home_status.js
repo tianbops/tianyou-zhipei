@@ -102,10 +102,6 @@ function userFriendlyError(message, code=''){
   if(failureCode==='PLAN_FAILED')return '配送顺序生成失败，请稍后重试。';
   if(failureCode==='OCR_INVALID')return '运单识别失败，请重新上传清晰的运单图片。';
   if(failureCode==='TIMEOUT')return '网络或服务器处理超时，请稍后重试。';
-  if(failureCode==='SAVE_FAILED')return '运单保存失败，请稍后重试。';
-  if(failureCode==='WAYBILL_DATE_MISSING')return '未识别到运单日期，请重新上传清晰的运单图片。';
-  if(failureCode==='WEIGHT_MISSING')return '未识别到商品总量，请重新上传清晰的运单图片。';
-  if(failureCode==='REVIEW_REQUIRED')return '仍有待定门店未确认，请先完成门店确认。';
   if(/基准|数据库|Redis/.test(text))return '当前线路数据读取失败，请稍后重试。';
   if(/未提取到有效门店|未识别到有效门店|有效门店/.test(text))return '运单文字提取失败，请重新上传清晰的运单图片。';
   if(/OCR|识别引擎|OCR文字|无法识别运单/.test(text))return '运单识别失败，请重新上传清晰的运单图片。';

@@ -443,7 +443,7 @@
         if (error?.code !== 'OCR_CANCELLED' && !/已取消/.test(String(error?.message || ''))) {
           console.error('[PaddleOCR batch]', error);
           setStatus(error?.message || '图片读取失败，请重试', 100, false, true);
-          window.handleUploadProcessingFailure?.(error?.message || '图片读取失败，请重试');
+          window.handleUploadProcessingFailure?.(error?.message || '图片读取失败，请重试', error?.code || (error?.name==='AbortError' ? 'TIMEOUT' : 'OCR_INVALID'));
         }
       }).finally(() => {
         // 取消旧任务后立即重新选择时，旧任务的 finally 不能清掉新选择的文件。
