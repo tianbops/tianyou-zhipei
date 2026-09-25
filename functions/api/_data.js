@@ -373,19 +373,64 @@ return 'OK'
 // 线路切换需要同时更新旧线路、新线路和用户记录；使用单次 EVAL 保证“进入新线路 + 退出旧线路”原子完成。
 export async function atomicRouteSwitch(env, {
   fromRouteKey, fromExpectedRouteUpdatedAt = '', fromRouteRecord,
-  toRouteKey, toExpectedRouteUpdatedAt = '', toRouteRecord, userUpdates = []
+  toRouteKey, toExpectedRouteUpdatedAt = '', toRouteRecord, userUpdates = [], profileUpdates = []
 }) {
   const updates = Array.isArray(userUpdates) ? userUpdates.filter(item => item?.key && item?.user) : [];
-  const keys = [fromRouteKey, toRouteKey, ...updates.map(item => item.key)];
+  const profiles = Array.isArray(profileUpdates) ? profileUpdates.filter(item => item?.key && item?.profile) : [];
+  const keys = [fromRouteKey, toRouteKey, ...updates.map(item => item.key), ...profiles.map(item => item.key)];
   if (!fromRouteKey || !toRouteKey || fromRouteKey === toRouteKey) throw new Error('线路切换参数无效');
-  const args = [String(fromExpectedRouteUpdatedAt || ''), JSON.stringify(fromRouteRecord), String(toExpectedRouteUpdatedAt || ''), JSON.stringify(toRouteRecord), ...updates.flatMap(item => [String(Number(item.expectedSessionVersion || 1)), JSON.stringify(item.user)])];
-  const script = 'local fromExpected = ARGV[1]\nlocal fromJson = ARGV[2]\nlocal toExpected = ARGV[3]\nlocal toJson = ARGV[4]\nlocal fromCurrent = redis.call(\'GET\', KEYS[1])\nlocal toCurrent = redis.call(\'GET\', KEYS[2])\nif not fromCurrent or not toCurrent then return \'ROUTE_CONFLICT\' end\nlocal okFrom, fromObj = pcall(cjson.decode, fromCurrent)\nlocal okTo, toObj = pcall(cjson.decode, toCurrent)\nif not okFrom or not okTo then return \'ROUTE_CONFLICT\' end\nif fromExpected ~= \'\' and tostring(fromObj.updatedAt or \'\') ~= fromExpected then return \'ROUTE_CONFLICT\' end\nif toExpected ~= \'\' and tostring(toObj.updatedAt or \'\') ~= toExpected then return \'ROUTE_CONFLICT\' end\nfor i = 3, #KEYS do\n  local argIndex = 5 + (i - 3) * 2\n  local expectedVersion = tonumber(ARGV[argIndex]) or 1\n  local currentUser = redis.call(\'GET\', KEYS[i])\n  if not currentUser then return \'USER_CONFLICT\' end\n  local ok, obj = pcall(cjson.decode, currentUser)\n  if not ok or tonumber(obj.sessionVersion or 1) ~= expectedVersion then return \'USER_CONFLICT\' end\nend\nredis.call(\'SET\', KEYS[1], fromJson)\nredis.call(\'SET\', KEYS[2], toJson)\nfor i = 3, #KEYS do\n  local argIndex = 5 + (i - 3) * 2\n  redis.call(\'SET\', KEYS[i], ARGV[argIndex + 1])\nend\nreturn \'OK\'';
+  const args = [
+    String(fromExpectedRouteUpdatedAt || ''), JSON.stringify(fromRouteRecord),
+    String(toExpectedRouteUpdatedAt || ''), JSON.stringify(toRouteRecord),
+    String(updates.length), String(profiles.length),
+    ...updates.flatMap(item => [String(Number(item.expectedSessionVersion || 1)), JSON.stringify(item.user)]),
+    ...profiles.map(item => JSON.stringify(item.profile))
+  ];
+  const script = `
+local fromExpected = ARGV[1]
+local fromJson = ARGV[2]
+local toExpected = ARGV[3]
+local toJson = ARGV[4]
+local userCount = tonumber(ARGV[5]) or 0
+local profileCount = tonumber(ARGV[6]) or 0
+local fromCurrent = redis.call('GET', KEYS[1])
+local toCurrent = redis.call('GET', KEYS[2])
+if not fromCurrent or not toCurrent then return 'ROUTE_CONFLICT' end
+local okFrom, fromObj = pcall(cjson.decode, fromCurrent)
+local okTo, toObj = pcall(cjson.decode, toCurrent)
+if not okFrom or not okTo then return 'ROUTE_CONFLICT' end
+if fromExpected ~= '' and tostring(fromObj.updatedAt or '') ~= fromExpected then return 'ROUTE_CONFLICT' end
+if toExpected ~= '' and tostring(toObj.updatedAt or '') ~= toExpected then return 'ROUTE_CONFLICT' end
+for i = 1, userCount do
+  local keyIndex = 2 + i
+  local argIndex = 7 + (i - 1) * 2
+  local expectedVersion = tonumber(ARGV[argIndex]) or 1
+  local currentUser = redis.call('GET', KEYS[keyIndex])
+  if not currentUser then return 'USER_CONFLICT' end
+  local ok, obj = pcall(cjson.decode, currentUser)
+  if not ok or tonumber(obj.sessionVersion or 1) ~= expectedVersion then return 'USER_CONFLICT' end
+end
+redis.call('SET', KEYS[1], fromJson)
+redis.call('SET', KEYS[2], toJson)
+for i = 1, userCount do
+  local keyIndex = 2 + i
+  local argIndex = 7 + (i - 1) * 2
+  redis.call('SET', KEYS[keyIndex], ARGV[argIndex + 1])
+end
+local profileArgStart = 7 + userCount * 2
+for i = 1, profileCount do
+  local keyIndex = 2 + userCount + i
+  redis.call('SET', KEYS[keyIndex], ARGV[profileArgStart + i - 1])
+end
+return 'OK'
+`;
   const result = await redisCommand(env, ['EVAL', script, String(keys.length), ...keys, ...args]);
   if (result === 'ROUTE_CONFLICT') throw new Error('线路状态已发生变化，请刷新后重试');
   if (result === 'USER_CONFLICT') throw new Error('用户绑定状态已发生变化，请刷新后重试');
   if (result !== 'OK') throw new Error('线路切换原子提交未确认');
   return true;
 }
+
 async function redisFetch(env, path, options = {}) {
   const base = String(env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, '');
   if (!base || !env.UPSTASH_REDIS_REST_TOKEN) throw new Error('Redis未配置');
