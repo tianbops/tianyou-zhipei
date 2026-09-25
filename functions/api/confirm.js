@@ -466,7 +466,7 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest, loc
     orderBatchId: today.orderBatchId, date, route, userId, vehicle: today.vehicle,
     count: today.count, uniqueStoreCount: today.uniqueStoreCount ?? today.count,
     weight: today.totalWeight, totalWeight: today.totalWeight, orders: today.orders,
-    matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: 0,
+    matchedCount: today.matchedCount, newStoreCount: today.newStoreCount, reviewCount: today.reviewCount || today.orders.filter(item => item?.needsReview === true).length,
     duplicateCount: today.duplicateCount || 0, recognizedCount: today.recognizedCount,
     rawOrderCount: today.rawOrderCount, baseDatabaseAvailable: today.baseDatabaseAvailable !== false,
     source: today.source, updatedAt: today.updatedAt
