@@ -12,6 +12,7 @@ export function todayWaybillKey(route,date,taskId){return v3Key('route',normaliz
 export function todayCorrectionKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'today',date,'correction',taskId);}
 export function todayLatestKey(route,date){return v3Key('route',normalizeRoute(route),'today',date,'latest');}
 export function pendingKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'pending',date,taskId);}
+export function confirmationKey(route,date,taskId){return v3Key('route',normalizeRoute(route),'confirmation',date,taskId);}
 export function lockKey(route,date){return v3Key('lock','route-date',normalizeRoute(route),date);}
 export function normalizeRoute(v){const s=String(v||'').trim();const m=s.match(/^(?:([0-9]+)|([0-9]+)号线)$/);return m?String(parseInt(m[1]||m[2],10)).padStart(2,'0')+'号线':s;}
 export async function getBase(env,route){const v=await redisGet(env,baseKey(route));return v&&Array.isArray(v.stores)?{...v,route:normalizeRoute(route)}:null;}
