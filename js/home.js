@@ -282,11 +282,11 @@ window.parseManualInput=async(options={})=>{
   window.renderUnifiedStatus('loading',45,'正在规划线路…');
   const route=currentRoute();if(!route)throw Object.assign(new Error('未指定配送线路'),{code:'ROUTE_REQUIRED'});
   const body={route,date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight:parseWeightFromText(text),text};
-  const response=await fetch('/api/auto-plan',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',signal:parseAbortController.signal,body:JSON.stringify(body)});
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok||!data.success)throw Object.assign(new Error(data.message||'自动规划未完成'),{code:data.code,stage:data.stage});
-  if(taskId&&!isUploadTaskActive(taskId))return[];
-  const result=data.result||{};parsedOrders=Array.isArray(result.stores)?result.stores:[];
+  const planner=window.WaybillPlanner;
+  if(!planner)throw Object.assign(new Error('自动规划模块未加载'),{code:'PLANNER_UNAVAILABLE'});
+  const plannerTask=await planner.run({ocrText:text,waybill:{route,date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight:parseWeightFromText(text)}});
+  if(!plannerTask?.result)throw Object.assign(new Error('自动规划未返回结果'),{code:'PLAN_EMPTY'});
+  const result=plannerTask.result;;parsedOrders=Array.isArray(result.stores)?result.stores:[];
   if(!parsedOrders.length&&!Array.isArray(result.pendingStores))throw Object.assign(new Error('未识别到有效门店'),{code:'EXTRACT_FAILED'});
   const parsedRoute=String(result.route||route).trim();if(parsedRoute&&Auth.setDispatchRoute)Auth.setDispatchRoute(parsedRoute);
   pendingMeta={parseContextId:data.taskId,userId:String(Auth.serverUser?.id||''),route:parsedRoute,date:result.date||body.date,vehicle:result.vehicle||body.vehicle,totalWeight:result.totalWeight||body.totalWeight,rawOrderCount:Number(result.rawCount)||0,matchedCount:parsedOrders.length,newStoreCount:Array.isArray(result.newStores)?result.newStores.length:0,reviewCount:Array.isArray(result.pendingStores)?result.pendingStores.length:0,duplicateCount:Number(result.merged)||0,recognizedCount:Number(result.rawCount)||0,uniqueStoreCount:Number(result.totalStores)||parsedOrders.length,baseDatabaseAvailable:true,source};
