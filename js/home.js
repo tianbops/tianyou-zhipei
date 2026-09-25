@@ -213,7 +213,7 @@ function renderUploadDetail(){
   if(!view||!title||!body)return;
   uploadDetailMode='correction';
   const sheet=document.querySelector('.upload-sheet');
-  sheet?.classList.remove('detail-mode-planning','detail-mode-recognition');
+  sheet?.classList.remove('detail-mode-recognition');
   sheet?.classList.add('detail-mode-correction');
   title.textContent='修正详情';
   body.textContent='';
