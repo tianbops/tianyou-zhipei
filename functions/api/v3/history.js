@@ -18,7 +18,7 @@ export async function onRequest({request,env}){
     const routeRecord=await getRoute(env,route);
     if(!routeRecord||routeRecord.status==='disabled')return json({success:false,error:'当前线路不存在或已停用'},404);
     if(taskId){
-      const key=v3Key('route',route,'plan',date,taskId);
+      const key=planKey(route,date,taskId);
       const one=await evalRedis(env,"local v=redis.call('GET',KEYS[1]); return v or ''",[key],[]);
       if(!one)return json({success:false,error:'历史运单不存在'},404);
       return json({success:true,route,date,taskId,record:JSON.parse(one)});
