@@ -250,6 +250,11 @@ window.cancelUpload=()=>{
 window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');if(opening){overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.cancelUpload?.();}};
 window.addEventListener('popstate',()=>{
   const overlay=$('uploadOverlay');
+  if(document.body.classList.contains('zpei-processing')){
+    // Android系统返回键/手势：处理中直接中止本次上传，并回到上传入口，不允许停在处理中。
+    window.handleUploadProcessingFailure?.('已取消本次上传');
+    return;
+  }
   if(!overlay||!uploadHistoryGuard)return;
   uploadHistoryGuard=false;
   window.clearManualInput?.();
