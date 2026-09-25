@@ -9,7 +9,8 @@ export async function onRequest({request,env}){
   if(request.method!=='POST')return json({success:false,stage:'start',code:'METHOD_NOT_ALLOWED',message:'Method not allowed'},405);
   const session=await authRequired(request,env,{allowAnyRoute:true});
   if(!session)return json({success:false,stage:'auth',code:'AUTH_EXPIRED',message:'登录已失效'},401);
-  const taskId=crypto.randomUUID();
+  const requestedTaskId=String(body?.taskId||'').trim();
+  const taskId=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedTaskId)?requestedTaskId:crypto.randomUUID();
   let body={};
   try{body=await request.json();}catch{return json({success:false,taskId,stage:'start',code:'INVALID_JSON',message:'请求数据无效'},400);}
   const started=Date.now();
