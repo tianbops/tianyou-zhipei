@@ -509,18 +509,29 @@ function encodeKey(value) { return encodeURIComponent(String(value || '').trim()
 
 async function redisMGet(env, keys) {
   if (!Array.isArray(keys) || !keys.length) return [];
-  const CHUNK_SIZE = 100;
+  // Upstash REST 的 MGET 在部分环境/代理链路下可能直接失败；历史日期单键 GET 已验证可用，
+  // 因此批量读取必须具备单键 GET 降级，不能让首页因为一次 MGET 异常直接返回 503。
+  const CHUNK_SIZE = 25;
   const output = [];
   for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
     const chunk = keys.slice(i, i + CHUNK_SIZE);
-    const result = await redisCommand(env, ['MGET', ...chunk]);
-    if (!Array.isArray(result) || result.length !== chunk.length) {
-      throw new Error('Redis MGET 历史批量读取返回数量异常');
+    try {
+      const result = await redisCommand(env, ['MGET', ...chunk]);
+      if (!Array.isArray(result) || result.length !== chunk.length) throw new Error('Redis MGET 历史批量读取返回数量异常');
+      output.push(...result.map(value => {
+        if (value === null || value === undefined || value === '') return null;
+        try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
+      }));
+    } catch (error) {
+      console.warn('Redis MGET 历史首页读取失败，降级单键 GET', error?.message || error);
+      const fallback = [];
+      for (let j = 0; j < chunk.length; j += 5) {
+        const small = chunk.slice(j, j + 5);
+        const values = await Promise.all(small.map(key => redisGet(env, key)));
+        fallback.push(...values);
+      }
+      output.push(...fallback);
     }
-    output.push(...result.map(value => {
-      if (value === null || value === undefined || value === '') return null;
-      try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
-    }));
   }
   return output;
 }
