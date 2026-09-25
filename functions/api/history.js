@@ -210,12 +210,13 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   // 绑定用户查询历史时必须同时发现两侧数据：
   // - 线路级 key 已存在：该日期以线路级数据为准（包括 []，防止已删除记录被 legacy 重新复活）。
   // - 线路级 key 不存在：才使用全部绑定用户的 legacy 数据，并按批次去重。
+  // 正常线路已经使用线路级 history/today 数据时，不再为每次历史首页加载扫描所有 legacy user:* keys。
+  // 旧版数据只在“线路级完全没有历史数据”时才进入兼容扫描，避免历史量增大后 SCAN 把首页请求拖到 503。
   let legacyHistoryKeys = [];
   let legacyTodayKeys = [];
-  if (isBoundRoute(session, route)) {
+  const hasRouteHistoryData = existingRouteHistoryKeys.length > 0 || existingRouteTodayKeys.length > 0;
+  if (isBoundRoute(session, route) && !hasRouteHistoryData) {
     try {
-      // 正常线路记录已经保存 boundUserIds；优先直接使用，避免每次历史查询再 SCAN 全部 user:*。
-      // 仅在旧线路记录缺少 boundUserIds 时回退到兼容扫描。
       let userIds = Array.isArray(routeRecord?.boundUserIds)
         ? routeRecord.boundUserIds.map(id => String(id || '').trim()).filter(Boolean)
         : [];
