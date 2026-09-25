@@ -320,7 +320,7 @@ function openRecord(date,item){
     button.innerHTML='<span>第'+(index+1)+'笔</span><span class="history-summary">'+summary.count+'家</span><span class="history-weight">'+summary.weight+'t</span>';
     surface.appendChild(button);
     const actions=document.createElement('div');actions.className='history-swipe-actions';
-    const edit=document.createElement('button');edit.type='button';edit.className='history-action history-edit';edit.textContent='修正';
+    const edit=document.createElement('button');edit.type='button';edit.className='history-action history-edit';edit.setAttribute('aria-label','查看修正详情');edit.title='查看修正详情';edit.textContent='查看';
     const del=document.createElement('button');del.type='button';del.className='history-action history-delete';del.textContent='删除';
     actions.append(edit,del);row.append(actions,surface);list.appendChild(row);
     bindSwipeRow(row,surface,date,item);bindRecordActions(row,date,item);
