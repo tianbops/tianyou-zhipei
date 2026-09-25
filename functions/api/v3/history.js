@@ -30,8 +30,13 @@ export async function onRequest({request,env}){
     }
     const dates=date?[date]:[];
     if(!dates.length){
-      const today=new Date();
-      for(let i=0;i<HISTORY_DAYS;i++){const d=new Date(today.getTime()-i*86400000).toISOString().slice(0,10);dates.push(d);}
+      // 历史业务日统一按中国时区计算，避免 UTC 跨日导致凌晨读取错一天。
+      const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+      const getPart=t=>Number(parts.find(p=>p.type===t)?.value||0);
+      const shanghaiToday=Date.UTC(getPart('year'),getPart('month')-1,getPart('day'),12,0,0);
+      for(let i=0;i<HISTORY_DAYS;i++){
+        dates.push(new Date(shanghaiToday-i*86400000).toISOString().slice(0,10));
+      }
     }
     const taskRefs=[];
     for(const d of dates){const idx=await evalRedis(env,"return redis.call('SMEMBERS',KEYS[1])",[historyIndexKey(route,d)],[]);if(Array.isArray(idx))for(const id of idx)taskRefs.push({date:d,taskId:String(id)});}
@@ -65,8 +70,9 @@ async function deleteV3History(env,route,date,taskId){
  if(!(await acquireRouteDateLock(env,route,date,token,30)))return json({success:false,error:'该日期数据正在处理中，请稍后重试'},409);
  try{
   const key=planKey(route,date,taskId), waybillKey=todayWaybillKey(route,date,taskId), correctionKey=todayCorrectionKey(route,date,taskId), todayIdx=todayIndexKey(route,date), historyIdx=historyIndexKey(route,date);
+  // 删除历史记录只删除 task 级数据和两个索引；latest-plan 是线路级指针，当前历史链路没有读取依赖，不能因删除任意一笔而误删。
   const script='local plan=redis.call("GET",KEYS[1]) if not plan then return "NOT_FOUND" end redis.call("DEL",KEYS[1],KEYS[2],KEYS[3]) redis.call("SREM",KEYS[4],ARGV[1]) redis.call("SREM",KEYS[5],ARGV[1]) return "OK"';
-  const outcome=await evalRedis(env,script,[key,waybillKey,correctionKey,todayIdx,historyIdx,latestKey],[taskId]);
+  const outcome=await evalRedis(env,script,[key,waybillKey,correctionKey,todayIdx,historyIdx],[taskId]);
   if(outcome==='NOT_FOUND')return json({success:false,error:'历史运单不存在'},404);
   if(outcome!=='OK')throw Error('历史记录原子删除未确认');
   return json({success:true,deleted:1,route,date,taskId});
