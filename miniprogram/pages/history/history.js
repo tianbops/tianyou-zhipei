@@ -15,9 +15,13 @@ Page({
       }catch(e){/* 保持空线路，交由后续登录/线路错误处理 */}
     }
     this.setData({dispatchRoute:route});
+    if(!route){
+      wx.showToast({title:'当前未选择调度线路',icon:'none'});
+      this.setData({items:[]});
+      return;
+    }
     try{
-      const url=route?'/api/v3/history?route='+encodeURIComponent(route):'/api/v3/history';
-      const data=await request(url);
+      const data=await request('/api/v3/history?route='+encodeURIComponent(route));
       const source=Array.isArray(data)?data:(data?.items||data?.history||data?.data||[]);
       const list=source.flatMap(group=>Array.isArray(group?.records)?group.records.map(record=>({...record,date:record?.date||group.date})): [group]);
       this.setData({items:list.map(x=>({
@@ -25,9 +29,9 @@ Page({
         count:x.uniqueStoreCount??x.storeCount??x.count??x.orders?.length??x.stores?.length??0,
         weight:(()=>{
           const raw=String(x.totalWeight??x.weight??'0kg').trim().replace(/,/g,'');
-          const m=raw.match(/[0-9]+(?:\\.[0-9]+)?/);
+          const m=raw.match(/[0-9]+(?:\.[0-9]+)?/);
           const n=m?Number(m[0]):NaN;
-          const t=Number.isFinite(n)?(/kg|千克|公斤/i.test(raw)?n/1000:/吨|\\bt\\b/i.test(raw)?n:n>=1000?n/1000:n):NaN;
+          const t=Number.isFinite(n)?(/kg|千克|公斤/i.test(raw)?n/1000:/吨|\bt\b/i.test(raw)?n:n>=1000?n/1000:n):NaN;
           return Number.isFinite(t)?((Math.round((t+Number.EPSILON)*100)/100).toFixed(2)+'t'):'0.00t';
         })()
       }))});
