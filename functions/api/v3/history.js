@@ -1,11 +1,11 @@
 // 天友智配One V3 · 统一历史数据出口
 import { authRequired } from '../_auth.js';
-import { canUseRoute, normalizeRoute, getRoute, historyIndexKey, planKey } from './data.js';
+import { canUseRoute, isRouteMaintainer, normalizeRoute, getRoute, historyIndexKey, planKey, todayWaybillKey, todayCorrectionKey, todayIndexKey, latestPlanKey, acquireRouteDateLock, releaseRouteDateLock } from './data.js';
 import { get, evalRedis } from './_redis.js';
 
 const HISTORY_DAYS=100;
 export async function onRequest({request,env}){
-  if(request.method!=='GET')return json({success:false,error:'Method not allowed'},405);
+  if(request.method!=='GET'&&request.method!=='DELETE')return json({success:false,error:'Method not allowed'},405);
   const session=await authRequired(request,env,{allowAnyRoute:true});
   if(!session)return json({success:false,error:'登录已失效'},401);
   try{
@@ -15,6 +15,11 @@ export async function onRequest({request,env}){
     const taskId=String(url.searchParams.get('taskId')||'').trim();
     if(!route)return json({success:false,error:'缺少线路'},400);
     if(!canUseRoute(session,route))return json({success:false,error:'无权使用该线路'},403);
+    if(request.method==='DELETE'){
+      if(!isRouteMaintainer(session,route))return json({success:false,error:'只有绑定该线路的用户可以删除历史记录'},403);
+      if(!date||!taskId)return json({success:false,error:'缺少日期或运单批次'},400);
+      return await deleteV3History(env,route,date,taskId);
+    }
     const routeRecord=await getRoute(env,route);
     if(!routeRecord||routeRecord.status==='disabled')return json({success:false,error:'当前线路不存在或已停用'},404);
     if(taskId){
@@ -55,4 +60,17 @@ export async function onRequest({request,env}){
     return json({success:false,error:e?.message||'历史数据读取失败'},503);
   }
 }
+async function deleteV3History(env,route,date,taskId){
+ const token=crypto.randomUUID();
+ if(!(await acquireRouteDateLock(env,route,date,token,30)))return json({success:false,error:'该日期数据正在处理中，请稍后重试'},409);
+ try{
+  const key=planKey(route,date,taskId), waybillKey=todayWaybillKey(route,date,taskId), correctionKey=todayCorrectionKey(route,date,taskId), todayIdx=todayIndexKey(route,date), historyIdx=historyIndexKey(route,date), latestKey=latestPlanKey(route);
+  const script='local plan=redis.call("GET",KEYS[1]) if not plan then return "NOT_FOUND" end redis.call("DEL",KEYS[1],KEYS[2],KEYS[3]) redis.call("SREM",KEYS[4],ARGV[1]) redis.call("SREM",KEYS[5],ARGV[1]) local latest=redis.call("GET",KEYS[6]) if latest then redis.call("DEL",KEYS[6]) end return "OK"';
+  const outcome=await evalRedis(env,script,[key,waybillKey,correctionKey,todayIdx,historyIdx,latestKey],[taskId]);
+  if(outcome==='NOT_FOUND')return json({success:false,error:'历史运单不存在'},404);
+  if(outcome!=='OK')throw Error('历史记录原子删除未确认');
+  return json({success:true,deleted:1,route,date,taskId});
+ }finally{await releaseRouteDateLock(env,route,date,token).catch(()=>{});}
+}
+
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}})}
