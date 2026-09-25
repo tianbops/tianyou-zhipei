@@ -572,3 +572,5 @@ body.zpei-processing .app-container{
   .zpei-processing-node{width:23px;flex-basis:23px}
   .zpei-processing-message{font-size:13px}
 }
+.zpei-processing-modal.active.error .zpei-processing-box{min-height:250px}
+.zpei-processing-modal.active.error .zpei-processing-message{margin-top:8px}
