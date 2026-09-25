@@ -184,11 +184,14 @@ function recoverFromToday(today, userId, route, date) {
 }
 
 async function listAllHistory(env, userId, route, session, routeRecord = null) {
-  // 正常线路数据只读取最近100天+未来1天的固定窗口。一次 pipeline 获取全部日期，
-  // 避免 history:* / today:* 的 SCAN 随历史 Key 数量增长而变慢。
-  const dates = historyDateWindow();
-  const routeHistoryKeys = dates.map(date => routeOrderKey(route, 'history:' + date));
-  const routeHistoryValues = await redisPipelineGet(env, routeHistoryKeys);
+  // 首页历史列表只需要“实际存在的历史 Key”。先扫描线路级索引，再按 Key 批量读取，
+  // 避免为最近100天逐日 GET 大量不存在的 Key。单日查询仍走 readHistoryOrRecover。
+  const routeHistoryKeysAll = await scanKeys(env, routeOrderKey(route, 'history:*'));
+  const routeHistoryKeys = routeHistoryKeysAll.filter(key => {
+    const date = normalizeDate(String(key).split(':history:').pop());
+    return date && isHistoryDateInWindow(date);
+  });
+  const routeHistoryValues = routeHistoryKeys.length ? await redisPipelineGet(env, routeHistoryKeys) : [];
   const routeValueMap = new Map();
   routeHistoryKeys.forEach((key, index) => {
     const value = routeHistoryValues[index];
@@ -196,9 +199,14 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   });
   const existingRouteHistoryKeys = routeHistoryKeys.filter(key => routeValueMap.has(key));
 
-  // 只有没有线路级 history 的日期才需要读取 today 作为兼容恢复来源。
-  const todayCandidateDates = dates.filter(date => !routeValueMap.has(routeOrderKey(route, 'history:' + date)));
-  const routeTodayKeys = todayCandidateDates.map(date => routeOrderKey(route, 'today:' + date));
+  // 仅对没有 history Key 的日期读取 today，作为旧版本/半成功数据的恢复来源。
+  // 通过 today:* 索引发现实际存在的 Key，避免再对100多个日期逐一 GET。
+  const routeTodayKeysAll = await scanKeys(env, routeOrderKey(route, 'today:*'));
+  const routeTodayKeys = routeTodayKeysAll.filter(key => {
+    const date = normalizeDate(String(key).split(':today:').pop());
+    return date && isHistoryDateInWindow(date) &&
+      !existingRouteHistoryKeys.some(historyKey => String(historyKey).endsWith(':history:' + date));
+  });
   const routeTodayValues = routeTodayKeys.length ? await redisPipelineGet(env, routeTodayKeys) : [];
   routeTodayKeys.forEach((key, index) => {
     const value = routeTodayValues[index];
@@ -206,12 +214,8 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   });
   const existingRouteTodayKeys = routeTodayKeys.filter(key => routeValueMap.has(key));
 
-  // 线路级数据与旧版 user 级数据可能处于“部分迁移”状态。
-  // 绑定用户查询历史时必须同时发现两侧数据：
-  // - 线路级 key 已存在：该日期以线路级数据为准（包括 []，防止已删除记录被 legacy 重新复活）。
-  // - 线路级 key 不存在：才使用全部绑定用户的 legacy 数据，并按批次去重。
-  // 正常线路已经使用线路级 history/today 数据时，不再为每次历史首页加载扫描所有 legacy user:* keys。
-  // 旧版数据只在“线路级完全没有历史数据”时才进入兼容扫描，避免历史量增大后 SCAN 把首页请求拖到 503。
+  // 旧版 user:* 数据仅在线路级完全没有历史/今日数据时兼容读取。
+  // 正常线路不会扫描用户级历史，避免旧数据量拖慢首页。
   let legacyHistoryKeys = [];
   let legacyTodayKeys = [];
   const hasRouteHistoryData = existingRouteHistoryKeys.length > 0 || existingRouteTodayKeys.length > 0;
@@ -246,13 +250,10 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   }
 
   const routeTodaySet = new Set(existingRouteTodayKeys);
-
-  // 先读取所有需要参与展示的 key；同一 key 只保留一次。
   const keyMap = new Map();
   existingRouteHistoryKeys.forEach(key => keyMap.set(key, { type: 'history', source: 'route' }));
   existingRouteTodayKeys.forEach(key => keyMap.set(key, { type: 'today', source: 'route' }));
 
-  // legacy key 不能直接覆盖线路级 key；后面按“日期”判断线路级 key 是否存在。
   legacyHistoryKeys.forEach(key => {
     const date = normalizeDate(String(key).split(':history:').pop());
     if (!date || existingRouteHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
@@ -273,7 +274,6 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   const values = keys.map(key => routeValueMap.has(key) ? routeValueMap.get(key) : missingValueMap.get(key));
   const grouped = new Map();
 
-  // 路线级 history 优先；同日期的 legacy history 不参与，避免部分删除后旧数据复活。
   keys.forEach((key, index) => {
     const meta = keyMap.get(key);
     const raw = values[index];
@@ -284,14 +284,10 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
       const date = normalizeDate(String(key).split(':history:').pop());
       if (!date) return;
       const records = Array.isArray(raw) ? raw : [];
-
-      // 线路级 key 存在即拥有该日期的权威性，即使 records=[] 也不能用 legacy 补回。
       if (source === 'route') {
         grouped.set(date, records);
         return;
       }
-
-      // legacy 只用于线路级 key 尚不存在的日期。
       if (routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
       const existing = grouped.get(date) || [];
       grouped.set(date, existing.concat(records));
@@ -300,8 +296,6 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
 
     const date = normalizeDate(String(key).split(':today:').pop());
     if (!date || !raw || !Array.isArray(raw.orders) || !raw.orders.length) return;
-
-    // history 优先于 today；route today 也优先于 legacy today。
     if (grouped.has(date)) return;
     if (routeHistoryKeys.some(routeKey => String(routeKey).endsWith(':history:' + date))) return;
     if (source === 'legacy' && routeTodaySet.has(routeOrderKey(route, 'today:' + date))) return;
