@@ -89,3 +89,4 @@ function clean(v){return String(v||'').replace(/\s+/g,' ').trim().slice(0,200);}
 function matchKey(v){return clean(v).replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”\"'‘’·\-_/]/g,'').toLowerCase();}
 function hash(v){let h=2166136261;for(const c of String(v))h=Math.imul(h^c.charCodeAt(0),16777619);return (h>>>0).toString(36);}
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});}
+
