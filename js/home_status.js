@@ -24,9 +24,14 @@ function ensureModal(){
     <section class="zpei-processing-box" role="dialog" aria-modal="true" aria-labelledby="zpeiProcessingTitle">
       <div class="zpei-processing-title" id="zpeiProcessingTitle">正在处理运单</div>
       <div class="zpei-processing-stages" role="status" aria-live="polite"></div>
+      <button type="button" class="zpei-processing-cancel-btn">取消</button>
       <button type="button" class="zpei-processing-failure-btn">返回上传</button>
     </section>`;
   document.body.appendChild(modal);
+  modal.querySelector('.zpei-processing-cancel-btn')?.addEventListener('click',()=>{
+    if(typeof window.cancelUpload==='function')window.cancelUpload();
+    else window.resetProcessingStatus?.();
+  });
   modal.querySelector('.zpei-processing-failure-btn')?.addEventListener('click',()=>{
     if(typeof window.resetUploadSession==='function')window.resetUploadSession();
     else{
@@ -96,9 +101,11 @@ function showError(){
   const title=node.querySelector('.zpei-processing-title');
   const stages=node.querySelector('.zpei-processing-stages');
   const button=node.querySelector('.zpei-processing-failure-btn');
+  const cancelButton=node.querySelector('.zpei-processing-cancel-btn');
   if(title)title.textContent='运单处理失败';
   if(stages)stages.style.display='none';
   if(button)button.style.display='inline-flex';
+  if(cancelButton)cancelButton.style.display='none';
   renderStages(-1,'error');
   setVisible(false);
 }
@@ -121,9 +128,11 @@ function render(status='idle',progress=0){
   const title=node.querySelector('.zpei-processing-title');
   const stages=node.querySelector('.zpei-processing-stages');
   const button=node.querySelector('.zpei-processing-failure-btn');
+  const cancelButton=node.querySelector('.zpei-processing-cancel-btn');
   if(stages)stages.style.display='flex';
   if(title)title.textContent=state==='success'?'处理完成':'正在处理运单';
   if(button)button.style.display='none';
+  if(cancelButton)cancelButton.style.display=state==='loading'?'inline-flex':'none';
 
   const activeIndex=stageIndex(progress,state);
   renderStages(activeIndex,state);
