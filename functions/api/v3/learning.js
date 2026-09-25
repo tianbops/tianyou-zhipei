@@ -1,11 +1,11 @@
 // 天友智配One V3 · 自适应门店学习
 // 只接收人工确认结果，形成可追溯的 OCR 变体 -> 稳定 storeId 映射。
 export function normalizeLearningKey(value){
- return String(value??'').replace(/\\s+/g,' ').trim().replace(/[\\s\\u3000，,。；;：:（）()【】\\[\\]<>《》“”\"'‘’·\\-_/]/g,'').toLowerCase();
+ return String(value??'').replace(/\s+/g,' ').trim().replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"'‘’·\-_/]/g,'').toLowerCase();
 }
 export function learnAlias(learning,rawName,store){
  const next={...(learning||{}),aliases:{...((learning||{}).aliases||{})},stats:{...((learning||{}).stats||{})}};
- const raw=String(rawName||'').replace(/\\s+/g,' ').trim();
+ const raw=String(rawName||'').replace(/\s+/g,' ').trim();
  const rawKey=normalizeLearningKey(raw),baseName=String(store?.name||'').trim(),baseKey=normalizeLearningKey(baseName),storeId=String(store?.storeId||'').trim();
  if(!rawKey||!baseKey||!storeId||rawKey===baseKey)return next;
  const now=new Date().toISOString(),old=next.aliases[rawKey]||{};
