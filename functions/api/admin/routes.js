@@ -124,7 +124,8 @@ export async function onRequest({ request, env }) {
       if (ids.includes(oldId)) continue;
       const oldUser = await getUser(env, oldId);
       if (!oldUser) continue;
-      const oldUserBoundRoute = normalizeRoute(oldUser.boundRouteId);
+      const oldProfile = await getUserProfile(env, oldUser.id);
+      const oldUserBoundRoute = normalizeRoute(oldProfile?.boundRouteId || oldUser.boundRouteId);
       if (oldUserBoundRoute && oldUserBoundRoute !== route) continue;
       userUpdates.push({
         key: `user:${encodeKey(oldId)}`,
