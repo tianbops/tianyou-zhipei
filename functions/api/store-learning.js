@@ -8,7 +8,8 @@ export async function onRequest({request,env}){
  if(!session?.id)return json({success:false,error:'登录已失效'},401);
  try{
   const body=await request.json().catch(()=>({}));
-  const route=normalizeRoute(body.route||session.boundRouteId);
+  const route=normalizeRoute(body.route);
+  if(!route)return json({success:false,error:'缺少调度线路'},400);
   if(!route||!isRouteMaintainer(session,route))return json({success:false,error:'只有绑定该线路的用户可以维护门店学习数据'},403);
   const input=Array.isArray(body.items)?body.items:[body];
   if(input.length>MAX_BATCH)return json({success:false,error:`单次最多学习 ${MAX_BATCH} 家门店`},400);
