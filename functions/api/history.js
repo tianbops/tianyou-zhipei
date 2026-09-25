@@ -31,10 +31,10 @@ export async function onRequest({ request, env }) {
     // 历史数据清理不能阻塞当前历史读取。SCAN 在历史量较大或 Redis 响应较慢时，
     // 如果等待清理完成，会导致修正详情页一直停留在“正在读取修正记录”。
     // 清理作为后台维护任务执行，当前请求立即继续读取目标日期。
-    purgeExpiredHistory(env, route).catch(error => console.warn('历史清理失败，稍后重试', error?.message || error));
+    maybePurgeExpiredHistory(env, route).catch(error => console.warn('历史清理失败，稍后重试', error?.message || error));
 
     // 不传日期时返回该用户/线路全部历史日期。
-    if (!date) return await listAllHistory(env, userId, route, session);
+    if (!date) return await listAllHistory(env, userId, route, session, routeRecord);
 
     const key = routeOrderKey(route, `history:${date}`);
     let records = await readHistoryOrRecover(env, userId, route, date, key, session);
@@ -183,7 +183,7 @@ function recoverFromToday(today, userId, route, date) {
   };
 }
 
-async function listAllHistory(env, userId, route, session) {
+async function listAllHistory(env, userId, route, session, routeRecord = null) {
   const historyPattern = routeOrderKey(route, 'history:*');
   const todayPattern = routeOrderKey(route, 'today:*');
   const [routeHistoryKeys, routeTodayKeys] = await Promise.all([
@@ -199,9 +199,17 @@ async function listAllHistory(env, userId, route, session) {
   let legacyTodayKeys = [];
   if (isBoundRoute(session, route)) {
     try {
-      const users = await listUsersByRoute(env, route);
-      const legacyResults = await Promise.all(users.map(async user => {
-        const legacyPrefix = 'user:' + encodeKey(user.id) + ':route:' + encodeKey(route) + ':orders:';
+      // 正常线路记录已经保存 boundUserIds；优先直接使用，避免每次历史查询再 SCAN 全部 user:*。
+      // 仅在旧线路记录缺少 boundUserIds 时回退到兼容扫描。
+      let userIds = Array.isArray(routeRecord?.boundUserIds)
+        ? routeRecord.boundUserIds.map(id => String(id || '').trim()).filter(Boolean)
+        : [];
+      if (!userIds.length) {
+        const users = await listUsersByRoute(env, route);
+        userIds = users.map(user => String(user?.id || '').trim()).filter(Boolean);
+      }
+      const legacyResults = await Promise.all(userIds.map(async userIdValue => {
+        const legacyPrefix = 'user:' + encodeKey(userIdValue) + ':route:' + encodeKey(route) + ':orders:';
         const [h, t] = await Promise.all([
           scanKeys(env, legacyPrefix + 'history:*'),
           scanKeys(env, legacyPrefix + 'today:*')
@@ -457,13 +465,25 @@ function isHistoryDateInWindow(date) {
   return normalized >= cutoff && normalized <= futureCutoff;
 }
 
+async function maybePurgeExpiredHistory(env, route) {
+  // 不再每次 GET 都扫描整条线路历史。用短期维护锁把清理频率限制为每线路约 5 分钟一次，
+  // 避免用户打开历史页时与正常读取同时触发全量 SCAN。
+  const lockKey = routeOrderKey(route, 'maintenance:history-purge');
+  const token = createLockToken();
+  const acquired = await acquireMigrationLock(env, lockKey, token, 300);
+  if (!acquired) return;
+  try {
+    await purgeExpiredHistory(env, route);
+  } finally {
+    await releaseMigrationLock(env, lockKey, token).catch(() => {});
+  }
+}
 async function purgeExpiredHistory(env, route) {
   const today = businessDate();
   const cutoff = addDays(today, -(HISTORY_DAYS - 1));
   const futureCutoff = addDays(today, FUTURE_DAYS);
   const keys = await scanKeys(env, routeOrderKey(route, 'history:*'));
   if (!keys.length) return;
-
   const commands = [];
   for (const key of keys) {
     const date = normalizeDate(String(key).split(':history:').pop());
