@@ -130,6 +130,10 @@ async function reviewRequest(env, admin, request) {
         key: 'user:' + encodeKey(user.id),
         expectedSessionVersion: Number(user.sessionVersion || 1),
         user: updatedUser
+      }],
+      profileUpdates: [{
+        key: userProfileKey(user.id),
+        profile: { userId: String(user.id), boundRouteId: route, routeDuty: duty, status: String(user.status || 'active'), approvedAt: now, updatedAt: now, schemaVersion: 3 }
       }]
     });
   } else {
@@ -164,6 +168,10 @@ async function reviewRequest(env, admin, request) {
         key: 'user:' + encodeKey(user.id),
         expectedSessionVersion: Number(user.sessionVersion || 1),
         user: updatedUser
+      }],
+      profileUpdates: [{
+        key: userProfileKey(user.id),
+        profile: { userId: String(user.id), boundRouteId: route, routeDuty: duty, status: String(user.status || 'active'), approvedAt: now, updatedAt: now, schemaVersion: 3 }
       }]
     });
   }
