@@ -1,5 +1,5 @@
 // 天友智配One V3 · 规划结果原子保存
-import { evalRedis } from './_redis.js';
+import { get, evalRedis } from './_redis.js';
 import { planKey, latestPlanKey, todayWaybillKey, todayCorrectionKey, todayIndexKey, historyIndexKey, acquireRouteDateLock, releaseRouteDateLock, v3Key } from './data.js';
 
 async function fingerprintOf(result){
@@ -49,12 +49,15 @@ return 'OK'`;
     [JSON.stringify(result),JSON.stringify(result),JSON.stringify(correctionData),result.taskId,result.taskId]
   );
 
-  if(outcome==='DUPLICATE:'+result.taskId)return {saved:true,idempotent:true,key};
+  if(outcome==='TASK_EXISTS'){
+    const existing=await get(env,key);
+    return {saved:true,idempotent:true,key,result:existing||result};
+  }
   if(outcome.startsWith('DUPLICATE:')){
     const existingTaskId=outcome.slice('DUPLICATE:'.length);
-    return {saved:true,idempotent:true,duplicate:true,existingTaskId,key};
+    const existing=await get(env,planKey(result.route,result.date,existingTaskId));
+    return {saved:true,idempotent:true,duplicate:true,existingTaskId,key,result:existing||result};
   }
-  if(outcome==='TASK_EXISTS')return {saved:true,idempotent:true,key};
   if(outcome!=='OK')throw Object.assign(new Error('规划结果保存未确认'),{code:'SAVE_FAILED',stage:'saving'});
   return {saved:true,idempotent:false,key};
  } finally {await releaseRouteDateLock(env,result.route,result.date,token).catch(()=>{});}
