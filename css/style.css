@@ -1927,3 +1927,18 @@ button,.function-btn,.menu-btn,.back-btn,.source-option,.source-menu-cancel,.det
 .dialog-btn button,.delete-actions button,.sheet-footer button{height:46px!important;border-radius:12px!important;font-size:14px!important;font-weight:600!important}
 .dialog-btn button:first-child,.delete-cancel,.btn-cancel{background:#202A34!important;color:#E3E8ED!important;border:1px solid rgba(255,255,255,.075)!important}
 .dialog-btn button:last-child,.delete-confirm,.btn-primary-action{background:#B8C1C8!important;color:#0B1015!important}
+
+
+/* 2026-09-25 自动保存流程：规划完成后不再显示旧的主确认按钮。 */
+#primaryActionBtn{
+  display:none!important;
+  visibility:hidden!important;
+}
+.upload-sheet.error #primaryActionBtn{
+  display:block!important;
+  visibility:visible!important;
+}
+.upload-sheet.detail-mode-review #primaryActionBtn{
+  display:flex!important;
+  visibility:visible!important;
+}
