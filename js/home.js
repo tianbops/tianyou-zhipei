@@ -182,76 +182,36 @@ async function parseOrderText(text,taskId=0){
 }
 window.cancelParse=async()=>{invalidateUploadTask();if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')await cancelOCR().catch(()=>{});};
 
-window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.remove('processing','success','error','cancelled')}}
-window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
-window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');openUploadHistoryGuard();window.resetProcessingStatus?.();window.openUploadSource?.();};
-let uploadHistoryGuard=false;
-function openUploadHistoryGuard(){
-  if(uploadHistoryGuard)return;
+window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');}};
+window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}};
+window.resetUploadSession=()=>{
+  // 失败返回按钮的唯一业务出口：一次性释放当前上传会话，不依赖 history、定时器、query 或 sessionStorage。
+  try{window.clearManualInput?.();}catch(error){console.warn('清理上传会话失败',error);}
+  try{document.body.classList.remove('zpei-processing','is-leaving','navigating-to-order');}catch(_){}
   const overlay=$('uploadOverlay');
-  if(!overlay)return;
-  history.pushState({zpeiUploadOverlay:true},'',location.href);
-  uploadHistoryGuard=true;
-}
-function closeUploadHistoryGuard(){
-  if(!uploadHistoryGuard)return;
-  uploadHistoryGuard=false;
-  if(history.state&&history.state.zpeiUploadOverlay){history.back();}
-}
-let uploadFailureTimer=null;
-let uploadFailureReturning=false;
-window.handleUploadProcessingFailure=(message='运单处理失败，请重新上传')=>{
-  // 失败只允许收口一次；旧异步任务迟到时不能重新触发返回流程。
-  if(uploadFailureReturning)return;
-  uploadFailureReturning=true;
-  if(uploadFailureTimer)clearTimeout(uploadFailureTimer);
-
-  // 第一优先级：立即失效本次上传任务，禁止任何迟到异步结果继续写回。
-  try{window.invalidateUploadTask?.();}catch(_){}
-  try{if(parseAbortController){parseCancelled=true;parseAbortController.abort();}}catch(_){}
-  try{window.cancelConfirm?.();}catch(_){}
-
-  // 先建立返回定时器，再做UI/数据清理。即使某个清理函数异常，也绝不能阻断自动返回。
-  uploadFailureTimer=setTimeout(()=>{
-    uploadFailureTimer=null;
-    try{window.clearManualInput?.();}catch(_){}
-    try{window.resetProcessingStatus?.();}catch(_){}
-    try{
-      const overlay=$('uploadOverlay');
-      const menu=$('uploadSourceMenu');
-      if(overlay)overlay.classList.add('active');
-      if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');}
-      openUploadHistoryGuard();
-      document.body.classList.remove('zpei-processing','is-leaving','navigating-to-order');
-    }catch(_){}
-    uploadFailureReturning=false;
-  },650);
-
-  // 失败态仅停留一瞬；这里即使渲染异常也不影响上面的返回定时器。
-  try{window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');}catch(_){}
+  const menu=$('uploadSourceMenu');
+  if(overlay)overlay.classList.add('active');
+  if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');}
+  window.resetProcessingStatus?.();
 };
 window.cancelUpload=()=>{
   const overlay=$('uploadOverlay');
   if(overlay)overlay.classList.remove('active');
-  window.resetProcessingStatus?.();
   window.closeUploadSource?.();
-  closeUploadHistoryGuard();
   try{window.clearManualInput?.();}catch(e){console.warn('清理上传状态失败',e);}
 };
-window.toggleUpload=()=>{const overlay=$('uploadOverlay');if(!overlay)return;const opening=!overlay.classList.contains('active');if(opening){overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();}else{window.cancelUpload?.();}};
-window.addEventListener('popstate',()=>{
+window.toggleUpload=()=>{
   const overlay=$('uploadOverlay');
-  if(document.body.classList.contains('zpei-processing')){
-    uploadHistoryGuard=false;
-    window.handleUploadProcessingFailure?.('已取消本次上传');
-    return;
+  if(!overlay)return;
+  const opening=!overlay.classList.contains('active');
+  if(opening){
+    overlay.classList.add('active');
+    window.renderUnifiedStatus?.('idle',0,'');
+    window.openUploadSource?.();
+  }else{
+    window.cancelUpload?.();
   }
-  if(!overlay||!uploadHistoryGuard)return;
-  uploadHistoryGuard=false;
-  window.clearManualInput?.();
-  overlay.classList.remove('active');
-  window.closeUploadSource?.();
-});
+};
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
@@ -269,7 +229,7 @@ window.goToOrderDetail=async()=>{
 };
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
-window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);window.__zspParseContext=null;if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();window.resetProcessingStatus?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;window.resetProcessingStatus?.();window.renderReviewStores?.([]);closeUploadDetail?.();};
+window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);window.__zspParseContext=null;if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;window.resetProcessingStatus?.();window.renderReviewStores?.([]);closeUploadDetail?.();};
 window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');const taskId=Number(options?.taskId)||ensureUploadTask();if(taskId&&!isUploadTaskActive(taskId))return[];if(parseInFlight)return auto?[]:toast('运单正在处理，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',28,'正在提取门店…');const data=await parseOrderText(text,taskId);if(taskId&&!isUploadTaskActive(taskId))return[];window.renderUnifiedStatus('loading',68,'正在匹配基准库…');parsedOrders=Array.isArray(data.stores)?data.stores:[];const parseContextId=`parse-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;const parsedRoute=String(data?.route||currentRoute()||'').trim();if(parsedRoute&&Auth.setDispatchRoute)Auth.setDispatchRoute(parsedRoute);const parsedUserId=String(data?.userId||((typeof Auth!=='undefined'&&Auth.serverUser)?(Auth.serverUser.id||Auth.serverUser.username||Auth.serverUser.account||''):'')).trim();data.parseContextId=parseContextId;window.__zspParseContext={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||'',vehicle:data.vehicle||'',totalWeight:data.totalWeight||'',stores:parsedOrders.map(item=>({...item}))};pendingMeta={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;if(taskId&&!isUploadTaskActive(taskId))return[];// 解析结果保留OCR/人工原文，不再把结构化摘要回写到输入框；这样用户可直接核对并修改原文，修改后由输入监听使当前解析结果失效并重新处理。\nwindow.onOrderParsed?.(data);reviewMode=true;
 if(!parsedOrders.length){
   throw Error('未识别到有效门店，请重新上传');
