@@ -29,8 +29,8 @@ function stageIndex(progress,status){
   if(status==='success')return STAGES.length-1;
   if(status==='error'||status==='cancelled')return -1;
   const value=Math.max(0,Math.min(100,Number(progress)||0));
-  if(value>=93)return 3;
-  if(value>=68)return 2;
+  if(value>=80)return 3;
+  if(value>=60)return 2;
   if(value>=25)return 1;
   return 0;
 }
