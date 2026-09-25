@@ -1,4 +1,4 @@
-/* 天友智配One - 全屏智能处理状态层 */
+/* 天友智配One - 统一运单处理弹窗状态框 */
 (() => {
 'use strict';
 
@@ -10,18 +10,32 @@ const STAGES=[
   {key:'complete',label:'完成'}
 ];
 
-let layer=null;
+let modal=null;
+let successTimer=null;
 
-function ensureLayer(){
-  if(layer&&document.body.contains(layer))return layer;
-  layer=document.createElement('div');
-  layer.id='zpeiProcessingLayer';
-  layer.className='zpei-processing-layer';
-  layer.setAttribute('aria-live','polite');
-  layer.setAttribute('aria-label','运单智能处理');
-  layer.innerHTML='<div class="zpei-processing-rail" role="status"></div>';
-  document.body.appendChild(layer);
-  return layer;
+function ensureModal(){
+  if(modal&&document.body.contains(modal))return modal;
+  modal=document.createElement('div');
+  modal.id='zpeiProcessingModal';
+  modal.className='zpei-processing-modal';
+  modal.setAttribute('aria-hidden','true');
+  modal.innerHTML=`
+    <div class="zpei-processing-backdrop" aria-hidden="true"></div>
+    <section class="zpei-processing-box" role="dialog" aria-modal="true" aria-labelledby="zpeiProcessingTitle">
+      <div class="zpei-processing-title" id="zpeiProcessingTitle">正在处理运单</div>
+      <div class="zpei-processing-stages" role="status" aria-live="polite"></div>
+      <div class="zpei-processing-message"></div>
+      <button type="button" class="zpei-processing-failure-btn">返回上传</button>
+    </section>`;
+  document.body.appendChild(modal);
+  modal.querySelector('.zpei-processing-failure-btn')?.addEventListener('click',()=>{
+    if(typeof window.resetUploadSession==='function')window.resetUploadSession();
+    else{
+      window.resetProcessingStatus?.();
+      window.openUploadSource?.();
+    }
+  });
+  return modal;
 }
 
 function stageIndex(progress,status){
@@ -34,84 +48,106 @@ function stageIndex(progress,status){
   return 0;
 }
 
-function renderRail(activeIndex,status){
-  const root=ensureLayer().querySelector('.zpei-processing-rail');
+function stageMessage(index,status){
+  if(status==='success')return '处理完成';
+  return [
+    '正在识别运单…',
+    '正在提取门店…',
+    '正在匹配基准库…',
+    '正在生成配送顺序…',
+    '处理完成'
+  ][Math.max(0,Math.min(STAGES.length-1,index))];
+}
+
+function renderStages(activeIndex,status){
+  const root=ensureModal().querySelector('.zpei-processing-stages');
   root.textContent='';
   STAGES.forEach((stage,index)=>{
+    const row=document.createElement('div');
+    row.className='zpei-processing-stage';
     const node=document.createElement('span');
-    node.className='zpei-stage';
-    node.dataset.stage=stage.key;
-    if(index<activeIndex||status==='success')node.classList.add('done');
-    else if(index===activeIndex)node.classList.add('current');
-    else node.classList.add('pending');
-    node.textContent=(index<activeIndex||status==='success'?'●':index===activeIndex?'◉':'○')+stage.label;
-    root.appendChild(node);
+    node.className='zpei-processing-node';
+    const label=document.createElement('span');
+    label.className='zpei-processing-label';
+    const complete=index<activeIndex||status==='success';
+    const current=index===activeIndex&&status!=='success';
+    node.textContent=complete?'●':current?'◉':'○';
+    label.textContent=stage.label;
+    if(complete)row.classList.add('done');
+    else if(current)row.classList.add('current');
+    else row.classList.add('pending');
+    row.append(node,label);
+    root.appendChild(row);
     if(index<STAGES.length-1){
-      const line=document.createElement('span');
-      line.className='zpei-stage-line'+(index<activeIndex||status==='success'?' done':'');
-      line.setAttribute('aria-hidden','true');
+      const line=document.createElement('div');
+      line.className='zpei-processing-stage-line'+(index<activeIndex||status==='success'?' done':'');
       root.appendChild(line);
     }
   });
 }
 
-function setProcessing(active){
-  document.body.classList.toggle('zpei-processing',active);
+function setVisible(visible){
+  document.body.classList.toggle('zpei-processing',visible);
 }
 
 function reset(){
-  setProcessing(false);
-  if(layer){
-    layer.classList.remove('active','error');
-    layer.setAttribute('aria-hidden','true');
+  if(successTimer){clearTimeout(successTimer);successTimer=null;}
+  setVisible(false);
+  if(modal){
+    modal.classList.remove('active','error','success');
+    modal.setAttribute('aria-hidden','true');
   }
 }
 
-function showError(message){
-  const current='运单处理失败，请重新上传';
-  const node=ensureLayer();
+function showError(){
+  if(successTimer){clearTimeout(successTimer);successTimer=null;}
+  const node=ensureModal();
   node.classList.add('active','error');
+  node.classList.remove('success');
   node.setAttribute('aria-hidden','false');
-  const rail=node.querySelector('.zpei-processing-rail');
-  rail.textContent='';
-  const text=document.createElement('div');
-  text.className='zpei-processing-error';
-  text.textContent=current;
-  rail.appendChild(text);
-  setProcessing(false);
+  const title=node.querySelector('.zpei-processing-title');
+  const message=node.querySelector('.zpei-processing-message');
+  const button=node.querySelector('.zpei-processing-failure-btn');
+  if(title)title.textContent='运单处理失败';
+  if(message)message.textContent='运单处理未完成，请重新上传运单';
+  if(button)button.style.display='inline-flex';
+  renderStages(-1,'error');
+  setVisible(false);
 }
 
-function render(status='idle',progress=0,message=''){
+function render(status='idle',progress=0){
   const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';
   if(state==='idle'||state==='cancelled'){
     reset();
     return;
   }
   if(state==='error'){
-    showError(typeof message==='object'?'运单处理失败，请重新上传':message);
+    showError();
     return;
   }
 
-  const node=ensureLayer();
+  const node=ensureModal();
   node.classList.add('active');
-  node.classList.remove('error');
+  node.classList.remove('error','success');
   node.setAttribute('aria-hidden','false');
-  setProcessing(true);
+  const title=node.querySelector('.zpei-processing-title');
+  const message=node.querySelector('.zpei-processing-message');
+  const button=node.querySelector('.zpei-processing-failure-btn');
+  if(title)title.textContent=state==='success'?'处理完成':'正在处理运单';
+  if(button)button.style.display='none';
 
   const activeIndex=stageIndex(progress,state);
-  renderRail(activeIndex,state);
+  renderStages(activeIndex,state);
+  if(message)message.textContent=stageMessage(activeIndex,state);
+  setVisible(true);
 
   if(state==='success'){
-    renderRail(STAGES.length-1,'success');
-    setProcessing(true);
-    window.setTimeout(()=>reset(),420);
+    node.classList.add('success');
+    successTimer=window.setTimeout(()=>reset(),520);
   }
 }
 
-window.renderUnifiedStatus=(status='idle',progress=0,message='')=>{
-  render(status,progress,message);
-};
-
+window.renderUnifiedStatus=(status='idle',progress=0,message='')=>render(status,progress);
 window.resetProcessingStatus=reset;
 
 })();
