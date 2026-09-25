@@ -29,6 +29,8 @@
   // 取消后的旧OCR引擎释放必须与新任务串行，允许用户立即重新选择图片，
   // 但新任务在旧引擎真正释放完成前不会启动新的推理实例。
   let engineDisposePromise = null;
+  let preloadPromise = null;
+  let ocrReadyState = 'idle';
 
   function beginUploadTask() {
     // 新任务开始时必须清除上一次“取消”状态，否则取消后立即二次上传
@@ -74,6 +76,24 @@
       '图片无法读取', '请重新上传图片'
     ].some(item => value === item || value.includes(item));
   }
+
+  function emitOCRReady(state, detail = '') {
+    ocrReadyState = state;
+    window.dispatchEvent(new CustomEvent('zpei:ocr-ready', { detail: { state, detail } }));
+  }
+
+  async function preloadOCR() {
+    if (preloadPromise) return preloadPromise;
+    ocrReadyState = 'loading';
+    emitOCRReady('loading');
+    preloadPromise = loadEngine()
+      .then(engine => { emitOCRReady('ready'); return engine; })
+      .catch(error => { preloadPromise = null; emitOCRReady('failed', error?.message || ''); throw error; });
+    return preloadPromise;
+  }
+
+  window.getOCRReadyState = () => ocrReadyState;
+  window.preloadOCR = () => preloadOCR().catch(() => null);
 
   async function loadSdk() {
     if (sdkPromise) return sdkPromise;
@@ -241,7 +261,9 @@
       const blob = await prepareImage(file);
       if (!isUploadTaskActive(taskId) || currentOperation !== operationId || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       setStatus(options.batch ? ('正在识别第 ' + options.index + '/' + options.total + ' 张运单…') : '正在准备文字识别…', 25);
-      const ocr = await loadEngine();
+      // 正常情况下这里直接复用首页提前预加载完成的OCR引擎；
+      // 若预加载仍在进行，则等待同一个 Promise，不重复初始化模型。
+      const ocr = await (preloadPromise || loadEngine());
       if (!isUploadTaskActive(taskId) || currentOperation !== operationId || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
       setStatus(options.batch ? ('正在读取第 ' + options.index + '/' + options.total + ' 张运单…') : '正在读取运单文字…', 55);
 
@@ -398,12 +420,12 @@
 
   window.callOCR = process;
 
-  // 正式版启动后后台预热 OCR：把 SDK/模型首次加载从“上传时等待”前移，
-  // 预热失败不阻断页面操作，用户上传时仍会再次尝试。
-  // 首页脚本加载完成后立即后台预热 OCR，不再等待用户打开上传面板。
-  // 预热过程不显示错误、不阻塞首页；用户真正上传图片时直接复用已完成的引擎。
+  // V3：OCR提前预加载。
+  // 页面脚本加载后立即在后台完成 SDK + PP-OCRv6 small 引擎初始化，
+  // 用户真正选择运单时直接复用热引擎，避免首次上传再支付模型加载成本。
+  // 预加载失败只记录 ready=failed，不阻断首页；上传时会自动重试。
   warmingUp = true;
-  loadEngine().catch(() => {}).finally(() => { warmingUp = false; });
+  preloadOCR().catch(() => {}).finally(() => { warmingUp = false; });
 
   window.openFileManager = async function() {
     window.closeUploadSource?.();
