@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：线路绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { baseKey as v3BaseKey, routeKey as v3RouteKey, getRoute as getV3Route, setRoute as setV3Route } from '../v3/data.js';
+import { baseKey as v3BaseKey, routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route } from '../v3/data.js';
 import { getUser, normalizeRoute, encodeKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand } from '../_data.js';
 
 export async function onRequest({ request, env }) {
