@@ -197,18 +197,15 @@
 
       // 运单已写入服务器：主动失效历史页缓存，确保下一次进入直接看到最新记录。
       try{localStorage.removeItem('zhipei:history-cache:'+encodeURIComponent(route));}catch(_){}
-      window.renderUnifiedStatus?.('loading',98,'保存完成，正在打开当日数据…');
+      window.renderUnifiedStatus?.('success',100,'完成');
       document.body.classList.add('navigating-to-order');
-
-      const handoffTitle=document.querySelector('.upload-sheet .sheet-title');
-      if(handoffTitle)handoffTitle.textContent='正在打开当日数据…';
 
       const params=new URLSearchParams({route});
       if(savedDate)params.set('date',savedDate);
       if(savedBatch)params.set('orderBatchId',savedBatch);
 
       const targetUrl=`pages/order_detail.html?${params.toString()}`;
-      window.location.assign(targetUrl);
+      window.setTimeout(()=>window.location.assign(targetUrl),480);
     }catch(error){
       if(error?.name==='AbortError'){
         window.renderUnifiedStatus?.('error',100,'运单保存超时，请检查网络后重试');
