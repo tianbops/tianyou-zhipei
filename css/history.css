@@ -350,7 +350,7 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn,.delete-cancel{height:44
 }
 
 
-/* 2026-09-25 历史运单：修改打开修正记录 */
+/* 2026-09-25 历史运单：修改打开修正详情弹窗 */
 .history-page .correction-modal{
   position:fixed!important;inset:0!important;z-index:10001!important;
   display:none!important;align-items:center!important;justify-content:center!important;
