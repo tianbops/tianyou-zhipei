@@ -17,8 +17,8 @@ function similarity(a,b){
  if(x.includes(y)||y.includes(x))return Math.min(x.length,y.length)/Math.max(x.length,y.length)*.96;
  let same=0;const xs=new Set(x),ys=new Set(y);for(const ch of xs)if(ys.has(ch))same++;
  const charScore=same/Math.max(xs.size,ys.size,1);
- const prefix=x.slice(0,Math.min(4,x.length))===y.slice(0,Math.min(4,y.length))?.06:0;
- const suffix=x.slice(-Math.min(4,x.length))===y.slice(-Math.min(4,y.length))?.08:0;
+ let prefix=0;if(x.slice(0,Math.min(4,x.length))===y.slice(0,Math.min(4,y.length)))prefix=.06;
+ let suffix=0;if(x.slice(-Math.min(4,x.length))===y.slice(-Math.min(4,y.length)))suffix=.08;
  return Math.min(1,charScore+prefix+suffix);
 }
 function identityFeatures(a,b){
