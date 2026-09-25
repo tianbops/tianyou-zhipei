@@ -21,7 +21,8 @@ Page({
   async loadRoutes(selected) {
     try {
       const data = await request('/api/routes');
-      const routes = Array.isArray(data?.routes) ? data.routes : [];
+      const routes = (Array.isArray(data?.routes) ? data.routes : []).filter(item => item?.status !== 'disabled');
+      // 未绑定用户同样拥有调度线路选择权；这里不以 boundRouteId 限制可用线路。
       const exists = routes.some(item => String(item?.id || '').trim() === selected);
       const dispatchRoute = exists ? selected : String(routes[0]?.id || selected || '').trim();
       app.globalData.dispatchRoute = dispatchRoute;
