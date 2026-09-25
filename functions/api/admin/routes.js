@@ -144,11 +144,30 @@ export async function onRequest({ request, env }) {
       updatedAt: now
     };
 
+    const profileUpdates = [];
+    for (const item of userUpdates) {
+      const uid = String(item.user?.id || '').trim();
+      if (!uid) continue;
+      const duty = uid === driverUserId ? 'driver' : uid === deliveryUserId ? 'delivery' : '';
+      profileUpdates.push({
+        key: userProfileKey(uid),
+        profile: {
+          userId: uid,
+          boundRouteId: duty ? route : '',
+          routeDuty: duty,
+          status: String(item.user?.status || 'active'),
+          approvedAt: item.user?.approvedAt || '',
+          updatedAt: now,
+          schemaVersion: 3
+        }
+      });
+    }
     await atomicRouteBinding(env, {
       routeKey: v3RouteKey(route),
       expectedRouteUpdatedAt: current.updatedAt || '',
       routeRecord: record,
-      userUpdates
+      userUpdates,
+      profileUpdates
     });
 
     await recordAdminLog(env, admin, 'bind_route', 'route', route, { driverUserId, deliveryUserId })
