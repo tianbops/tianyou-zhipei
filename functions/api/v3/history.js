@@ -1,7 +1,7 @@
 // 天友智配One V3 · 统一历史数据出口
 import { authRequired } from '../_auth.js';
-import { canUseRoute, normalizeRoute, getRoute } from './data.js';
-import { evalRedis, v3Key } from './_redis.js';
+import { canUseRoute, normalizeRoute, getRoute, historyIndexKey, planKey } from './data.js';
+import { get, evalRedis } from './_redis.js';
 
 const HISTORY_DAYS=100;
 export async function onRequest({request,env}){
@@ -23,8 +23,16 @@ export async function onRequest({request,env}){
       if(!one)return json({success:false,error:'历史运单不存在'},404);
       return json({success:true,route,date,taskId,record:JSON.parse(one)});
     }
-    const pattern=v3Key('route',route,'plan','*','*');
-    const raw=await evalRedis(env,"local keys=redis.call('KEYS',ARGV[1]); local out={}; for _,k in ipairs(keys) do local v=redis.call('GET',k); if v then table.insert(out,v) end end; return cjson.encode(out)",[],[pattern]);
+    const dates=date?[date]:[];
+    if(!dates.length){
+      const today=new Date();
+      for(let i=0;i<HISTORY_DAYS;i++){const d=new Date(today.getTime()-i*86400000).toISOString().slice(0,10);dates.push(d);}
+    }
+    const taskRefs=[];
+    for(const d of dates){const idx=await get(env,historyIndexKey(route,d));if(Array.isArray(idx))for(const id of idx)taskRefs.push({date:d,taskId:String(id)});}
+    if(!taskRefs.length)return json({success:true,route,history:[],records:[]});
+    const keys=taskRefs.map(x=>planKey(route,x.date,x.taskId));
+    const raw=await evalRedis(env,"local out={}; for i,k in ipairs(KEYS) do local v=redis.call('GET',k); if v then table.insert(out,v) end end; return cjson.encode(out)",keys,[]);
     const rows=typeof raw==='string'?JSON.parse(raw):[];
     const now=Date.now();
     const records=rows.filter(x=>{
