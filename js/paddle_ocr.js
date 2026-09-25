@@ -98,7 +98,9 @@
     if (!warmingUp) setStatus('正在准备文字识别…', 35);
     const createOptions = {
       lang: 'ch',
-      ocrVersion: 'PP-OCRv5',
+      // 2026-09：官方浏览器 SDK 0.4.2 已支持 PP-OCRv6。
+      // 默认使用 v6 small，兼顾中文/英文/业务编码识别与浏览器端速度。
+      ocrVersion: 'PP-OCRv6',
       worker: {
         createWorker: () => new Worker(OCR_WORKER_URL, { type: 'module' })
       },
