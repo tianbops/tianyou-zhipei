@@ -579,11 +579,24 @@ async function redisPipeline(env, commands) {
 }
 
 async function redisPipelineGet(env, keys) {
-  return redisPipeline(env, keys.map(key => ['GET', key])).then(results => results.map(item => {
-    const value = item?.result !== undefined ? item.result : item;
-    if (value === null || value === undefined || value === '') return null;
-    try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
-  }));
+  if (!Array.isArray(keys) || !keys.length) return [];
+  // Upstash/Cloudflare 环境对单次 pipeline 的命令数量存在实现差异。
+  // 历史查询窗口超过100个日期时分批读取，避免单次批量请求直接返回503。
+  const CHUNK_SIZE = 50;
+  const output = [];
+  for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
+    const chunk = keys.slice(i, i + CHUNK_SIZE);
+    const results = await redisPipeline(env, chunk.map(key => ['GET', key]));
+    if (!Array.isArray(results) || results.length !== chunk.length) {
+      throw new Error('Redis历史批量读取返回数量异常');
+    }
+    output.push(...results.map(item => {
+      const value = item?.result !== undefined ? item.result : item;
+      if (value === null || value === undefined || value === '') return null;
+      try { return typeof value === 'string' ? JSON.parse(value) : value; } catch { return null; }
+    }));
+  }
+  return output;
 }
 
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
