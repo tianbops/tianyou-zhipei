@@ -28,8 +28,10 @@ export async function onRequest({ request, env }) {
     }
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
-    // 历史数据保留100天；每次进入历史查询时执行一次清理。
-    await purgeExpiredHistory(env, route).catch(error => console.warn('历史清理失败，继续读取历史数据', error?.message || error));
+    // 历史数据清理不能阻塞当前历史读取。SCAN 在历史量较大或 Redis 响应较慢时，
+    // 如果等待清理完成，会导致修正详情页一直停留在“正在读取修正记录”。
+    // 清理作为后台维护任务执行，当前请求立即继续读取目标日期。
+    purgeExpiredHistory(env, route).catch(error => console.warn('历史清理失败，稍后重试', error?.message || error));
 
     // 不传日期时返回该用户/线路全部历史日期。
     if (!date) return await listAllHistory(env, userId, route, session);
