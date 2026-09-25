@@ -271,7 +271,7 @@
       const count = Array.isArray(result?.items) ? result.items.length : 0;
       if (!options.batch) {
         putText(text);
-        setStatus('已读取运单文字' + (count ? '，共 ' + count + ' 行' : ''), 100, true);
+        setStatus('已读取运单文字', 60);
       }
       return { rawText: text, source: 'paddleocr-browser', itemCount: count, metrics: result?.metrics || null };
     };
@@ -335,7 +335,7 @@
     const totalLines = results.reduce((sum, item) => sum + (Number(item.itemCount) || 0), 0);
     if (list.length > 1) {
       const message = failed.length ? ('已读取 ' + results.length + '/' + list.length + ' 张运单，' + failed.length + ' 张未成功') : ('已读取 ' + results.length + ' 张运单');
-      setStatus(message, 100, true);
+      setStatus('已读取运单文字', 60);
     }
     // OCR完成后直接进入规划，用户无需再次点击“规划路线”；识别文字仍原样保留在输入框。
     if (typeof window.parseManualInput === 'function') {
