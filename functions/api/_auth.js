@@ -2,6 +2,7 @@
 // Web：HttpOnly Cookie；微信小程序/Android：Bearer Token。
 // 所有客户端最终映射到同一个 userId，并实时校验用户状态与 sessionVersion。
 import { getUser, normalizeRoute, normalizeRole } from './_data.js';
+import { getUserProfile, setUserProfile } from './v3/data.js';
 
 const WEB_SESSION_TTL = 8 * 60 * 60;
 const TOKEN_SESSION_TTL = 30 * 24 * 60 * 60;
@@ -100,16 +101,36 @@ export async function verifySession(request, env) {
   if (!user || user.status === 'disabled') return null;
   if (Number(user.sessionVersion || 1) !== Number(session.sessionVersion || 1)) return null;
 
+  const profile = await getUserProfile(env, user.id) || {
+    userId: String(user.id),
+    boundRouteId: normalizeRoute(user.boundRouteId),
+    routeDuty: String(user.routeDuty || ''),
+    status: String(user.status || 'active'),
+    approvedAt: user.approvedAt || '',
+    updatedAt: new Date().toISOString()
+  };
+  if (profile.boundRouteId !== normalizeRoute(user.boundRouteId) || profile.routeDuty !== String(user.routeDuty || '') || profile.status !== String(user.status || 'active')) {
+    await setUserProfile(env, user.id, {
+      ...profile,
+      userId: String(user.id),
+      boundRouteId: normalizeRoute(user.boundRouteId),
+      routeDuty: String(user.routeDuty || ''),
+      status: String(user.status || 'active'),
+      approvedAt: user.approvedAt || profile.approvedAt || ''
+    }).catch(() => {});
+  }
   return {
     ...session,
     username: String(user.username || session.username || ''),
     name: String(user.name || session.name || user.username || ''),
-    route: normalizeRoute(user.boundRouteId),
-    boundRouteId: normalizeRoute(user.boundRouteId),
+    route: normalizeRoute(profile.boundRouteId),
+    boundRouteId: normalizeRoute(profile.boundRouteId),
     role: normalizeRole(user.role),
+    routeDuty: String(profile.routeDuty || ''),
     adminLevel: String(user.adminLevel || ''),
     vehicle: String(user.vehicle || ''),
-    status: String(user.status || 'active'),
+    status: String(profile.status || user.status || 'active'),
+    v3Profile: profile,
     user
   };
 }
