@@ -27,7 +27,7 @@ async function saveOrder(request, env, session) {
   const routeRecord = await getRoute(env, route);
   if (!routeRecord || routeRecord.status === 'disabled') return json({ error: '当前线路不存在或已停用' }, 404);
   // /api/orders POST 仅保留“订单详情页更换车辆”这一增量写操作。
-  // 正式运单录入必须经过 /api/confirm，避免出现“今日订单已写入、历史记录未生成”的半确认状态。
+  // 正式运单录入统一由 /api/auto-plan 完成；本接口只允许订单详情页对已确认批次进行车辆更新。
   const source = String(body.source || '').trim();
   if (source !== 'order-detail') return json({ error: '订单录入请使用确认接口' }, 409);
   if (!String(body.orderBatchId || '').trim()) return json({ error: '缺少原订单批次，不能修改车辆' }, 400);
