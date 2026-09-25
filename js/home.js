@@ -271,26 +271,34 @@ window.goToOrderDetail=async()=>{
 window.goToHistory=()=>navigateApp('pages/history.html');
 window.logout=()=>Auth.logout();
 window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);window.__zspParseContext=null;if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;window.resetProcessingStatus?.();window.renderReviewStores?.([]);closeUploadDetail?.();};
-window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');const taskId=Number(options?.taskId)||ensureUploadTask();if(taskId&&!isUploadTaskActive(taskId))return[];if(parseInFlight)return auto?[]:toast('运单正在处理，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',28,'正在提取门店…');const data=await parseOrderText(text,taskId);if(taskId&&!isUploadTaskActive(taskId))return[];window.renderUnifiedStatus('loading',68,'正在匹配基准库…');parsedOrders=Array.isArray(data.stores)?data.stores:[];const parseContextId=`parse-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;const parsedRoute=String(data?.route||currentRoute()||'').trim();if(parsedRoute&&Auth.setDispatchRoute)Auth.setDispatchRoute(parsedRoute);const parsedUserId=String(data?.userId||((typeof Auth!=='undefined'&&Auth.serverUser)?(Auth.serverUser.id||Auth.serverUser.username||Auth.serverUser.account||''):'')).trim();data.parseContextId=parseContextId;window.__zspParseContext={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||'',vehicle:data.vehicle||'',totalWeight:data.totalWeight||'',stores:parsedOrders.map(item=>({...item}))};pendingMeta={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;if(taskId&&!isUploadTaskActive(taskId))return[];// 解析结果保留OCR/人工原文，不再把结构化摘要回写到输入框；这样用户可直接核对并修改原文，修改后由输入监听使当前解析结果失效并重新处理。\nwindow.onOrderParsed?.(data);reviewMode=true;
-if(!parsedOrders.length){
-  throw Error('未识别到有效门店，请重新上传');
-}
-window.renderUnifiedStatus('loading',86,'正在生成配送顺序…');
-// 规划成功后直接进入服务器入库；自动录入模块异常也必须进入统一失败出口。
-if(typeof window.submitManualOrder==='function'){
-  window.submitManualOrder({auto:true}).catch(error=>window.handleUploadProcessingFailure?.(error?.message||'运单保存失败，请重新上传',error?.code||((error?.serverStage==='save')?'SAVE_FAILED':error?.name==='AbortError'?'TIMEOUT':'')));
-}else{
-  ensureConfirmModule().then(loaded=>{
-    if(loaded&&typeof window.submitManualOrder==='function'){
-      window.submitManualOrder({auto:true}).catch(error=>window.handleUploadProcessingFailure?.(error?.message||'运单保存失败，请重新上传'));
-    }else{
-      window.handleUploadProcessingFailure?.('自动录入模块加载失败，请重新上传');
-    }
-  }).catch(error=>{
-    console.error('自动录入模块加载失败',error);
-    window.handleUploadProcessingFailure?.(error?.message||'自动录入模块加载失败，请重新上传',error?.code||'');
-  });
-}return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'||/已取消|取消处理/.test(String(e?.message||''))){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.handleUploadProcessingFailure?.(e.message||'处理失败，请重新上传',e.code||'');if(auto)throw e;return[]}};
+window.parseManualInput=async(options={})=>{
+ const auto=options?.auto===true,source=String(options?.source||'manual'),taskId=Number(options?.taskId)||ensureUploadTask();
+ if(taskId&&!isUploadTaskActive(taskId))return[];
+ if(parseInFlight)return auto?[]:toast('运单正在处理，请勿重复操作','warning');
+ const text=$('manualOrderInput')?.value||'';
+ if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return[];}
+ parseInFlight=true;parseCancelled=false;parseAbortController=new AbortController();
+ try{
+  window.renderUnifiedStatus('loading',45,'正在规划线路…');
+  const route=currentRoute();if(!route)throw Object.assign(new Error('未指定配送线路'),{code:'ROUTE_REQUIRED'});
+  const body={route,date:parseDateFromText(text)||currentDate(),vehicle:parseVehicleFromText(text),totalWeight:parseWeightFromText(text),text};
+  const response=await fetch('/api/auto-plan',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',signal:parseAbortController.signal,body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.success)throw Object.assign(new Error(data.message||'自动规划未完成'),{code:data.code,stage:data.stage});
+  if(taskId&&!isUploadTaskActive(taskId))return[];
+  const result=data.result||{};parsedOrders=Array.isArray(result.stores)?result.stores:[];
+  if(!parsedOrders.length&&!Array.isArray(result.pendingStores))throw Object.assign(new Error('未识别到有效门店'),{code:'EXTRACT_FAILED'});
+  const parsedRoute=String(result.route||route).trim();if(parsedRoute&&Auth.setDispatchRoute)Auth.setDispatchRoute(parsedRoute);
+  pendingMeta={parseContextId:data.taskId,userId:String(Auth.serverUser?.id||''),route:parsedRoute,date:result.date||body.date,vehicle:result.vehicle||body.vehicle,totalWeight:result.totalWeight||body.totalWeight,rawOrderCount:Number(result.rawCount)||0,matchedCount:parsedOrders.length,newStoreCount:Array.isArray(result.newStores)?result.newStores.length:0,reviewCount:Array.isArray(result.pendingStores)?result.pendingStores.length:0,duplicateCount:Number(result.merged)||0,recognizedCount:Number(result.rawCount)||0,uniqueStoreCount:Number(result.totalStores)||parsedOrders.length,baseDatabaseAvailable:true,source};
+  window.__zspParseContext={...pendingMeta,stores:parsedOrders};
+  reviewMode=true;window.renderUnifiedStatus('success',100,'规划完成');window.onOrderParsed?.({success:true,...result,stores:parsedOrders});
+  return parsedOrders;
+ }catch(e){
+  if(e?.name==='AbortError'||e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[];}
+  window.handleUploadProcessingFailure?.(e.message||'规划失败，请重新上传',e.code||'PLAN_FAILED');if(auto)throw e;return[];
+ }finally{parseAbortController=null;parseInFlight=false;}
+};
+
 async function refreshHomeOrder(){
   const seq=++homeOrderLoadSeq;
   const route=String(currentRoute()||'').trim();
