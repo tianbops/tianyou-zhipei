@@ -79,8 +79,7 @@
       list.appendChild(card);
     });
     body.appendChild(list);
-    const button=$('primaryActionBtn'),cancel=$('.sheet-footer .btn-cancel');
-    if(button){button.textContent='完成确认';button.disabled=false;button.classList.add('ready');button.onclick=applyReview;}
+    const cancel=$('.sheet-footer .btn-cancel');
     window.__pendingReviewFooterMode=true;
     if(cancel){cancel.textContent='返回';cancel.onclick=()=>window.closePendingReviewDetail?.();}
     view.hidden=false;view.setAttribute('aria-hidden','false');
@@ -94,9 +93,8 @@
     view.hidden=true;view.setAttribute('aria-hidden','true');
     const sheet=document.querySelector('.upload-sheet');
     sheet?.classList.remove('detail-view-open','detail-mode-review');
-    const button=$('primaryActionBtn'),cancel=$('.sheet-footer .btn-cancel');
-    if(button){button.textContent='';button.classList.remove('ready');button.disabled=false;button.hidden=true;button.setAttribute('aria-hidden','true');button.onclick=null;}
-    if(cancel){cancel.textContent='取消';cancel.onclick=()=>window.cancelUpload?.();}
+    const cancel=$('.sheet-footer .btn-cancel');
+    if(cancel)/{cancel.textContent='取消';cancel.onclick=()=>window.cancelUpload?.();}
     window.__pendingReviewFooterMode=false;
   };
   function writeReviewText(stores){
@@ -162,7 +160,6 @@
   async function confirm(options={}){
     const autoConfirm=options?.auto===true;
     const input=$('manualOrderInput');
-    const button=$('primaryActionBtn');
     if(confirmInFlight)return;
     confirmInFlight=true;
     confirmStartedAt=Date.now();
@@ -198,11 +195,6 @@
         window.renderUnifiedStatus?.('error',100,'未指定配送线路');
         return;
       }
-      if(button){
-        button.disabled=true;
-        button.textContent='正在录入…';
-      }
-
       const currentText=String(input?.value||'');
       const totalWeight=metaState.totalWeight||weightFromText(currentText);
       const textDate=extractDateFromText(currentText);
