@@ -1,10 +1,10 @@
 // 天友智配One V1.0 - 用户线路申请/解除绑定
 import { authRequired } from './_auth.js';
 import {
-  canUseRoute, encodeKey, getRoute, getUser, normalizeRoute, publicUser,
-  redisCommand, redisGet, redisSet, routeRecordKey, atomicRouteBinding
+  canUseRoute, encodeKey, getUser, normalizeRoute, publicUser,
+  redisCommand, redisGet, redisSet, atomicRouteBinding
 } from './_data.js';
-import { userProfileKey } from './v3/data.js';
+import { userProfileKey, routeKey as v3RouteKey, getRoute as getV3Route } from './v3/data.js';
 
 const REQUEST_PREFIX = 'route:binding-request:';
 const USER_REQUEST_PREFIX = 'route:binding-request:user:';
@@ -120,7 +120,7 @@ async function unbindSelf(env, user) {
 
   const route = normalizeRoute(user.boundRouteId);
   if (!route) return json({ success: false, error: '当前账号未绑定线路' }, 409);
-  const current = await getRoute(env, route);
+  const current = await getV3Route(env, route);
   if (!current) return json({ success: false, error: '绑定线路不存在，请联系管理员' }, 404);
 
   const duty = String(user.routeDuty || '').trim().toLowerCase();
@@ -171,7 +171,7 @@ async function unbindSelf(env, user) {
     }
   }];
   await atomicRouteBinding(env, {
-    routeKey: routeRecordKey(route),
+    routeKey: v3RouteKey(route),
     expectedRouteUpdatedAt: current.updatedAt || '',
     routeRecord: updatedRoute,
     userUpdates: updates,
