@@ -22,7 +22,17 @@ async function loadRecord(){
     const params=new URLSearchParams();
     if(currentDate)params.set('date',currentDate);
     if(includeRoute&&currentRoute)params.set('route',currentRoute);
-    const r=await fetch('/api/history?'+params.toString(),{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),12000);
+    let r;
+    try{
+      r=await fetch('/api/history?'+params.toString(),{cache:'no-store',headers:authHeaders(),credentials:'same-origin',signal:controller.signal});
+    }catch(error){
+      if(error?.name==='AbortError')throw Error('历史数据读取超时，请返回历史查询后重试');
+      throw error;
+    }finally{
+      clearTimeout(timer);
+    }
     if(!r.ok)throw Error('历史数据服务不可用（'+r.status+'）');
     const payload=await r.json().catch(()=>[]);
     return Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
