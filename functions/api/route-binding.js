@@ -1,10 +1,10 @@
 // 天友智配One V1.0 - 用户线路申请/解除绑定
 import { authRequired } from './_auth.js';
 import {
-  canUseRoute, encodeKey, getUser, normalizeRoute, publicUser,
+  encodeKey, getUser, normalizeRoute, publicUser,
   redisCommand, redisGet, redisSet, atomicRouteBinding
 } from './_data.js';
-import { userProfileKey, routeKey as v3RouteKey, getRoute as getV3Route, bindingRequestKey, bindingRequestUserKey, bindingRequestIndexKey } from './v3/data.js';
+import { canUseRoute as canUseV3Route, userProfileKey, routeKey as v3RouteKey, getRoute as getV3Route, bindingRequestKey, bindingRequestUserKey, bindingRequestIndexKey } from './v3/data.js';
 
 const REVIEW_LOCK_TTL_SECONDS = 30;
 
@@ -45,7 +45,7 @@ async function createRequest(env, user, request) {
   const duty = String(body.duty || '').trim().toLowerCase();
   if (!route) return json({ success: false, error: '请选择有效线路' }, 400);
   if (!['driver', 'delivery'].includes(duty)) return json({ success: false, error: '请选择驾驶员或配送员身份' }, 400);
-  if (!canUseRoute(user, route)) return json({ success: false, error: '当前账号不可使用该线路' }, 403);
+  if (!canUseV3Route(user, route)) return json({ success: false, error: '当前账号不可使用该线路' }, 403);
 
   const boundRoute = normalizeRoute(user.boundRouteId);
   if (boundRoute === route) return json({ success: false, error: '当前账号已在该线路，无需重复申请' }, 409);
