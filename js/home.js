@@ -413,8 +413,9 @@ if(parsedOrders.length){
   pendingReviewCount=parsedOrders.filter(item=>item?.needsReview===true).length;
   statusBaseDetails=statusDetails.slice();
   const structuredStatus={left:resultDate,right:`${uniqueCount}家 · ${resultWeight}`,compact:true,details:[...statusBaseDetails,...(pendingReviewCount>0?[`待定${pendingReviewCount}家`]:[])]};
-  window.renderUnifiedStatus('success',100,structuredStatus);
-  window.renderStatusDetail?.(structuredStatus.details);
+  // 规划完成后继续沿用同一个状态框进入自动保存阶段；最终成功由录入流程统一处理。
+  window.renderUnifiedStatus('loading',86,'规划完成，正在保存运单及修正记录…');
+  window.renderStatusDetail?.([...structuredStatus.details,'正在保存运单及修正记录']);
 }else{window.clearStatusDetail?.();correctionDetails=[];correctionStats={raw:0,corrected:0,merged:0};statusBaseDetails=[];pendingReviewCount=0;setCorrectionSummary(0);}
 if(parsedOrders.length){
   // 规划成功后直接进入服务器入库；不再要求用户点击“确认录入”。
