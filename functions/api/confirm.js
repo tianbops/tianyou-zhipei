@@ -435,19 +435,33 @@ function normalizeOrder(item, index, batchId, date, route) {
 }
 
 function buildCorrectionDetails(orders) {
-  return (Array.isArray(orders) ? orders : [])
-    .map(item => {
-      const from = String(item?.rawName || '').trim();
-      const to = String(item?.baseName || item?.name || '').trim();
-      if (!from || !to || from === to || !isTrueNameCorrection(from, to)) return null;
-      return {
+  const result = [];
+  const seen = new Set();
+  for (const item of Array.isArray(orders) ? orders : []) {
+    const to = String(item?.baseName || item?.name || '').trim();
+    if (!to) continue;
+    const rawNames = [
+      ...(Array.isArray(item?.rawNames) ? item.rawNames : []),
+      item?.rawName
+    ].map(value => String(value || '').trim()).filter(Boolean);
+    for (const from of rawNames) {
+      if (from === to || !isTrueNameCorrection(from, to)) continue;
+      const key = [
+        String(item?.storeId || '').trim(),
+        correctionCompareKey(from),
+        correctionCompareKey(to)
+      ].join('\\u0000');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
         storeId: String(item?.storeId || '').trim(),
         code: String(item?.code || '').trim(),
         from,
         to
-      };
-    })
-    .filter(Boolean);
+      });
+    }
+  }
+  return result;
 }
 
 function correctionCompareKey(value) {
