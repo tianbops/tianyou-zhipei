@@ -2,6 +2,9 @@
 import { get as redisGet, set as redisSet, evalRedis, v3Key } from './_redis.js';
 export { v3Key };
 export function routeKey(route){return v3Key('route',normalizeRoute(route));}
+export function userProfileKey(userId){return v3Key('user',String(userId||'').trim(),'profile');}
+export async function getUserProfile(env,userId){const v=await redisGet(env,userProfileKey(userId));return v&&typeof v==='object'?v:null;}
+export async function setUserProfile(env,userId,value){return redisSet(env,userProfileKey(userId),{...value,userId:String(userId||'').trim(),schemaVersion:3,updatedAt:new Date().toISOString()});}
 export async function getRoute(env,route){const v=await redisGet(env,routeKey(route));return v&&v.id?{...v,id:normalizeRoute(v.id),name:v.name||normalizeRoute(v.id)}:null;}
 export async function setRoute(env,route,value){return redisSet(env,routeKey(route),{...value,id:normalizeRoute(route),name:value?.name||normalizeRoute(route),schemaVersion:3});}
 export function baseKey(route){return v3Key('route',normalizeRoute(route),'base');}
@@ -21,6 +24,14 @@ export async function getLearning(env,route){const v=await redisGet(env,learning
 export async function setLearning(env,route,value){return redisSet(env,learningKey(route),{...value,schemaVersion:3,route:normalizeRoute(route)});}
 export async function acquireRouteDateLock(env,route,date,token,seconds=30){const script="if redis.call('SET',KEYS[1],ARGV[1],'NX','EX',ARGV[2]) then return 'OK' else return 'BUSY' end";return (await evalRedis(env,script,[lockKey(route,date)],[token,String(seconds)]))==='OK';}
 export async function releaseRouteDateLock(env,route,date,token){const script="if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end";return evalRedis(env,script,[lockKey(route,date)],[token]);}
-export function canUseRoute(session,route){return Boolean(session&&session.status!=='disabled'&&normalizeRoute(route));}
-export function isRouteMaintainer(session,route){return Boolean(session&&normalizeRoute(session.boundRouteId)===normalizeRoute(route));}
+export function canUseRoute(session,route){
+ const r=normalizeRoute(route); if(!session||session.status==='disabled'||!r)return false;
+ const p=session.v3Profile||session; if(p.status==='disabled')return false;
+ // V3：已有线路均可调度；绑定线路用户保留其维护权限，不允许跨线路修改基准库。
+ return true;
+}
+export function isRouteMaintainer(session,route){
+ const r=normalizeRoute(route), p=session?.v3Profile||session;
+ return Boolean(p&&['driver','delivery'].includes(String(p.routeDuty||'').toLowerCase())&&normalizeRoute(p.boundRouteId)===r);
+}
 export { redisGet, redisSet };
