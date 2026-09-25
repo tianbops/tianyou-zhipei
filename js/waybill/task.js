@@ -14,7 +14,7 @@
     task=create(input);controller=new AbortController();
     try{
       setStage('RECOGNIZING');
-      const ocr=await input.ocr();
+      const ocr=input.ocrText?{text:input.ocrText}:await input.ocr();
       if(!ocr?.text)throw Object.assign(Error('运单识别失败'),{code:'OCR_INVALID'});
       task.ocrText=ocr.text;setStage('EXTRACTING');setStage('MATCHING');
       const r=await fetch('/api/auto-plan',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',signal:controller.signal,body:JSON.stringify({...input.waybill,text:ocr.text})});
