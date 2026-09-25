@@ -98,7 +98,21 @@ window.Auth = {
 
   async getCurrentServerUser(force = false) {
     if (this.serverUser && !force) return this.serverUser;
-    const response = await fetch('/api/me', { cache: 'no-store', credentials: 'same-origin' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    let response;
+    try {
+      response = await fetch('/api/me', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') throw Object.assign(new Error('登录状态读取超时'), { status: 408 });
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!response.ok) {
       this.serverUser = null;
       return null;
