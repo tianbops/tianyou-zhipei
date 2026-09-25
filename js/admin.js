@@ -11,6 +11,10 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   $('#createRoute').onclick=createRoute;
   $('#cancelRouteEdit').onclick=closeRouteEditor;
   $('#refreshRequests').onclick=loadRequests;
+  $('#refreshInvites').onclick=loadInvites;
+  $('#showCreateInvite').onclick=()=>$('#inviteCreatePanel').classList.remove('hidden');
+  $('#cancelCreateInvite').onclick=()=>$('#inviteCreatePanel').classList.add('hidden');
+  $('#createInvite').onclick=createInvite;
   $('#refreshLogs').onclick=loadLogs;
   $('#resetDataBtn').onclick=resetData;
   $('#toggleResetKey').onclick=()=>toggleResetKey();
@@ -24,7 +28,7 @@ async function boot(){
     const me=await api('/api/me');
     if(!me.success||me.user?.role!=='system_admin'||me.user?.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
     $('#adminUser').textContent=(me.user.name||me.user.username)+' · 主系统管理员';
-    const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadLogs()]);
+    const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadInvites(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
     if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
   }catch(e){notice(e.message||'管理员身份验证失败',true)}
@@ -66,6 +70,37 @@ async function reviewRouteRequest(id,action){
     notice(`线路绑定申请已${label}`);
     await Promise.all([loadRequests(),loadUsers(),loadRoutes()]);
   }catch(e){notice(e.message,true)}
+}
+async function loadInvites(){
+  try{
+    const r=await api('/api/admin/invites'); if(!r.success) throw new Error(r.error||'邀请码读取失败');
+    renderInvites(r.invites||[]);
+  }catch(e){notice(e.message,true);throw e}
+}
+async function createInvite(){
+  const button=$('#createInvite'); button.disabled=true; button.textContent='创建中…';
+  try{
+    const r=await api('/api/admin/invites',{method:'POST',body:{maxUses:$('#inviteUses').value,expiresIn:$('#inviteExpiry').value}});
+    if(!r.success) throw new Error(r.error||'邀请码创建失败');
+    $('#inviteCreatePanel').classList.add('hidden'); await loadInvites();
+    const code=r.invite?.code||'';
+    if(code){ const copied=await navigator.clipboard?.writeText(code).then(()=>true).catch(()=>false); await OneModal.alert('邀请码：'+code+(copied?'\\n\\n已自动复制。':'\\n\\n请立即复制保存；出于安全考虑，之后管理员页面不会再次显示完整明文。'),{title:'邀请码已创建'}); }
+    else notice('邀请码已创建');
+  }catch(e){notice(e.message||'邀请码创建失败',true)}
+  finally{button.disabled=false;button.textContent='创建邀请码'}
+}
+function renderInvites(list){
+  $('#inviteList').innerHTML=list.map(x=>{
+    const uses=x.maxUses===0?'不限':(x.usedCount+'/'+x.maxUses+' 次');
+    const expiry=x.expiresAt?new Date(x.expiresAt).toLocaleDateString('zh-CN'):'永久';
+    const label=x.status==='active'?'有效':x.status==='exhausted'?'已用完':x.status==='expired'?'已过期':'已停用';
+    const action=x.status==='active'?'<button onclick="setInviteStatus(\''+escAttr(x.hash)+'\',\'disabled\')">停用</button>':'';
+    return '<article class="invite-card"><div class="invite-main"><div><div class="name">邀请码 '+esc(x.maskedCode||'••••-••••')+'</div><div class="meta">'+esc(uses)+' · '+esc(expiry)+'</div></div><span class="badge">'+esc(label)+'</span></div><div class="meta">创建：'+esc(x.createdAt||'')+(x.lastUsedAt?' · 最后使用：'+esc(x.lastUsedAt):'')+'</div><div class="actions">'+action+'</div></article>';
+  }).join('')||'<div class="empty-state">暂无邀请码</div>';
+}
+async function setInviteStatus(hash,status){
+  if(!await OneModal.confirm('确定停用这个邀请码吗？停用后无法继续注册使用？',{title:'停用邀请码',confirmText:'停用',danger:true})) return;
+  try{ const r=await api('/api/admin/invites',{method:'PATCH',body:{hash,status}}); if(!r.success) throw new Error(r.error||'操作失败'); notice('邀请码已停用'); await loadInvites(); }catch(e){notice(e.message||'操作失败',true)}
 }
 async function loadLogs(){
   const endpoint='/api/admin/logs';
@@ -144,6 +179,7 @@ function switchTab(tab){
   $('#logsTab').classList.toggle('hidden',tab!=='logs');
   $('#requestsTab').classList.toggle('hidden',tab!=='requests');
   $('#resetTab').classList.toggle('hidden',tab!=='reset');
+  $('#invitesTab').classList.toggle('hidden',tab!=='invites');
 }
 function toggleResetKey(){
   const input=$('#resetKey');
