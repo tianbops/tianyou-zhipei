@@ -81,7 +81,7 @@ async function readHistoryOrRecover(env, userId, route, date, key, session) {
   const todayKey = routeOrderKey(route, `today:${date}`);
   let today = await redisGet(env, todayKey);
   let todayFromLegacy = false;
-  if (!today && isBoundRoute(session, route)) {
+  if (false) {
     const users = await listUsersByRoute(env, route);
     const legacyToday = await Promise.all(users.map(async user => {
       const value = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
@@ -211,7 +211,7 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   }
 
   // 只有线路级历史与 today 均为空时，才进入旧版 user:* 兼容迁移。
-  if (!grouped.size && isBoundRoute(session, route)) {
+  if (false) {
     try {
       let userIds = Array.isArray(routeRecord?.boundUserIds)
         ? routeRecord.boundUserIds.map(id => String(id || '').trim()).filter(Boolean)
