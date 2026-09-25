@@ -177,7 +177,8 @@ export async function onRequest({ request, env }) {
         history: historyPayload,
         latest: { date, orderBatchId, updatedAt: saved.updatedAt }
       });
-      if (writeResult !== 'OK') throw new Error('订单保存时数据发生变化，请重试');
+      if (writeResult === 'LOCK_LOST') throw new Error('订单保存锁已失效，请刷新后重试');
+      if (writeResult !== 'OK') throw new Error(`订单保存原子提交未确认（${writeResult || 'unknown'}）`);
 
       // 返回成功前同时核验今日与历史，保证“确认成功”与两份核心数据一致。
       stage = 'verify-order-history';
@@ -484,7 +485,9 @@ async function saveHistoryAndLatest(env, userId, route, date, today, latest, loc
 }
 
 async function atomicSaveOrder(env, { lockKey, lockToken, todayKey, historyKey, latestKey, expectedToday, expectedHistory, today, history, latest }) {
-  const script = '\nlocal lock = redis.call("GET", KEYS[1])\nif lock ~= ARGV[1] then return "LOCK_LOST" end\nlocal currentToday = redis.call("GET", KEYS[2])\nif currentToday ~= ARGV[2] then return "CONFLICT_TODAY" end\nlocal currentHistory = redis.call("GET", KEYS[3])\nif currentHistory ~= ARGV[3] then return "CONFLICT_HISTORY" end\nredis.call("SET", KEYS[2], ARGV[4])\nredis.call("SET", KEYS[3], ARGV[5])\nredis.call("SET", KEYS[4], ARGV[6])\nreturn "OK"\n';
+  // 日期锁已经是本接口的并发互斥条件；锁内再比较 JSON 字符串会产生无意义的“数据发生变化”假冲突。
+  // 所有会修改同一线路+日期订单数据的写入口均使用同一日期锁，因此以锁作为提交闸门，并在同一个 EVAL 内完成三项写入。
+  const script = '\nlocal lock = redis.call("GET", KEYS[1])\nif lock ~= ARGV[1] then return "LOCK_LOST" end\nredis.call("SET", KEYS[2], ARGV[4])\nredis.call("SET", KEYS[3], ARGV[5])\nredis.call("SET", KEYS[4], ARGV[6])\nreturn "OK"\n';
   const stringify = value => value === null || value === undefined ? '' : JSON.stringify(value);
   return redisCommand(env, [
     'EVAL', script, '4', lockKey, todayKey, historyKey, latestKey,
