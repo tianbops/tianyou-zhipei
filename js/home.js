@@ -210,13 +210,21 @@ function openUploadEntryAfterReload(){
 }
 window.handleUploadProcessingFailure=(message='运单处理失败，请重新上传')=>{
   if(uploadFailureTimer)clearTimeout(uploadFailureTimer);
+  // P0失败收口：先立即失效当前上传任务并清空所有临时数据，再只停留极短时间显示失败态。
+  // 不等待OCR/解析资源释放，旧异步任务随后即使迟到也因taskId失效而不能写回页面。
+  try{window.invalidateUploadTask?.();}catch(_){}
+  try{window.clearManualInput?.();}catch(_){}
+  try{window.resetProcessingStatus?.();}catch(_){}
+  const target=new URL('./home.html',document.baseURI);
+  target.searchParams.set('upload','retry');
+  target.searchParams.set('t',String(Date.now()));
+  try{sessionStorage.setItem('zpeiUploadRetry','1');}catch(_){}
   window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');
   uploadFailureTimer=setTimeout(()=>{
     uploadFailureTimer=null;
-    // 失败返回采用“整页硬重置”：不在旧页面里等待OCR/解析异步清理。
-    // 浏览器导航会直接销毁旧任务和临时状态，重新加载后再打开上传入口。
-    location.replace('home.html?upload=retry');
-  },700);
+    // URL必须带一次性时间戳，避免Cloudflare/浏览器继续命中旧的失败页状态。
+    window.location.replace(target.href);
+  },650);
 };
 window.cancelUpload=()=>{
   const overlay=$('uploadOverlay');
@@ -289,9 +297,11 @@ document.addEventListener('DOMContentLoaded',async()=>{try{if(typeof Auth==='und
 if(!(await Auth.checkAuth()))return;
 const autoOpenUpload=new URLSearchParams(location.search).get('upload')==='retry';const me=await Auth.getCurrentServerUser();if(me?.adminLevel==='primary'){location.replace('admin.html');return;}
 if(autoOpenUpload){
-  // 失败返回页先清掉一次性参数，再立即打开上传入口；不等待线路/当日数据请求。
+  try{sessionStorage.removeItem('zpeiUploadRetry')}catch(_){ }
   history.replaceState(history.state||{},'',location.pathname);
   openUploadEntryAfterReload();
+}else{
+  try{if(sessionStorage.getItem('zpeiUploadRetry')==='1'){sessionStorage.removeItem('zpeiUploadRetry');openUploadEntryAfterReload();}}catch(_){ }
 }
 await loadDispatchRoutes();ensureConfirmModule().catch(()=>{});const initialSeq=++homeOrderLoadSeq;const initialRoute=String(currentRoute()||'').trim();const loaded=await loadServerOrder(currentDate(),initialRoute);if(initialSeq===homeOrderLoadSeq&&String(currentRoute()||'').trim()===initialRoute){serverOrder=loaded;updateSummary()}$('manualOrderInput')?.addEventListener('input',function(){if(reviewMode){reviewMode=false;parsedOrders=[];window.onOrderParsed?.({stores:[]});window.renderUnifiedStatus('idle',0,'订单信息已修改，请重新上传运单')}});document.addEventListener('click',event=>{const menu=$('homeMenu'),button=document.querySelector('.menu-btn');if(menu&&menu.style.display==='block'&&!menu.contains(event.target)&&!button?.contains(event.target))menu.style.display='none'})}catch(e){console.error('首页初始化失败',e);error(e.message||'首页初始化失败')}});
 window.addEventListener('pageshow',event=>{document.body.classList.remove('is-leaving');const menu=$('homeMenu');if(menu)menu.style.display='none';if(event.persisted){const overlay=$('uploadOverlay');window.clearManualInput?.();if(overlay)overlay.classList.remove('active');closeUploadSource();if(typeof Auth!=='undefined')refreshHomeOrder()}});
