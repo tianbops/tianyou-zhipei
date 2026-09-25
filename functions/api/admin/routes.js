@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：线路绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { baseKey as v3BaseKey, routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route } from '../v3/data.js';
+import { baseKey as v3BaseKey, routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route, getUserProfile } from '../v3/data.js';
 import { getUser, normalizeRoute, encodeKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand } from '../_data.js';
 
 export async function onRequest({ request, env }) {
@@ -81,7 +81,8 @@ export async function onRequest({ request, env }) {
     for (const id of ids) {
       const user = await getUser(env, id);
       if (!user || user.status === 'disabled') return json({ success: false, error: '绑定用户不存在或已停用' }, 400);
-      const bound = normalizeRoute(user.boundRouteId);
+      const profile = await getUserProfile(env, user.id);
+      const bound = normalizeRoute(profile?.boundRouteId || user.boundRouteId);
       if (bound && bound !== route) return json({ success: false, error: `用户 ${user.name || user.username} 已绑定 ${bound}，一个用户只能绑定一条线路` }, 409);
       users.push(user);
     }
