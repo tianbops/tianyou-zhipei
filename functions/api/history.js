@@ -255,14 +255,17 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   });
   legacyTodayKeys.forEach(key => {
     const date = normalizeDate(String(key).split(':today:').pop());
-    if (!date || routeTodayKeys.some(routeKey => String(routeKey).endsWith(':today:' + date))) return;
+    if (!date || existingRouteTodayKeys.some(routeKey => String(routeKey).endsWith(':today:' + date))) return;
     keyMap.set(key, { type: 'today', source: 'legacy' });
   });
 
   const keys = [...keyMap.keys()];
   if (!keys.length) return json([]);
 
-  const values = keys.map(key => routeValueMap.has(key) ? routeValueMap.get(key) : null);
+  const missingKeys = keys.filter(key => !routeValueMap.has(key));
+  const missingValues = missingKeys.length ? await redisPipelineGet(env, missingKeys) : [];
+  const missingValueMap = new Map(missingKeys.map((key, index) => [key, missingValues[index]]));
+  const values = keys.map(key => routeValueMap.has(key) ? routeValueMap.get(key) : missingValueMap.get(key));
   const grouped = new Map();
 
   // 路线级 history 优先；同日期的 legacy history 不参与，避免部分删除后旧数据复活。
