@@ -96,9 +96,36 @@ function normalizeOcrText(value) {
 function extractStores(source) {
   const routeText = extractRouteRegion(source);
   if (!routeText) return [];
-  const continuous = routeText.replace(/\s+/g, ' ').replace(/\s*->\s*/g, '->').trim();
-  if (continuous.includes('->')) return dedupeRawStores(continuous.split('->').map(part => cleanStoreName(stripOrderMetadata(part))).filter(isLikelyStore));
-  return dedupeRawStores(routeText.split('\n').map(line => cleanStoreName(stripOrderMetadata(line))).filter(isLikelyStore));
+
+  const cleanPart = value => cleanStoreName(stripOrderMetadata(value));
+  const normalLines = routeText
+    .split('\n')
+    .map(cleanPart)
+    .filter(isLikelyStore);
+  const arrowParts = routeText
+    .replace(/\s+/g, ' ')
+    .replace(/\s*->\s*/g, '->')
+    .split('->')
+    .map(cleanPart)
+    .filter(isLikelyStore);
+
+  // OCR 常把编号门店压成一行，或把换行吞掉；优先恢复“01、门店 / 1.门店 / 1)门店”结构。
+  const numbered = [];
+  const numberedPattern = /(?:^|\s|\|)(?:\d{1,3})\s*[、.．)）:-]\s*([^\d、.．)）:-][^\n|]*?)(?=\s+(?:\d{1,3})\s*[、.．)）:-]\s*|$)/g;
+  let match;
+  while ((match = numberedPattern.exec(routeText)) !== null) {
+    const name = cleanPart(match[1]);
+    if (isLikelyStore(name)) numbered.push(name);
+  }
+
+  // OCR 可能使用竖线分隔门店；只在常规换行/箭头没有提取到结果时启用。
+  const pipeParts = routeText
+    .split(/[|｜]/)
+    .map(cleanPart)
+    .filter(isLikelyStore);
+
+  const candidates = arrowParts.length ? arrowParts : normalLines.length ? normalLines : numbered.length ? numbered : pipeParts;
+  return dedupeRawStores(candidates);
 }
 
 function extractRouteRegion(source) {
