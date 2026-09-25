@@ -31,21 +31,6 @@ async function listRequests(env) {
   records.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   return json({ success: true, requests: records });
 }
-/* V3 list replacement marker */
-/*
-  do {
-    const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', 'zpei:v3:binding-request:*', 'COUNT', '200']);
-    cursor = String(result?.[0] || '0');
-    const keys = Array.isArray(result?.[1]) ? result[1] : [];
-    for (const key of keys) {
-      const value = await redisGet(env, key).catch(() => null);
-      if (value && typeof value === 'object' && value.id && value.status === 'pending') records.push(value);
-    }
-  } while (cursor !== '0');
-  records.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-  return json({ success: true, requests: records });
-}
-
 async function reviewRequest(env, admin, request) {
   const body = await request.json().catch(() => ({}));
   const requestId = String(body.requestId || '').trim();
