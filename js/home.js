@@ -189,12 +189,12 @@ async function parseOrderText(text,taskId=0){
 window.cancelParse=async()=>{invalidateUploadTask();if(parseAbortController){parseCancelled=true;parseAbortController.abort();}const cancelOCR=window.cancelOCR;if(typeof cancelOCR==='function')await cancelOCR().catch(()=>{});};
 
 function setPrimaryActionMode(mode){
-  primaryActionMode=mode==='confirm'?'confirm':mode==='error'?'error':'idle';
+  primaryActionMode=mode==='error'?'error':'idle';
   const button=$('primaryActionBtn');
   if(!button)return;
-  const visible=primaryActionMode==='confirm'||primaryActionMode==='error';
-  button.textContent=primaryActionMode==='confirm'?'确认录入':primaryActionMode==='error'?'重新上传':'';
-  button.classList.toggle('ready',primaryActionMode==='confirm');
+  const visible=primaryActionMode==='error';
+  button.textContent=primaryActionMode==='error'?'重新上传':'';
+  button.classList.toggle('ready',false);
   button.disabled=false;
   button.hidden=!visible;
   button.setAttribute('aria-hidden',visible?'false':'true');
@@ -202,106 +202,71 @@ function setPrimaryActionMode(mode){
 window.openUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.add('active');menu.setAttribute('aria-hidden','false');const sheet=menu.closest('.upload-sheet');sheet?.classList.add('waiting')}}
 window.closeUploadSource=()=>{const menu=$('uploadSourceMenu');if(menu){menu.classList.remove('active');menu.setAttribute('aria-hidden','true')}}
 window.handlePrimaryAction=async()=>{
-  if(primaryActionMode==='confirm'){
-    if(typeof window.submitManualOrder!=='function'){
-      const loaded=await ensureConfirmModule();
-      if(!loaded){
-        window.renderUnifiedStatus?.('error',100,'确认录入模块加载失败，请刷新页面后重试');
-        window.homeToast?.('确认录入模块加载失败，请刷新页面后重试','error');
-        return;
-      }
-    }
-    return window.submitManualOrder();
-  }
-  if(primaryActionMode==='error'){
-    window.restartUpload?.();
-  }
+  if(primaryActionMode==='error')window.restartUpload?.();
 };
 let uploadDetailMode='';
 function getCorrectionDetailText(){
   return Array.isArray(correctionDetails)&&correctionDetails.length?correctionDetails:[];
 }
-function renderUploadDetail(mode){
+function renderUploadDetail(){
   const view=$('uploadDetailView'),title=$('uploadDetailTitle'),body=$('uploadDetailBody');
   if(!view||!title||!body)return;
-  uploadDetailMode=mode==='correction'?'correction':'recognition';
+  uploadDetailMode='correction';
   const sheet=document.querySelector('.upload-sheet');
-  if(sheet){
-    sheet.classList.remove('detail-mode-planning','detail-mode-recognition','detail-mode-correction');
-    sheet.classList.add(`detail-mode-${uploadDetailMode}`);
-  }
-  title.textContent=uploadDetailMode==='correction'?'修正详情':'识别详情';
+  sheet?.classList.remove('detail-mode-planning','detail-mode-recognition');
+  sheet?.classList.add('detail-mode-correction');
+  title.textContent='修正详情';
   body.textContent='';
-  if(uploadDetailMode==='recognition'){
-    const sectionTitle=document.createElement('div');sectionTitle.className='detail-section-title';sectionTitle.textContent='当日订单信息';body.appendChild(sectionTitle);
-    const info=document.createElement('div');info.className='order-info-list';
-    const lines=String($('manualOrderInput')?.value||'').split(/\n/).map(v=>v.trim()).filter(Boolean);const values={};
-    lines.forEach(line=>{const m=line.match(/^(日期|线路|车辆|门店|重量|门店数|总重量)\\s*[:：]\\s*(.+)$/);if(m)values[m[1]]=m[2];});
-    [['日期',values.日期||pendingMeta.date||'未识别'],['线路',values.线路||currentRoute()||'未识别'],['车辆',values.车辆||pendingMeta.vehicle||'未识别'],['门店',values.门店||`${Number(pendingMeta.uniqueStoreCount)||parsedOrders.length}家`],['重量',values.重量||pendingMeta.totalWeight||'未识别']].forEach(([label,value])=>{const row=document.createElement('div');row.className='order-info-row';const left=document.createElement('span');left.textContent=`${label}：`;const right=document.createElement('strong');right.textContent=String(value||'未识别');row.append(left,right);info.appendChild(row);});
-    body.appendChild(info);const listTitle=document.createElement('div');listTitle.className='detail-subtitle';listTitle.textContent='门店列表';body.appendChild(listTitle);
-    const pre=document.createElement('pre');pre.className='upload-detail-text';
-    const detailStores=Array.isArray(parsedOrders)?parsedOrders:[];
-    if(detailStores.length){
-      const orderedStores=[...detailStores.filter(item=>item?.needsReview===true),...detailStores.filter(item=>item?.isNew===true&&item?.needsReview!==true),...detailStores.filter(item=>item?.needsReview!==true&&item?.isNew!==true)];
-      pre.textContent=orderedStores.map((item,index)=>{
-        const mark=item?.needsReview?'⚠️ 待定：':item?.isNew?'⚠️ 新增：':'';
-        return `${String(index+1).padStart(2,'0')}. ${mark}${storeName(item)}`;
-      }).join('\n');
-    }else{
-      const marker=lines.findIndex(v=>v.includes('门店列表'));
-      pre.textContent=marker>=0?(lines.slice(marker+1).join('\n')||'暂无门店列表'):'暂无门店列表';
-    }
-    body.appendChild(pre);
+  const sectionTitle=document.createElement('div');
+  sectionTitle.className='detail-section-title';
+  sectionTitle.textContent='当日更改信息';
+  body.appendChild(sectionTitle);
+  const stats=document.createElement('div');
+  stats.className='correction-stats';
+  [['原始',correctionStats.raw],['更正',correctionStats.corrected],['合并',correctionStats.merged]].forEach(([label,value])=>{
+    const item=document.createElement('div');
+    item.className='correction-stat';
+    const text=document.createElement('span');
+    text.textContent=label+'：'+(Number(value)||0)+'家';
+    item.appendChild(text);
+    stats.appendChild(item);
+  });
+  body.appendChild(stats);
+  const detailTitle=document.createElement('div');
+  detailTitle.className='detail-subtitle';
+  detailTitle.textContent='更改明细';
+  body.appendChild(detailTitle);
+  const items=getCorrectionDetailText();
+  if(!items.length){
+    const empty=document.createElement('div');
+    empty.className='upload-detail-empty';
+    empty.textContent='暂无修正记录';
+    body.appendChild(empty);
   }else{
-    const sectionTitle=document.createElement('div');
-    sectionTitle.className='detail-section-title';
-    sectionTitle.textContent='当日更改信息';
-    body.appendChild(sectionTitle);
-    const stats=document.createElement('div');
-    stats.className='correction-stats';
-    [['原始',correctionStats.raw],['更正',correctionStats.corrected],['合并',correctionStats.merged]].forEach(([label,value])=>{
-      const item=document.createElement('div');
-      item.className='correction-stat';
-      const text=document.createElement('span');
-      text.textContent=label+'：'+(Number(value)||0)+'家';
-      item.appendChild(text);stats.appendChild(item);
+    items.forEach(item=>{
+      const row=document.createElement('div');
+      row.className='correction-item';
+      const parts=String(item).split(' → ');
+      const left=document.createElement('span');left.className='correction-left';left.textContent=parts[0]||'';
+      const arrow=document.createElement('span');arrow.className='correction-arrow';arrow.textContent='→';
+      const right=document.createElement('span');right.className='correction-right';right.textContent=parts.slice(1).join(' → ')||'';
+      row.append(left,arrow,right);
+      body.appendChild(row);
     });
-    body.appendChild(stats);
-    const detailTitle=document.createElement('div');
-    detailTitle.className='detail-subtitle';
-    detailTitle.textContent='更改明细';
-    body.appendChild(detailTitle);
-    const items=getCorrectionDetailText();
-    if(!items.length){
-      const empty=document.createElement('div');
-      empty.className='upload-detail-empty';
-      empty.textContent='暂无修正记录';
-      body.appendChild(empty);
-    }else{
-      items.forEach(item=>{
-        const row=document.createElement('div');
-        row.className='correction-item';
-        const parts=String(item).split(' → ');
-        const left=document.createElement('span');left.className='correction-left';left.textContent=parts[0]||'';
-        const arrow=document.createElement('span');arrow.className='correction-arrow';arrow.textContent='→';
-        const right=document.createElement('span');right.className='correction-right';right.textContent=parts.slice(1).join(' → ')||'';
-        row.append(left,arrow,right);body.appendChild(row);
-      });
-    }
   }
   view.hidden=false;
   view.setAttribute('aria-hidden','false');
-  document.querySelector('.upload-sheet')?.classList.add('detail-view-open');
+  sheet?.classList.add('detail-view-open');
 }
 function closeUploadDetail(){
   const view=$('uploadDetailView');if(!view)return;
   view.hidden=true;view.setAttribute('aria-hidden','true');
   const sheet=document.querySelector('.upload-sheet');
-  sheet?.classList.remove('detail-view-open','detail-mode-planning','detail-mode-correction');
+  sheet?.classList.remove('detail-view-open','detail-mode-correction');
   uploadDetailMode='';
 }
 window.closeUploadDetail=closeUploadDetail;
-window.openCorrectionDetails=()=>renderUploadDetail('correction');
+window.openCorrectionDetails=()=>renderUploadDetail();
 window.restartUpload=()=>{window.clearManualInput?.();const overlay=$('uploadOverlay');if(!overlay)return;overlay.classList.add('active');openUploadHistoryGuard();window.renderUnifiedStatus?.('idle',0,'准备好开始今天的配送任务');window.openUploadSource?.();};
 let uploadHistoryGuard=false;
 function openUploadHistoryGuard(){
