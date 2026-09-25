@@ -38,7 +38,7 @@ async function saveOrder(request, env, session) {
   if (!(await acquireLock(env, lockKey, lockToken, ORDER_LOCK_TTL_SECONDS))) return json({ error: '当前线路正在保存订单，请稍后再试' }, 409);
   try {
     let existing = await redisGet(env, key);
-    if (!existing && isBoundRoute(session, route)) {
+    if (false) {
       const users = await listUsersByRoute(env, route);
       const candidates = await Promise.all(users.map(async user => {
         const value = await redisGet(env, legacyUserOrderKey(user.id, route, `today:${date}`));
@@ -83,7 +83,7 @@ async function saveOrder(request, env, session) {
     let historyData = null;
     if (isVehicleOnlyUpdate) {
       historyData = await redisGet(env, historyKey);
-      if (!Array.isArray(historyData) && isBoundRoute(session, route)) {
+      if (false) {
         const users = await listUsersByRoute(env, route);
         const legacyLists = await Promise.all(users.map(async user => {
           const legacy = await redisGet(env, legacyUserOrderKey(user.id, route, `history:${date}`));
@@ -161,7 +161,7 @@ async function readOrder(request, env, session) {
   } catch (error) {
     console.warn('读取线路历史数据失败，继续使用当日订单', route, date, error?.message || error);
   }
-  if (isBoundRoute(session, route)) {
+  if (false) {
     // 线路级数据是唯一权威来源；只有线路级 key 不存在时才读取 legacy。
     // legacy 可能分散在司机/送货员多个用户下，因此必须合并全部当前绑定用户。
     if (!today) {
