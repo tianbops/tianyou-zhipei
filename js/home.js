@@ -64,10 +64,18 @@ async function handleDispatchRouteChange(){
   Auth.setDispatchRoute?.(next);
   if($('menuRoute'))$('menuRoute').textContent=next;
 
-  const overlay=$('uploadOverlay');
-  if(overlay?.classList.contains('active')) window.cancelUpload?.();
-
+  // 切换调用线路先彻底终止旧线路任务，再切换业务上下文。
+  // 仅关闭上传弹层不够：后台 OCR / Auto-Plan 仍可能继续完成并回写旧线路状态。
+  await window.cancelParse?.().catch?.(()=>{});
+  window.cancelUpload?.();
   serverOrder=null;
+  parsedOrders=[];
+  pendingMeta={};
+  reviewMode=false;
+  window.__zspParseContext=null;
+  window.renderReviewStores?.([]);
+
+  
   updateSummary();
 
   try{
