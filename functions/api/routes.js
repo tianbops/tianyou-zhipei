@@ -31,7 +31,7 @@ export async function onRequest({ request, env }) {
 
     if (request.method === 'PUT') {
       if (!route) return json({ error: 'Missing route parameter' }, 400);
-      if (!canManageRoute(session.user || session, route)) return json({ error: '当前账号可以调度该线路，但无权修改该线路基准数据库' }, 403);
+      if (!isV3RouteMaintainer(session, route)) return json({ error: '当前账号可以调度该线路，但无权修改该线路基准数据库' }, 403);
       const body = await request.json().catch(() => ({}));
       if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
       const routeRecord = await getV3Route(env, route);
@@ -75,11 +75,6 @@ export async function onRequest({ request, env }) {
     console.error('routes api error', error);
     return json({ success: false, error: error?.message || '线路基准数据库服务异常', code: 'ROUTES_API_ERROR' }, 503);
   }
-}
-
-function legacyBaseOptions(session, route) {
-  const boundRoute = normalizeRoute(session?.boundRouteId);
-  return boundRoute === normalizeRoute(route) && session?.id ? { allowLegacyUserId: session.id } : {};
 }
 
 async function acquireLock(env, key, value, ttl) {
