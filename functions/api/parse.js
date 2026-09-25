@@ -155,7 +155,7 @@ function extractStores(source) {
   // 第二优先级：补充OCR把箭头吞掉后留下的独立行。
   const normalLines = preparedRouteText
     .split('\n')
-    .filter(line => !/->/.test(line))
+    .filter(line => !/->/.test(line) && !/[|｜]/.test(line))
     .map(cleanPart)
     .filter(isLikelyStore);
   candidates.push(...normalLines);
