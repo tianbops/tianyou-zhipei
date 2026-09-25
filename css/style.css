@@ -458,7 +458,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
 }
 .zpei-processing-layer.active{display:flex}
 .zpei-processing-rail{
-  width:min(100%,390px);
+  width:min(100%,520px);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -471,22 +471,22 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
   align-items:center;
   justify-content:center;
   flex:0 0 auto;
-  font-size:13px;
-  line-height:20px;
+  font-size:16px;
+  line-height:24px;
   color:#5F6B77;
   transition:color .2s ease,opacity .2s ease;
 }
 .zpei-stage.done{color:#B8C2CC}
-.zpei-stage.current{color:#F2F5F7;animation:zpeiStagePulse 1.6s ease-in-out infinite}
+.zpei-stage.current{color:#F2F5F7;animation:zpeiStagePulse .95s ease-in-out infinite}
 .zpei-stage-line{
   display:block;
   width:clamp(12px,4.2vw,24px);
   height:1px;
   flex:0 1 24px;
-  margin:0 5px;
+  margin:0 8px;
   background:#26313B;
 }
-.zpei-stage-line.done{background:#697680}
+.zpei-stage-line.done{background:#9AA6B0;box-shadow:0 0 6px rgba(184,194,204,.24)}
 .zpei-processing-error{
   font-size:14px;
   line-height:22px;
@@ -495,9 +495,9 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
 }
 body.zpei-processing .app-container{pointer-events:none}
 body.zpei-processing .upload-overlay{display:none!important}
-@keyframes zpeiStagePulse{0%,100%{opacity:.72}50%{opacity:1}}
+@keyframes zpeiStagePulse{0%,100%{opacity:.58;transform:scale(.98)}35%{opacity:1;transform:scale(1.05)}65%{opacity:.9;transform:scale(1.02)}}
 @media(max-width:380px){
   .zpei-processing-layer{padding-left:10px;padding-right:10px}
-  .zpei-stage{font-size:12px}
+  .zpei-stage{font-size:14px}
   .zpei-stage-line{width:clamp(8px,3.2vw,16px);flex-basis:16px;margin:0 3px}
 }
