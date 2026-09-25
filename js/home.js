@@ -251,7 +251,7 @@ if(parsedOrders.length){
     const rawNames=[...new Set((Array.isArray(item?.rawNames)?item.rawNames:[]).map(value=>String(value).trim()).filter(Boolean))];
     if(item?.matched&&rawNames.length>1){
       mergeCount++;
-          }
+    }
     // 已合并的多条原始名称只归入“合并”，不再重复计入“更正”。
     // 只统计实质名称变化；OCR换行、空格、括号/标点差异不计入“更正”。
     if(rawNames.length<=1&&item?.matched&&baseName&&rawNames.some(value=>value!==baseName)){
@@ -270,8 +270,6 @@ if(parsedOrders.length){
       const substantive=changedNames.filter(value=>normalizeForCompare(value)!==normalizeForCompare(baseName));
       if(substantive.length){
         correctionCount++;
-        // 修正详情只清理OCR残留在名称末尾的连接符，不改变原始名称及匹配数据。
-        const displayCorrectionNames=substantive.map(value=>String(value).trim().replace(/\\s*[-—–]+\\s*$/,'').trim()).filter(Boolean);
               }
     }
   });
