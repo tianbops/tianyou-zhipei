@@ -586,5 +586,22 @@ async function redisPipelineGet(env, keys) {
   return output;
 }
 
+function businessDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+function addDays(date, offset) {
+  const value = normalizeDate(date);
+  if (!value || !Number.isFinite(Number(offset))) return '';
+  const parts = value.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(n => !Number.isInteger(n))) return '';
+  const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + Number(offset)));
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
 function normalizeDate(value) { const s = String(value || '').trim().replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-'), m = s.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : ''; }
 function json(payload, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }); }
