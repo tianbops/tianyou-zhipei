@@ -19,10 +19,10 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  const learning=await getLearning(env,route);
  const candidates=extractStores(text);
  if(!candidates.length)throw Object.assign(new Error('未提取到有效门店'),{code:'EXTRACT_FAILED',stage:'extracting'});
- const matched=matchStores(candidates,base,learning);
+ const finalDate=dateValue(date)||new Date().toISOString().slice(0,10);
+ const matched=matchStores(candidates,base,learning,{route,date:finalDate});
  const deduped=dedupeStores(matched.matched,candidates,matched.pendingStores);
  const planned=routePlan(deduped.stores,deduped.pendingStores);
- const finalDate=dateValue(date)||new Date().toISOString().slice(0,10);
  const result={taskId,route,date:finalDate,vehicle:String(vehicle??'').trim(),totalWeight:String(totalWeight??'').trim(),stores:planned.plannedStores,pendingStores:planned.pendingStores,newStores:planned.pendingStores,rawCount:deduped.rawCount,totalStores:deduped.totalStores,corrections:planned.plannedStores.filter(x=>x.corrected).length,merged:deduped.merged,routeOrder:planned.routeOrder,correctionDetails:planned.plannedStores.filter(x=>x.corrected).map(x=>({storeId:x.storeId,originalName:x.originalName,name:x.name,routeOrder:x.routeOrder,matchConfidence:x.matchConfidence,matchVia:x.matchVia})),createdAt:new Date().toISOString(),schemaVersion:3,ocrVersion,ocrModel};
  await savePlan(env,result);
  return result;
