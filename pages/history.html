@@ -47,6 +47,12 @@
   'use strict';
   let selected='', historyLoading=false;
   let pendingDelete=null;
+  let validatedRoute='';
+  let routeValidationPromise=null;
+  let historyRefreshPromise=null;
+  const HISTORY_CACHE_FRESH_MS=30*1000;
+  const HISTORY_CACHE_STALE_MS=5*60*1000;
+  const HISTORY_CACHE_PREFIX='zhipei:history-cache:';
   const $=id=>document.getElementById(id), pad=v=>String(v).padStart(2,'0');
   const authHeaders=()=>Auth.getAuthHeaders?Auth.getAuthHeaders():{};
   function shanghaiParts(date=new Date()){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);const get=t=>Number(parts.find(p=>p.type===t)?.value||0);return [get('year'),get('month'),get('day')]}
@@ -60,9 +66,78 @@
   function openDatePicker(){const now=selected?selected.split('-').map(Number):today(), [y,m,d]=now;buildWheel('yearWheel',2020,2035,y,'year');buildWheel('monthWheel',1,12,m,'month');buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day');$('dateModal').classList.add('active');$('dateModal').setAttribute('aria-hidden','false')}
   function closeDatePicker(){$('dateModal').classList.remove('active');$('dateModal').setAttribute('aria-hidden','true')}
   function confirmDate(){const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=Math.min(wheelValue('dayWheel'),daysInMonth(y,m));selected=`${y}-${pad(m)}-${pad(d)}`;closeDatePicker();openDateHistory(selected)}
-  async function validateDispatchRoute(){const route=String(typeof Auth!=='undefined'?(Auth.getDispatchRoute?Auth.getDispatchRoute():''):'').trim();if(!route)throw new Error('当前未选择调度线路，请返回首页选择线路');const r=await fetch('/api/routes',{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});const payload=await r.json().catch(()=>({}));if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`线路状态读取失败（${r.status}）`);const routes=Array.isArray(payload?.routes)?payload.routes:[];const fmt=Auth.formatRouteCode?Auth.formatRouteCode(route):route;const found=routes.find(x=>{const id=String(x?.id||'').trim(),name=String(x?.name||'').trim();return (id&&(Auth.formatRouteCode?Auth.formatRouteCode(id):id)===fmt)||(name&&(Auth.formatRouteCode?Auth.formatRouteCode(name):name)===fmt)});if(!found)throw new Error('当前线路不存在，无法查询历史记录');if(found.status==='disabled')throw new Error('当前线路已停用，无法查询历史记录');return route}
-  async function requestHistory(date){const route=await validateDispatchRoute();const params=new URLSearchParams();if(date)params.set('date',date);if(route)params.set('route',route);const query=params.toString()?`?${params.toString()}`:'';const r=await fetch('/api/history'+query,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);const payload=await r.json();return Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[])}
-  async function loadHistoryDates(){if(historyLoading)return;historyLoading=true;const box=$('historyList');box.innerHTML='<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>正在读取历史记录...</div>';try{const entries=await requestHistory('');renderDates(Array.isArray(entries)?entries.filter(entry=>entry?.date&&Array.isArray(entry.records)&&entry.records.length):[])}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21"/></svg></span>${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}finally{historyLoading=false}}
+  function historyCacheKey(route){return HISTORY_CACHE_PREFIX+encodeURIComponent(String(route||''))}
+  function readHistoryCache(route){
+    try{
+      const raw=localStorage.getItem(historyCacheKey(route));
+      if(!raw)return null;
+      const cached=JSON.parse(raw);
+      if(!cached||!Array.isArray(cached.data)||!Number.isFinite(Number(cached.savedAt)))return null;
+      return {data:cached.data,savedAt:Number(cached.savedAt)};
+    }catch(_){return null}
+  }
+  function writeHistoryCache(route,data){
+    try{localStorage.setItem(historyCacheKey(route),JSON.stringify({savedAt:Date.now(),data:Array.isArray(data)?data:[]}));}catch(_){}
+  }
+  function normalizeHistoryEntries(entries){return Array.isArray(entries)?entries.filter(entry=>entry?.date&&Array.isArray(entry.records)&&entry.records.length):[]}
+  async function validateDispatchRoute(force=false){
+    const route=String(typeof Auth!=='undefined'?(Auth.getDispatchRoute?Auth.getDispatchRoute():''):'').trim();
+    if(!route)throw new Error('当前未选择调度线路，请返回首页选择线路');
+    if(!force&&validatedRoute===route)return route;
+    if(!force&&routeValidationPromise)return routeValidationPromise;
+    routeValidationPromise=(async()=>{
+      const r=await fetch('/api/routes',{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+      const payload=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`线路状态读取失败（${r.status}）`);
+      const routes=Array.isArray(payload?.routes)?payload.routes:[];
+      const fmt=Auth.formatRouteCode?Auth.formatRouteCode(route):route;
+      const found=routes.find(x=>{const id=String(x?.id||'').trim(),name=String(x?.name||'').trim();return (id&&(Auth.formatRouteCode?Auth.formatRouteCode(id):id)===fmt)||(name&&(Auth.formatRouteCode?Auth.formatRouteCode(name):name)===fmt)});
+      if(!found)throw new Error('当前线路不存在，无法查询历史记录');
+      if(found.status==='disabled')throw new Error('当前线路已停用，无法查询历史记录');
+      validatedRoute=route;
+      return route;
+    })();
+    try{return await routeValidationPromise}finally{routeValidationPromise=null}
+  }
+  async function requestHistory(date){
+    const route=await validateDispatchRoute();
+    const params=new URLSearchParams();
+    if(date)params.set('date',date);
+    if(route)params.set('route',route);
+    const query=params.toString()?`?${params.toString()}`:'';
+    const r=await fetch('/api/history'+query,{cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+    if(!r.ok)throw new Error(r.status===401?'登录已失效，请重新登录':`历史数据读取失败（${r.status}）`);
+    const payload=await r.json();
+    return Array.isArray(payload?.data)?payload.data:(Array.isArray(payload)?payload:[]);
+  }
+  async function refreshHistoryDates(){
+    if(historyRefreshPromise)return historyRefreshPromise;
+    historyRefreshPromise=(async()=>{
+      const entries=normalizeHistoryEntries(await requestHistory(''));
+      writeHistoryCache(validatedRoute,entries);
+      renderDates(entries);
+      return entries;
+    })();
+    try{return await historyRefreshPromise}finally{historyRefreshPromise=null}
+  }
+  async function loadHistoryDates(options={}){
+    const force=options.force===true;
+    const box=$('historyList');
+    const route=await validateDispatchRoute();
+    const cached=readHistoryCache(route);
+    const age=cached?Math.max(0,Date.now()-cached.savedAt):Infinity;
+    if(cached){
+      renderDates(normalizeHistoryEntries(cached.data));
+      if(!force&&age<HISTORY_CACHE_FRESH_MS)return;
+      // 成熟移动端列表常用“先显示上次内容，再静默刷新”的规则；刷新期间不清空当前列表。
+      refreshHistoryDates().catch(error=>console.warn('历史后台刷新失败',error));
+      if(age<=HISTORY_CACHE_STALE_MS)return;
+    }else if(!historyRefreshPromise){
+      box.innerHTML='<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>正在读取历史记录...</div>';
+    }
+    if(!cached){
+      try{await refreshHistoryDates()}catch(e){console.error(e);box.innerHTML=`<div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21M12 3c2.2 2.5 3.3 9 3.3 9S14.2 18.5 12 21"/></svg></span>${escapeHtml(e.message)}<br><small>请联网后重试</small></div>`}}
+  }
   function parseWeightTons(value){const source=String(value??'').trim().replace(/,/g,'');const match=source.match(/\d+(?:\.\d+)?/);if(!match)return 0;const n=Number(match[0]);if(!Number.isFinite(n))return 0;if(/kg|千克|公斤/i.test(source))return n/1000;return n} function recordSummary(item){const count=Number(item?.uniqueStoreCount)||Number(item?.count)||(Array.isArray(item?.orders)?item.orders.length:0);const tons=parseWeightTons(item?.totalWeight??item?.weight);const weight=(Math.round((tons+Number.EPSILON)*100)/100).toFixed(2);return {count,weight}}
   function renderDates(entries){
   const box=$('historyList');
@@ -179,7 +254,24 @@
 
 function historySignature(item){const batch=String(item?.orderBatchId||'').trim();if(batch)return `batch:${batch}`;const vehicle=String(item?.vehicle||'').trim().toLowerCase(),weight=String(item?.totalWeight??item?.weight??'').trim(),orders=Array.isArray(item?.orders)?item.orders.map(order=>{const storeId=String(order?.storeId||order?.baseCode||'').trim();const name=String(order?.name||order?.storeName||order?.shopName||order?.['门店名称']||'').trim().replace(/[\\s\\u3000（）()【】\\[\\]]/g,'').toLowerCase();return{identity:storeId?'id:'+storeId:(name?'name:'+name:''),weight:Number(order?.weight)||0}}).filter(order=>order.identity).sort((a,b)=>String(a.identity+'|'+a.weight).localeCompare(String(b.identity+'|'+b.weight))):[];return JSON.stringify({vehicle,weight,orders})}
   function dedupeDateRecords(records){const map=new Map();records.forEach(item=>{const signature=historySignature(item);if(signature&&!map.has(signature))map.set(signature,item)});return [...map.values()]}
-  async function deleteRecord(date,item,button){if(!item?.orderBatchId)return;button.disabled=true;button.classList.add('deleting');try{const r=await fetch('/api/history?date='+encodeURIComponent(date)+'&route='+encodeURIComponent(typeof Auth!=='undefined'?(Auth.getDispatchRoute?Auth.getDispatchRoute():''):'')+'&orderBatchId='+encodeURIComponent(item.orderBatchId),{method:'DELETE',cache:'no-store',headers:authHeaders(),credentials:'same-origin'});const payload=await r.json().catch(()=>({}));if(!r.ok||payload?.success!==true)throw new Error(payload?.error||'删除失败');await requestHistory(date);window.location.reload()}catch(e){console.error(e);OneModal.notice(e.message||'删除失败',{title:'删除失败'});button.disabled=false;button.classList.remove('deleting')}}
+  async function deleteRecord(date,item,button){
+    if(!item?.orderBatchId)return;
+    button.disabled=true;button.classList.add('deleting');
+    try{
+      const route=await validateDispatchRoute();
+      const r=await fetch('/api/history?date='+encodeURIComponent(date)+'&route='+encodeURIComponent(route)+'&orderBatchId='+encodeURIComponent(item.orderBatchId),{method:'DELETE',cache:'no-store',headers:authHeaders(),credentials:'same-origin'});
+      const payload=await r.json().catch(()=>({}));
+      if(!r.ok||payload?.success!==true)throw new Error(payload?.error||'删除失败');
+      try{localStorage.removeItem(historyCacheKey(route))}catch(_){}
+      // 删除成功后直接更新当前列表，避免整页 reload 再次触发完整历史读取。
+      const records=await requestHistory(date);
+      if(date){
+        const box=$('historyList');
+        if(records.length){renderDates([{date,records}]);const head=box.querySelector('.history-head');head?.click();}
+        else box.innerHTML='<div class="empty-tip">'+escapeHtml(date)+' 暂无配送记录</div>';
+      }
+    }catch(e){console.error(e);OneModal.notice(e.message||'删除失败',{title:'删除失败'});button.disabled=false;button.classList.remove('deleting')}
+  }
   function closeSwipeRows(except){document.querySelectorAll('.history-swipe-row.open').forEach(row=>{if(row!==except){row.classList.remove('open');const surface=row.querySelector('.history-swipe-surface');if(surface)surface.style.transform='translateX(0)'}})}
 function bindSwipeRow(row,surface,date,item){
   let startX=0,startY=0,dragging=false,moved=false;
@@ -251,9 +343,31 @@ function goBack(){closeDatePicker();location.replace('../home.html')}
   $('confirmDelete')?.addEventListener('click',async()=>{const p=pendingDelete;if(!p)return;closeDeleteConfirm();await deleteRecord(p.date,p.item,p.button)});$('cancelDate')?.addEventListener('click',closeDatePicker);$('confirmDate')?.addEventListener('click',confirmDate);$('dateModal')?.addEventListener('click',e=>{if(e.target===$('dateModal'))closeDatePicker()});
   ['yearWheel','monthWheel','dayWheel'].forEach(id=>$(id)?.addEventListener('scroll',()=>{const box=$(id);clearTimeout(box._timer);box._timer=setTimeout(()=>{const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=wheelValue('dayWheel');if(id==='yearWheel'||id==='monthWheel')buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day')},90)}));
   let historyInitialized=false;
-  async function initHistory(force=false){if(historyInitialized&&!force)return;historyInitialized=true;try{closeDatePicker();if(!(await Auth.checkAuth())){historyInitialized=false;return}await validateDispatchRoute();await loadHistoryDates()}catch(e){historyInitialized=false;const box=$('historyList');if(box)box.innerHTML='<div class="empty-tip">'+escapeHtml(e?.message||'历史记录读取失败')+'<br><small>请返回首页重新选择有效线路</small></div>';console.error(e)}}
+  async function initHistory(force=false){
+    if(historyInitialized&&!force)return;
+    historyInitialized=true;
+    try{
+      closeDatePicker();
+      if(!(await Auth.checkAuth())){historyInitialized=false;return}
+      await loadHistoryDates({force});
+    }catch(e){
+      historyInitialized=false;
+      const box=$('historyList');
+      if(box)box.innerHTML='<div class="empty-tip">'+escapeHtml(e?.message||'历史记录读取失败')+'<br><small>请返回首页重新选择有效线路</small></div>';
+      console.error(e);
+    }
+  }
   document.addEventListener('DOMContentLoaded',()=>initHistory(false));
-  window.addEventListener('pageshow',event=>{if(event.persisted)initHistory(true)});
+  window.addEventListener('pageshow',event=>{
+    if(event.persisted){
+      initHistory(false);
+      return;
+    }
+    // 普通返回历史页不重复整页加载；仅当缓存超过新鲜窗口时静默更新。
+    const route=String(Auth.getDispatchRoute?Auth.getDispatchRoute():'').trim();
+    const cached=route?readHistoryCache(route):null;
+    if(cached&&Date.now()-cached.savedAt>=HISTORY_CACHE_FRESH_MS)refreshHistoryDates().catch(error=>console.warn('历史返回刷新失败',error));
+  });
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDatePicker();closeDeleteConfirm()}});
   window.addEventListener('pagehide',()=>{closeDatePicker();closeDeleteConfirm()});
   function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
