@@ -208,7 +208,7 @@ async function parseOrderText(text,taskId=0){
     if(!response.ok||!data.success){
       const message=String(data?.error||'');
       if(/未找到.*独立基准数据库/.test(message)){if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});const fallback=fallbackParse(text);if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});return fallback;}
-      throw Error(message||`运单处理接口错误（${response.status}）`);
+      throw Object.assign(new Error(message||`运单处理接口错误（${response.status}）`),{code:String(data?.code||'PARSE_FAILED'),stage:String(data?.stage||'parse')});
     }
     return data.data;
   }catch(e){
@@ -290,7 +290,7 @@ if(typeof window.submitManualOrder==='function'){
     console.error('自动录入模块加载失败',error);
     window.handleUploadProcessingFailure?.(error?.message||'自动录入模块加载失败，请重新上传');
   });
-}return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'||/已取消|取消处理/.test(String(e?.message||''))){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.handleUploadProcessingFailure?.(e.message||'处理失败，请重新上传');if(auto)throw e;return[]}};
+}return parsedOrders}catch(e){parsedOrders=[];reviewMode=false;window.onOrderParsed?.({stores:[]});if(e?.code==='PARSE_CANCELLED'||/已取消|取消处理/.test(String(e?.message||''))){window.renderUnifiedStatus('cancelled',0,'已取消');return[]}window.handleUploadProcessingFailure?.(e.message||'处理失败，请重新上传',e.code||'');if(auto)throw e;return[]}};
 async function refreshHomeOrder(){
   const seq=++homeOrderLoadSeq;
   const route=String(currentRoute()||'').trim();
