@@ -74,7 +74,7 @@ async function createRequest(env, user, request) {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const record = {
-      schemaVersion: 1, id, userId: user.id, username: user.username,
+      schemaVersion: 3, id, userId: user.id, username: user.username,
       name: user.name || user.username, route, duty, status: 'pending',
       createdAt: now, updatedAt: now
     };
