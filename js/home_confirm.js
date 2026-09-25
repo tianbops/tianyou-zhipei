@@ -218,19 +218,15 @@
       }
       if(Array.isArray(error?.reviewRequired)&&error.reviewRequired.length){
         renderReview(error.reviewRequired);
+      }else{
+        // 自动入库失败也必须进入统一P0失败返回链路，不能只停在错误状态。
+        window.handleUploadProcessingFailure?.(error?.message||'运单保存失败，请重新上传');
       }
     }finally{
       if(timer)clearTimeout(timer);
       confirmAbortController=null;
       confirmInFlight=false;
       confirmStartedAt=0;
-      if(button){
-        button.disabled=false;
-        button.textContent='';
-        button.classList.remove('ready');
-        button.hidden=true;
-        button.setAttribute('aria-hidden','true');
-      }
     }
   }
   window.cancelConfirm=()=>{if(confirmAbortController){try{confirmAbortController.abort();}catch(_){}}confirmInFlight=false;};
