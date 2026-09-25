@@ -1,6 +1,6 @@
 // 天友智配One V1.0 - 系统管理：线路绑定
 import { requireSystemAdmin } from '../_auth.js';
-import { baseKey as v3BaseKey } from '../v3/data.js';
+import { baseKey as v3BaseKey, routeKey as v3RouteKey } from '../v3/data.js';
 import { getRoute, getUser, normalizeRoute, encodeKey, routeRecordKey, routeBaseKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, redisSet } from '../_data.js';
 
 async function repairCreatedRoutesFromAdminLogs(env, records) {
@@ -105,8 +105,8 @@ export async function onRequest({ request, env }) {
         updatedBy: admin.id,
         source: 'route-create'
       };
-      const script = "if redis.call('exists', KEYS[1]) == 1 then return 0 end if redis.call('exists', KEYS[2]) == 1 then return -1 end redis.call('set', KEYS[1], ARGV[1]) redis.call('set', KEYS[2], ARGV[2]) return 1";
-      const result = await redisCommand(env, ['EVAL', script, '2', routeRecordKey(route), v3BaseKey(route), JSON.stringify(record), JSON.stringify({...base, schemaVersion:3, source:'v3-route-create'})]);
+      const script = "if redis.call('exists', KEYS[1]) == 1 then return 0 end if redis.call('exists', KEYS[2]) == 1 or redis.call('exists', KEYS[3]) == 1 then return -1 end redis.call('set', KEYS[1], ARGV[1]) redis.call('set', KEYS[2], ARGV[2]) redis.call('set', KEYS[3], ARGV[1]) return 1";
+      const result = await redisCommand(env, ['EVAL', script, '3', routeRecordKey(route), v3BaseKey(route), v3RouteKey(route), JSON.stringify(record), JSON.stringify({...base, schemaVersion:3, source:'v3-route-create'})]);
       if (Number(result) === 0) return json({ success: false, error: '该线路已存在', code: 'ROUTE_EXISTS' }, 409);
       if (Number(result) !== 1) return json({ success: false, error: '该线路已有残留基准数据，请先检查后再创建', code: 'ROUTE_BASE_EXISTS' }, 409);
       await recordAdminLog(env, admin, 'create_route', 'route', route, { status: 'active' }).catch(error => console.warn('create route audit log failed', error));
