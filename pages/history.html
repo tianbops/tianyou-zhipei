@@ -24,15 +24,6 @@
       <div class="history-scroll" id="historyList"><div class="empty-tip"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></span>加载中...</div></div>
     </section>
   </div>
-  <div class="correction-modal" id="correctionModal" aria-hidden="true">
-    <div class="correction-sheet" role="dialog" aria-modal="true" aria-labelledby="correctionTitle">
-      <div class="correction-sheet-head">
-        <strong id="correctionTitle">修正详情</strong>
-        <button type="button" id="closeCorrection" aria-label="关闭">关闭</button>
-      </div>
-      <div class="correction-list" id="correctionList"></div>
-    </div>
-  </div>
   <div class="delete-modal" id="deleteModal" aria-hidden="true">
     <div class="delete-sheet" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
       <div class="delete-icon" aria-hidden="true"><span class="z-icon"><svg viewBox="0 0 24 24"><path d="M6 7h12M9 7V5h6v2M8 10v7M12 10v7M16 10v7"/><path d="M7 7l1 13h8l1-13"/></svg></span></div>
@@ -256,8 +247,6 @@ function goBack(){closeDatePicker();location.replace('../home.html')}
   $('datePickerBtn')?.addEventListener('click',openDatePicker);
   function closeDeleteConfirm(){pendingDelete=null;$('deleteModal')?.classList.remove('active');$('deleteModal')?.setAttribute('aria-hidden','true')}
   $('cancelDelete')?.addEventListener('click',closeDeleteConfirm);
-  $('closeCorrection')?.addEventListener('click',closeCorrectionRecord);
-  $('correctionModal')?.addEventListener('click',e=>{if(e.target===$('correctionModal'))closeCorrectionRecord()});
   $('deleteModal')?.addEventListener('click',e=>{if(e.target===$('deleteModal'))closeDeleteConfirm()});
   $('confirmDelete')?.addEventListener('click',async()=>{const p=pendingDelete;if(!p)return;closeDeleteConfirm();await deleteRecord(p.date,p.item,p.button)});$('cancelDate')?.addEventListener('click',closeDatePicker);$('confirmDate')?.addEventListener('click',confirmDate);$('dateModal')?.addEventListener('click',e=>{if(e.target===$('dateModal'))closeDatePicker()});
   ['yearWheel','monthWheel','dayWheel'].forEach(id=>$(id)?.addEventListener('scroll',()=>{const box=$(id);clearTimeout(box._timer);box._timer=setTimeout(()=>{const y=wheelValue('yearWheel'),m=wheelValue('monthWheel'),d=wheelValue('dayWheel');if(id==='yearWheel'||id==='monthWheel')buildWheel('dayWheel',1,daysInMonth(y,m),Math.min(d,daysInMonth(y,m)),'day')},90)}));
@@ -265,8 +254,8 @@ function goBack(){closeDatePicker();location.replace('../home.html')}
   async function initHistory(force=false){if(historyInitialized&&!force)return;historyInitialized=true;try{closeDatePicker();if(!(await Auth.checkAuth())){historyInitialized=false;return}await validateDispatchRoute();await loadHistoryDates()}catch(e){historyInitialized=false;const box=$('historyList');if(box)box.innerHTML='<div class="empty-tip">'+escapeHtml(e?.message||'历史记录读取失败')+'<br><small>请返回首页重新选择有效线路</small></div>';console.error(e)}}
   document.addEventListener('DOMContentLoaded',()=>initHistory(false));
   window.addEventListener('pageshow',event=>{if(event.persisted)initHistory(true)});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDatePicker();closeDeleteConfirm();closeCorrectionRecord()}});
-  window.addEventListener('pagehide',()=>{closeDatePicker();closeDeleteConfirm();closeCorrectionRecord()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDatePicker();closeDeleteConfirm()}});
+  window.addEventListener('pagehide',()=>{closeDatePicker();closeDeleteConfirm()});
   function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
   </script>
 </body>
