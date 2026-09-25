@@ -1,13 +1,11 @@
 // 天友智配One V1.0 - 管理员审核线路绑定申请
 import { requireSystemAdmin } from '../_auth.js';
-import { routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route } from '../v3/data.js';
+import { routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route, bindingRequestKey, bindingRequestUserKey, bindingRequestIndexKey } from '../v3/data.js';
 import {
   atomicRouteBinding, atomicRouteSwitch, encodeKey, getUser, normalizeRoute, publicUser,
   redisCommand, redisGet, redisSet, recordAdminLog
 } from '../_data.js';
 
-const REQUEST_PREFIX = 'route:binding-request:';
-const USER_REQUEST_PREFIX = 'route:binding-request:user:';
 const REVIEW_LOCK_TTL_SECONDS = 30;
 
 export async function onRequest({ request, env }) {
@@ -25,9 +23,18 @@ export async function onRequest({ request, env }) {
 
 async function listRequests(env) {
   const records = [];
-  let cursor = '0';
+  const ids = await redisCommand(env, ['SMEMBERS', bindingRequestIndexKey()]).catch(() => []);
+  for (const id of Array.isArray(ids) ? ids : []) {
+    const value = await redisGet(env, bindingRequestKey(id)).catch(() => null);
+    if (value && typeof value === 'object' && value.id && value.status === 'pending') records.push(value);
+  }
+  records.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  return json({ success: true, requests: records });
+}
+/* V3 list replacement marker */
+/*
   do {
-    const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', REQUEST_PREFIX + '*', 'COUNT', '200']);
+    const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', 'zpei:v3:binding-request:*', 'COUNT', '200']);
     cursor = String(result?.[0] || '0');
     const keys = Array.isArray(result?.[1]) ? result[1] : [];
     for (const key of keys) {
@@ -46,7 +53,7 @@ async function reviewRequest(env, admin, request) {
   if (!requestId) return json({ success: false, error: '缺少 requestId' }, 400);
   if (!['approve', 'reject'].includes(action)) return json({ success: false, error: '非法审核操作' }, 400);
 
-  const key = REQUEST_PREFIX + encodeKey(requestId);
+  const key = bindingRequestKey(requestId);
   const reviewLockKey = `lock:route-binding-review:${encodeKey(requestId)}`;
   const reviewLockValue = crypto.randomUUID();
   if (!(await acquireReviewLock(env, reviewLockKey, reviewLockValue))) {
@@ -62,7 +69,7 @@ async function reviewRequest(env, admin, request) {
       const updated = { ...pending, status: 'rejected', reviewedBy: admin.id, reviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       await finalizeRequestStatus(env, {
         requestKey: key,
-        userRequestKey: USER_REQUEST_PREFIX + encodeKey(pending.userId),
+        userRequestKey: bindingRequestUserKey(pending.userId),
         requestId,
         updated,
         deleteUserIndex: true
@@ -179,7 +186,7 @@ async function reviewRequest(env, admin, request) {
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
   await finalizeRequestStatus(env, {
     requestKey: key,
-    userRequestKey: USER_REQUEST_PREFIX + encodeKey(pending.userId),
+    userRequestKey: bindingRequestUserKey(pending.userId),
     requestId,
     updated: approved,
     deleteUserIndex: true
@@ -198,7 +205,7 @@ async function finishApprovedWithoutRewrite(env, admin, pending, key) {
   const approved = { ...pending, status: 'approved', reviewedBy: admin.id, reviewedAt: now, updatedAt: now };
   await finalizeRequestStatus(env, {
     requestKey: key,
-    userRequestKey: USER_REQUEST_PREFIX + encodeKey(pending.userId),
+    userRequestKey: bindingRequestUserKey(pending.userId),
     requestId: pending.id,
     updated: approved,
     deleteUserIndex: true
@@ -207,10 +214,10 @@ async function finishApprovedWithoutRewrite(env, admin, pending, key) {
   return json({ success: true, request: approved });
 }
 
-async function finalizeRequestStatus(env, { requestKey, userRequestKey, requestId, updated, deleteUserIndex = false }) {
-  const script = "local current = redis.call('GET', KEYS[1]) if not current then return 'MISSING' end local ok, obj = pcall(cjson.decode, current) if not ok or tostring(obj.id or '') ~= ARGV[1] or tostring(obj.status or '') ~= 'pending' then return 'CHANGED' end redis.call('SET', KEYS[1], ARGV[2]) if ARGV[3] == '1' and redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end return 'OK'";
+async function finalizeRequestStatus(env, { requestKey, userRequestKey, indexKey = bindingRequestIndexKey(), requestId, updated, deleteUserIndex = false }) {
+  const script = "local current = redis.call('GET', KEYS[1]) if not current then return 'MISSING' end local ok, obj = pcall(cjson.decode, current) if not ok or tostring(obj.id or '') ~= ARGV[1] or tostring(obj.status or '') ~= 'pending' then return 'CHANGED' end redis.call('SET', KEYS[1], ARGV[2]) if ARGV[3] == '1' and redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end redis.call('SREM', KEYS[3], ARGV[1]) return 'OK'";
   const result = await redisCommand(env, [
-    'EVAL', script, '2', requestKey, userRequestKey,
+    'EVAL', script, '3', requestKey, userRequestKey, indexKey,
     requestId, JSON.stringify(updated), deleteUserIndex ? '1' : '0'
   ]);
   if (result === 'MISSING') throw new Error('申请不存在或已处理');
