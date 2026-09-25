@@ -572,3 +572,74 @@ body.zpei-processing .app-container{
   .zpei-processing-stage-line{width:clamp(5px,1.8vw,10px);flex-basis:10px;margin:0 3px}
 }
 .zpei-processing-modal.active.error .zpei-processing-box{min-height:158px}
+/* UI 2.8 · 上传运单弹窗与处理状态框统一UI 2026-09-25 */
+.upload-sheet{
+  width:min(94vw,430px)!important;
+  max-width:430px!important;
+  max-height:none!important;
+  padding:22px 18px 18px!important;
+  border-radius:20px!important;
+  background:#151D26!important;
+  border:1px solid rgba(255,255,255,.09)!important;
+  box-shadow:0 22px 58px rgba(0,0,0,.58)!important;
+}
+.upload-sheet .sheet-handle{
+  width:36px!important;
+  height:4px!important;
+  margin:0 auto 14px!important;
+  background:rgba(255,255,255,.15)!important;
+  border-radius:4px!important;
+}
+.upload-source-menu{
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+.upload-source-menu .source-menu-title{
+  height:28px!important;
+  line-height:28px!important;
+  margin:0 0 20px!important;
+  font-size:20px!important;
+  font-weight:700!important;
+  color:#F2F5F7!important;
+  text-align:center!important;
+}
+.upload-source-menu .source-menu-options{
+  display:grid!important;
+  grid-template-columns:repeat(3,1fr)!important;
+  gap:10px!important;
+}
+.upload-source-menu .source-option{
+  height:64px!important;
+  min-height:64px!important;
+  border-radius:12px!important;
+  background:#1B2530!important;
+  border:1px solid rgba(255,255,255,.075)!important;
+  color:#D5DCE2!important;
+  box-shadow:none!important;
+}
+.upload-source-menu .source-option span{
+  font-size:26px!important;
+  line-height:1!important;
+}
+.upload-source-menu .source-option:active{
+  background:#202A34!important;
+  transform:scale(.985);
+}
+@media(max-width:380px){
+  .upload-sheet{
+    width:min(96vw,380px)!important;
+    padding:20px 10px 16px!important;
+  }
+  .upload-source-menu .source-menu-title{
+    font-size:19px!important;
+    margin-bottom:18px!important;
+  }
+  .upload-source-menu .source-menu-options{gap:7px!important}
+  .upload-source-menu .source-option{
+    height:62px!important;
+    min-height:62px!important;
+  }
+}
