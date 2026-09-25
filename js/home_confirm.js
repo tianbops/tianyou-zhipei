@@ -220,7 +220,8 @@
         renderReview(error.reviewRequired);
       }else{
         // 自动入库失败也必须进入统一P0失败返回链路，不能只停在错误状态。
-        window.handleUploadProcessingFailure?.(error?.message||'运单保存失败，请重新上传');
+        const failureCode=error?.serverStage==='save'?'SAVE_FAILED':error?.name==='AbortError'?'TIMEOUT':error?.code||'';
+        window.handleUploadProcessingFailure?.(error?.message||'运单保存失败，请重新上传',failureCode);
       }
     }finally{
       if(timer)clearTimeout(timer);
