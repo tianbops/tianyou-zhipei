@@ -11,7 +11,6 @@ const STAGES=[
 ];
 
 let layer=null;
-let progressTimer=null;
 
 function ensureLayer(){
   if(layer&&document.body.contains(layer))return layer;
@@ -58,13 +57,9 @@ function renderRail(activeIndex,status){
 
 function setProcessing(active){
   document.body.classList.toggle('zpei-processing',active);
-  const overlay=document.getElementById('uploadOverlay');
-  if(overlay)overlay.classList.toggle('zpei-processing-source',active);
 }
 
 function reset(){
-  if(progressTimer)cancelAnimationFrame(progressTimer);
-  progressTimer=null;
   setProcessing(false);
   if(layer){
     layer.classList.remove('active','error');
@@ -117,8 +112,6 @@ window.renderUnifiedStatus=(status='idle',progress=0,message='')=>{
   render(status,progress,message);
 };
 
-window.renderStatusDetail=()=>{};
-window.clearStatusDetail=()=>{};
 window.resetProcessingStatus=reset;
 
 })();
