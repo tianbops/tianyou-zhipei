@@ -234,48 +234,11 @@ window.logout=()=>Auth.logout();
 window.clearManualInput=()=>{invalidateUploadTask();correctionDetails=[];setCorrectionSummary(0);if(parseAbortController){parseCancelled=true;parseAbortController.abort();}if(typeof window.cancelOCR==='function')window.cancelOCR().catch(()=>{});window.cancelConfirm?.();const input=$('manualOrderInput');if(input){input.value='';input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。')}['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{const fileInput=$(id);if(fileInput)fileInput.value='';});parsedOrders=[];pendingMeta={};reviewMode=false;window.resetProcessingStatus?.();window.renderReviewStores?.([]);const sheet=document.querySelector('.upload-sheet');if(sheet){sheet.classList.remove('processing','success','error','cancelled','review-ready','detail-view-open');sheet.classList.add('waiting')}closeUploadDetail?.();};
 window.parseManualInput=async(options={})=>{const auto=options?.auto===true;const source=String(options?.source||'manual');const taskId=Number(options?.taskId)||ensureUploadTask();if(taskId&&!isUploadTaskActive(taskId))return[];if(parseInFlight)return auto?[]:toast('运单正在处理，请勿重复点击','warning');try{const text=$('manualOrderInput')?.value||'';if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return [];}window.renderUnifiedStatus('loading',10,'正在处理运单…');const data=await parseOrderText(text,taskId);if(taskId&&!isUploadTaskActive(taskId))return[];window.renderUnifiedStatus('loading',78,'正在生成配送顺序…');parsedOrders=Array.isArray(data.stores)?data.stores:[];const parseContextId=`parse-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;const parsedRoute=String(data?.route||parseRoute||currentRoute()||'').trim();if(parsedRoute&&Auth.setDispatchRoute)Auth.setDispatchRoute(parsedRoute);const parsedUserId=String(data?.userId||((typeof Auth!=='undefined'&&Auth.serverUser)?(Auth.serverUser.id||Auth.serverUser.username||Auth.serverUser.account||''):'')).trim();data.parseContextId=parseContextId;window.__zspParseContext={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||'',vehicle:data.vehicle||'',totalWeight:data.totalWeight||'',stores:parsedOrders.map(item=>({...item}))};pendingMeta={parseContextId,userId:parsedUserId,route:parsedRoute,date:data.date||pendingMeta.date||'',vehicle:data.vehicle||pendingMeta.vehicle||'',totalWeight:data.totalWeight||pendingMeta.totalWeight||'',rawOrderCount:Number(data.rawOrderCount)||0,matchedCount:Number(data.matchedCount)||0,newStoreCount:Number(data.newStoreCount)||0,reviewCount:Number(data.reviewCount)||0,duplicateCount:Number(data.duplicateCount)||0,recognizedCount:Number(data.recognizedCount)||0,uniqueStoreCount:Number(data.uniqueStoreCount)||parsedOrders.length,baseDatabaseAvailable:data.baseDatabaseAvailable!==false,source:source||'web-confirm'};const uniqueCount=Number(data.uniqueStoreCount)||parsedOrders.length;const rawCount=Number(data.recognizedCount)||Number(data.rawOrderCount)||parsedOrders.length;if(taskId&&!isUploadTaskActive(taskId))return[];// 解析结果保留OCR/人工原文，不再把结构化摘要回写到输入框；这样用户可直接核对并修改原文，修改后由输入监听使当前解析结果失效并重新处理。\nwindow.onOrderParsed?.(data);reviewMode=true;
 if(parsedOrders.length){
-  let mergeCount=0,correctionCount=0;
-  const newStoreCount=Number(data?.newStoreCount)||parsedOrders.filter(item=>item?.isNew===true||item?.matchType==='new').length;
-  
-  parsedOrders.forEach(item=>{
-    const baseName=String(item?.baseName||item?.name||'').trim();
-    const rawNames=[...new Set((Array.isArray(item?.rawNames)?item.rawNames:[]).map(value=>String(value).trim()).filter(Boolean))];
-    if(item?.matched&&rawNames.length>1){
-      mergeCount++;
-    }
-    // 已合并的多条原始名称只归入“合并”，不再重复计入“更正”。
-    // 只统计实质名称变化；OCR换行、空格、括号/标点差异不计入“更正”。
-    if(rawNames.length<=1&&item?.matched&&baseName&&rawNames.some(value=>value!==baseName)){
-      const changedNames=rawNames.filter(value=>value!==baseName);
-      // “更正”只统计业务名称变化。OCR造成的空格、换行、全半角标点、
-      // 中英文括号、常见罗马数字/字母误识别等，只属于识别格式差异，不计入名称更正。
-      const normalizeForCompare=value=>{
-        const romanMap={ 'Ⅰ':'I','Ⅱ':'II','Ⅲ':'III','Ⅳ':'IV','Ⅴ':'V','Ⅵ':'VI','Ⅶ':'VII','Ⅷ':'VIII','Ⅸ':'IX','Ⅹ':'X' };
-        return String(value||'')
-          .normalize('NFKC')
-          .replace(/[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g,roman=>romanMap[roman]||roman)
-          .replace(/((?:ii|iii|iv|v|vi|vii|viii|ix|x))l(?=类)/gi,'$1')
-          .replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"'‘’·、\/\\_-]/g,'')
-          .toLowerCase();
-      };
-      const substantive=changedNames.filter(value=>normalizeForCompare(value)!==normalizeForCompare(baseName));
-      if(substantive.length){
-        correctionCount++;
-              }
-    }
-  });
-  const rawWeight=String(data?.totalWeight||'').trim();
-  const weightT=parseWeight(rawWeight);
-  const resultWeight=weightT>0?`${(Math.round((weightT+Number.EPSILON)*100)/100).toFixed(2)}t`:'未识别';
-  const resultDate=String(data?.date||pendingMeta.date||currentDate()).trim();
-  const statusDetails=[];
-  if(newStoreCount>0)statusDetails.push(`新增${newStoreCount}家`);
-  if(correctionCount>0)statusDetails.push(`更正${correctionCount}家`);
-  if(mergeCount>0)statusDetails.push(`合并${mergeCount}家`);
-  pendingReviewCount=parsedOrders.filter(item=>item?.needsReview===true).length;
-  // 规划完成后进入自动保存；业务统计在处理界面不展示，完成后由当日数据页统一呈现。
+  // 规划完成后继续自动保存；业务统计只在结果页面展示。
   window.renderUnifiedStatus('loading',86,'规划完成');
-}else{window.resetProcessingStatus?.();}
+}else{
+  window.resetProcessingStatus?.();
+}
 if(parsedOrders.length){
   // 规划成功后直接进入服务器入库。
   // 未确定门店保留为“待定”状态，不阻断本次运单落库。
