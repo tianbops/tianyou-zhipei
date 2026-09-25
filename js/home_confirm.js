@@ -184,8 +184,6 @@
       const pending=parsedState.filter(item=>item?.needsReview);
       if(pending.length&&!autoConfirm){
         window.renderUnifiedStatus?.('error',100,`还有 ${pending.length} 家门店待定`);
-        renderReview(pending);
-        window.openPendingReviewDetail?.(pending);
         return;
       }
 
