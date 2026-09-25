@@ -25,8 +25,8 @@ export async function onRequest({request,env}){
       if(!waybill)return json({success:false,error:'今日运单数据不存在'},404);
       return json({success:true,route,date,taskId,waybill,corrections:corrections||{taskId,route,date,corrections:[],count:0,schemaVersion:3}});
     }
-    const index=await get(env,todayIndexKey(route,date));
-    const taskIds=Array.isArray(index)?index:[];
+    const rawIndex=await evalRedis(env,"return redis.call('SMEMBERS',KEYS[1])",[todayIndexKey(route,date)],[]);
+    const taskIds=Array.isArray(rawIndex)?rawIndex:[];
     if(!taskIds.length)return json({success:true,route,date,waybills:[],todayWaybillCount:0,todaySummary:{storeCount:0,totalWeight:''}});
     const rows=await evalRedis(env,"local out={}; for i,k in ipairs(KEYS) do local v=redis.call('GET',k); if v then table.insert(out,v) end end; return cjson.encode(out)",[...taskIds.map(id=>todayWaybillKey(route,date,id))],[]);
     const waybills=typeof rows==='string'?JSON.parse(rows):[];
