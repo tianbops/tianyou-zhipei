@@ -188,18 +188,22 @@ async function listAllHistory(env, userId, route, session, routeRecord = null) {
   // 避免 history:* / today:* 的 SCAN 随历史 Key 数量增长而变慢。
   const dates = historyDateWindow();
   const routeHistoryKeys = dates.map(date => routeOrderKey(route, 'history:' + date));
-  const routeTodayKeys = dates.map(date => routeOrderKey(route, 'today:' + date));
-  const routeValues = await redisPipelineGet(env, [...routeHistoryKeys, ...routeTodayKeys]);
+  const routeHistoryValues = await redisPipelineGet(env, routeHistoryKeys);
   const routeValueMap = new Map();
   routeHistoryKeys.forEach((key, index) => {
-    const value = routeValues[index];
-    if (value !== null && value !== undefined) routeValueMap.set(key, value);
-  });
-  routeTodayKeys.forEach((key, index) => {
-    const value = routeValues[routeHistoryKeys.length + index];
+    const value = routeHistoryValues[index];
     if (value !== null && value !== undefined) routeValueMap.set(key, value);
   });
   const existingRouteHistoryKeys = routeHistoryKeys.filter(key => routeValueMap.has(key));
+
+  // 只有没有线路级 history 的日期才需要读取 today 作为兼容恢复来源。
+  const todayCandidateDates = dates.filter(date => !routeValueMap.has(routeOrderKey(route, 'history:' + date)));
+  const routeTodayKeys = todayCandidateDates.map(date => routeOrderKey(route, 'today:' + date));
+  const routeTodayValues = routeTodayKeys.length ? await redisPipelineGet(env, routeTodayKeys) : [];
+  routeTodayKeys.forEach((key, index) => {
+    const value = routeTodayValues[index];
+    if (value !== null && value !== undefined) routeValueMap.set(key, value);
+  });
   const existingRouteTodayKeys = routeTodayKeys.filter(key => routeValueMap.has(key));
 
   // 线路级数据与旧版 user 级数据可能处于“部分迁移”状态。
