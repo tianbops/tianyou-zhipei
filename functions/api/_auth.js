@@ -177,7 +177,11 @@ export async function authRequired(request, env, options = {}) {
 }
 
 export async function requireSystemAdmin(request, env) {
-  return authRequired(request, env, { roles: ['system_admin'], allowSystemAdmin: true });
+  const session = await authRequired(request, env, { roles: ['system_admin'], allowSystemAdmin: true });
+  if (!session) return null;
+  // 唯一管理员模式：只有 primary 主系统管理员可以进入管理 API。
+  if (session.role !== 'system_admin' || session.adminLevel !== 'primary') return null;
+  return session;
 }
 
 export async function requireRouteMaintainer(request, env, route) {
