@@ -195,6 +195,8 @@
       if(isDuplicate&&!savedBatch)throw Error('重复运单缺少原批次信息，请重试');
 
 
+      // 运单已写入服务器：主动失效历史页缓存，确保下一次进入直接看到最新记录。
+      try{localStorage.removeItem('zhipei:history-cache:'+encodeURIComponent(route));}catch(_){}
       window.renderUnifiedStatus?.('loading',98,'保存完成，正在打开当日数据…');
       document.body.classList.add('navigating-to-order');
 
