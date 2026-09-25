@@ -1,10 +1,7 @@
 // 天友智配One V1.0 - 线路与基准数据库 API
 import { authRequired } from './_auth.js';
-import { baseKey as v3BaseKey, getBase as getV3Base, setBase as setV3Base } from './v3/data.js';
-import {
-  canManageRoute, getRoute, loadRouteBase, normalizeRoute,
-  normalizeStores, routeBaseKey
-} from './_data.js';
+import { baseKey as v3BaseKey, getBase as getV3Base, getRoute as getV3Route, isRouteMaintainer as isV3RouteMaintainer } from './v3/data.js';
+import { normalizeStores, normalizeRoute } from './_data.js';
 
 const LOCK_TTL_SECONDS = 20;
 
@@ -28,7 +25,7 @@ export async function onRequest({ request, env }) {
         updatedAt: base.updatedAt || null,
         dataVersion: Number(base.dataVersion) || 1,
         schemaVersion: Number(base.schemaVersion) || 1,
-        editable: canManageRoute(session.user || session, route)
+        editable: isV3RouteMaintainer(session, route)
       });
     }
 
@@ -37,7 +34,7 @@ export async function onRequest({ request, env }) {
       if (!canManageRoute(session.user || session, route)) return json({ error: '当前账号可以调度该线路，但无权修改该线路基准数据库' }, 403);
       const body = await request.json().catch(() => ({}));
       if (!Array.isArray(body.stores)) return json({ error: 'stores 必须是数组' }, 400);
-      const routeRecord = await getRoute(env, route);
+      const routeRecord = await getV3Route(env, route);
       if (!routeRecord) return json({ error: '线路不存在，请先由系统管理员创建该线路', code: 'ROUTE_NOT_FOUND' }, 404);
 
       const lockKey = `lock:route-base:${encodeURIComponent(route)}`;
@@ -54,7 +51,7 @@ export async function onRequest({ request, env }) {
         const stores = normalizeStores(body.stores);
         const updatedAt = new Date().toISOString();
         const value = {
-          schemaVersion: 1, route, stores, dataVersion: currentVersion + 1 || 1,
+          schemaVersion: 3, route, stores, dataVersion: currentVersion + 1 || 1,
           updatedAt, updatedBy: session.id, source: 'route-editor'
         };
         const writeResult = await atomicSaveRouteBase(env, {
@@ -139,7 +136,7 @@ async function listRoutes(env) {
     const response = await fetch(env.UPSTASH_REDIS_REST_URL + '/', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + env.UPSTASH_REDIS_REST_TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify(['SCAN', cursor, 'MATCH', 'route:*', 'COUNT', '200']),
+      body: JSON.stringify(['SCAN', cursor, 'MATCH', 'zpei:v3:route:*', 'COUNT', '200']),
       cache: 'no-store'
     });
     if (!response.ok) throw new Error('线路列表读取失败');
@@ -147,7 +144,7 @@ async function listRoutes(env) {
     cursor = String(data?.result?.[0] || '0');
     const keys = Array.isArray(data?.result?.[1]) ? data.result[1] : [];
     for (const key of keys) {
-      if (key.includes(':base') || key.includes(':orders:') || key.includes(':learning')) continue;
+      if ((key.match(/:/g)||[]).length !== 3) continue;
       const value = await fetch(env.UPSTASH_REDIS_REST_URL + '/get/' + encodeURIComponent(key), {
         headers: { Authorization: 'Bearer ' + env.UPSTASH_REDIS_REST_TOKEN }, cache: 'no-store'
       }).then(r => r.json()).catch(() => ({}));
