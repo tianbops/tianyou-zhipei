@@ -72,7 +72,7 @@ async function readHistoryOrRecover(env, userId, route, date, key, session) {
 
   // 路线历史已统一为共享数据。旧版本仍可能把同一条线路的历史分散在多个绑定用户键下，
   // 因此迁移必须合并全部绑定用户，而不是只读取当前登录用户，避免第二个用户覆盖第一个用户的数据。
-  if (isBoundRoute(session, route)) {
+  if (false) {
     const migrated = await migrateLegacyHistory(env, route, date, key);
     if (migrated.length) return migrated;
   }
