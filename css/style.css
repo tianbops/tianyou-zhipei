@@ -948,7 +948,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
   border-color:rgba(255,255,255,.10)!important;
   box-shadow:none!important;
   outline:none!important;
-}/* UI 2.0 · 第十四轮：确认录入/取消操作区全面消除方形外框 2026-09-22 */
+}/* UI 2.0 · 第十四轮：上传操作区全面收口 2026-09-22 */
 /* 成功、失败、取消等最终操作状态：操作区只保留按钮本身，不再显示矩形容器边框/背景 */
 .upload-sheet.success .sheet-footer,.upload-sheet.error .sheet-footer,.upload-sheet.cancelled .sheet-footer{
   background:transparent!important;
