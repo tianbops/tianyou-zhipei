@@ -13,6 +13,9 @@ export async function onRequest({ request, env }) {
   if (!session) return json({ success: false, error: '未登录或登录已失效' }, 401);
   const user = await getUser(env, session.id);
   if (!user || user.status === 'disabled') return json({ success: false, error: '用户不存在或已停用' }, 401);
+  if (session.role === 'system_admin' && session.adminLevel === 'primary') {
+    return json({ success: false, error: '主系统管理员不参与线路绑定或业务调度' }, 403);
+  }
 
   try {
     if (request.method === 'GET') return getStatus(env, user);
