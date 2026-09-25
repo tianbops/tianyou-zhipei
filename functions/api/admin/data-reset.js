@@ -16,7 +16,8 @@ const APP_PATTERNS = Object.freeze([
   'system:admin:logs',
   'system:admin:bootstrap:used',
   'wx:openid:*',
-  'wx:unionid:*'
+  'wx:unionid:*',
+  'zpei:v3:*'
 ]);
 
 export async function onRequest({ request, env }) {
