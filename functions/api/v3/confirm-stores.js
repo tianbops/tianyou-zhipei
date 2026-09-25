@@ -63,9 +63,9 @@ export async function onRequest({request,env}){
     confirmed:[...confirmedHistory,...confirmed],
     updatedAt:new Date().toISOString(),updatedBy:session.id
    };
-   const script="if redis.call('GET',KEYS[1])~=ARGV[1] or redis.call('GET',KEYS[2])~=ARGV[2] or redis.call('GET',KEYS[3])~=ARGV[3] then return 'CONFLICT' end redis.call('SET',KEYS[1],ARGV[4]) redis.call('SET',KEYS[2],ARGV[5]) redis.call('SET',KEYS[3],ARGV[6]) return 'OK'";
-   const oldBase=JSON.stringify(base),oldLearning=JSON.stringify(learning),oldConfirmation=JSON.stringify(confirmation||null);
-   const outcome=await evalRedis(env,script,[baseKey(route),learningKey(route),confirmationKey(route)],[oldBase,oldLearning,oldConfirmation,JSON.stringify(nextBase),JSON.stringify(nextLearning),JSON.stringify(nextConfirmation)]);
+   const script="if redis.call('GET',KEYS[1])~=ARGV[1] or redis.call('GET',KEYS[2])~=ARGV[2] or redis.call('GET',KEYS[3])~=ARGV[3] or redis.call('GET',KEYS[4])~=ARGV[4] then return 'CONFLICT' end redis.call('SET',KEYS[1],ARGV[5]) redis.call('SET',KEYS[2],ARGV[6]) redis.call('SET',KEYS[3],ARGV[7]) redis.call('SET',KEYS[4],ARGV[8]) return 'OK'";
+   const oldBase=JSON.stringify(base),oldLearning=JSON.stringify(learning),oldConfirmation=JSON.stringify(confirmation||null),oldPlan=JSON.stringify(plan);
+   const outcome=await evalRedis(env,script,[baseKey(route),learningKey(route),confirmationKey(route,date,taskId),planKey(route,date,taskId)],[oldBase,oldLearning,oldConfirmation,oldPlan,JSON.stringify(nextBase),JSON.stringify(nextLearning),JSON.stringify(nextConfirmation),JSON.stringify(nextPlan)]);
    if(outcome==='CONFLICT')throw Object.assign(new Error('基准库刚刚发生变化，请刷新后重新确认'),{code:'CONFIRM_CONFLICT'});
    if(outcome!=='OK')throw Object.assign(new Error('门店确认保存未确认'),{code:'CONFIRM_SAVE_FAILED'});
    return json({success:true,idempotent:false,route,date,taskId,confirmed,storeCount:stores.length,confirmedAt:nextConfirmation.updatedAt});
