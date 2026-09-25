@@ -284,9 +284,12 @@ if(parsedOrders.length){
   pendingReviewCount=parsedOrders.filter(item=>item?.needsReview===true).length;
   statusBaseDetails=statusDetails.slice();
   const structuredStatus={left:resultDate,right:`${uniqueCount}家 · ${resultWeight}`,compact:true,details:[...statusBaseDetails,...(pendingReviewCount>0?[`待定${pendingReviewCount}家`]:[])]};
-  // 规划完成后继续沿用同一个状态框进入自动保存阶段；最终成功由录入流程统一处理。
+  // 规划完成后进入自动保存；统计明细保持固定顺序：新增 → 更正 → 合并 → 待定。
+  // “正在保存…”只作为主状态文字显示，不混入统计明细，避免状态框排序错乱。
+  window.__zspStatusDetails=[...structuredStatus.details];
+  window.__zspStatusSummary=structuredStatus;
   window.renderUnifiedStatus('loading',86,'规划完成，正在保存运单及修正记录…');
-  window.renderStatusDetail?.([...structuredStatus.details,'正在保存运单及修正记录']);
+  window.renderStatusDetail?.(structuredStatus.details);
 }else{window.clearStatusDetail?.();statusBaseDetails=[];pendingReviewCount=0;}
 if(parsedOrders.length){
   // 规划成功后直接进入服务器入库。
