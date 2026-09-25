@@ -1,6 +1,6 @@
 // 天友智配One V3 · 今日运单/今日修正数据调用接口
 import { authRequired } from '../_auth.js';
-import { canUseRoute, normalizeRoute, todayWaybillKey, todayCorrectionKey, planKey } from './data.js';
+import { canUseRoute, normalizeRoute, todayWaybillKey, todayCorrectionKey, planKey, getRoute } from './data.js';
 import { get, evalRedis, v3Key } from './_redis.js';
 
 export async function onRequest({request,env}){
