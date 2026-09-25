@@ -99,7 +99,7 @@ function renderInvites(list){
   }).join('')||'<div class="empty-state">暂无邀请码</div>';
 }
 async function setInviteStatus(hash,status){
-  if(!await OneModal.confirm('确定停用这个邀请码吗？停用后无法继续注册使用？',{title:'停用邀请码',confirmText:'停用',danger:true})) return;
+  if(!await OneModal.confirm('确定停用这个邀请码吗？停用后无法继续注册使用。',{title:'停用邀请码',confirmText:'停用',danger:true})) return;
   try{ const r=await api('/api/admin/invites',{method:'PATCH',body:{hash,status}}); if(!r.success) throw new Error(r.error||'操作失败'); notice('邀请码已停用'); await loadInvites(); }catch(e){notice(e.message||'操作失败',true)}
 }
 async function loadLogs(){
@@ -201,7 +201,7 @@ async function resetData(){
   try{
     const r=await api('/api/admin/data-reset',{method:'POST',headers:{'X-Data-Reset-Key':key},body:{confirmation}});
     if(!r.success) throw new Error(r.error||'数据重置失败');
-    $('#resetResult').textContent=`已清空：扫描 ${r.scanned||0} 个键，删除 ${r.deleted||0} 个键。请重新注册管理员并建立线路数据。`;
+    $('#resetResult').textContent=`已清空：扫描 ${r.scanned||0} 个键，删除 ${r.deleted||0} 个键。请保留现有主系统管理员账号，重新建立线路和基准库。`;
     $('#resetResult').classList.remove('hidden');
     notice('数据重置完成。主系统管理员账号已保留，可继续进行系统管理。');
     $('#resetKey').value='';
