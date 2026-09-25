@@ -202,11 +202,43 @@ let uploadFailureTimer=null;
 window.handleUploadProcessingFailure=(message='运单处理失败，请重新上传')=>{
   if(uploadFailureTimer)clearTimeout(uploadFailureTimer);
   window.renderUnifiedStatus?.('error',0,'运单处理失败，请重新上传');
-  uploadFailureTimer=setTimeout(()=>{
+  uploadFailureTimer=setTimeout(async()=>{
     uploadFailureTimer=null;
-    // 失败任务先彻底清理，再重新打开“上传运单”入口；不复用失败任务的任何状态。
-    try{window.clearManualInput?.();}catch(e){console.warn('失败运单清理失败',e);}
-    window.restartUpload?.();
+    // 失败处理必须形成单向收口：先让旧任务立即失效，再清理输入/解析上下文，
+    // 等OCR资源释放完成后，最后一次性恢复“上传运单”入口，避免异步清理把入口再次关闭。
+    try{
+      invalidateUploadTask();
+      if(parseAbortController){parseCancelled=true;parseAbortController.abort();}
+      parsedOrders=[];
+      pendingMeta={};
+      correctionDetails=[];
+      setCorrectionSummary(0);
+      reviewMode=false;
+      window.__zspParseContext=null;
+      const input=$('manualOrderInput');
+      if(input){
+        input.value='';
+        input.setAttribute('placeholder','上传运单后，这里显示识别文字，请核对识别结果。');
+      }
+      ['ocrCameraInput','ocrAlbumInput','ocrFileInput'].forEach(id=>{
+        const fileInput=$(id);
+        if(fileInput)fileInput.value='';
+      });
+      window.onOrderParsed?.({stores:[]});
+      window.renderReviewStores?.([]);
+      closeUploadDetail?.();
+      if(typeof window.cancelConfirm==='function')window.cancelConfirm();
+      if(typeof window.cancelOCR==='function')await window.cancelOCR().catch(()=>{});
+    }catch(e){
+      console.warn('失败运单资源清理失败',e);
+    }finally{
+      window.resetProcessingStatus?.();
+      const overlay=$('uploadOverlay');
+      if(overlay)overlay.classList.add('active');
+      openUploadHistoryGuard();
+      window.closeUploadSource?.();
+      window.openUploadSource?.();
+    }
   },900);
 };
 window.cancelUpload=()=>{
