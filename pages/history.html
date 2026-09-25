@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#05070A">
   <title>历史查询 · 天友智配One</title>
   <link rel="stylesheet" href="../css/order.css?v=20260922-16">
-  <link rel="stylesheet" href="../css/history.css?v=20260925-20">
+  <link rel="stylesheet" href="../css/history.css?v=20260925-21">
   <link rel="stylesheet" href="../css/icons.css?v=20260921-1">
 </head>
 <body>
@@ -292,7 +292,7 @@ function bindSwipeRow(row,surface,date,item){
     if(!dragging)return;
     const dx=event.clientX-startX;
     dragging=false;
-    if(moved&&dx<-42){row.classList.add('open');surface.style.transition='transform .18s ease';surface.style.transform='translateX(-156px)';}
+    if(moved&&dx<-42){row.classList.add('open');surface.style.transition='transform .18s ease';surface.style.transform='translateX(-144px)';}
     else if(moved&&dx>42){row.classList.remove('open');surface.style.transition='transform .18s ease';surface.style.transform='translateX(0)';}
     else reset();
     if(moved)event.preventDefault();
