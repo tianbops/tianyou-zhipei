@@ -309,16 +309,26 @@ export async function redisCommand(env, command) {
 
 // 路线绑定需要同时更新路线记录和多个用户记录；使用单次 EVAL 保证整组写入原子提交。
 // 同时用 expectedUpdatedAt / expectedSessionVersion 做乐观并发校验，避免并发管理员覆盖最新绑定。
-export async function atomicRouteBinding(env, { routeKey, expectedRouteUpdatedAt = '', routeRecord, userUpdates = [] }) {
+export async function atomicRouteBinding(env, { routeKey, expectedRouteUpdatedAt = '', routeRecord, userUpdates = [], profileUpdates = [] }) {
   const updates = Array.isArray(userUpdates) ? userUpdates.filter(item => item?.key && item?.user) : [];
-  const keys = [routeKey, ...updates.map(item => item.key)];
-  const args = [String(expectedRouteUpdatedAt || ''), JSON.stringify(routeRecord), ...updates.flatMap(item => [
-    String(Number(item.expectedSessionVersion || 1)),
-    JSON.stringify(item.user)
-  ])];
+  const profiles = Array.isArray(profileUpdates) ? profileUpdates.filter(item => item?.key && item?.profile) : [];
+  const keys = [routeKey, ...updates.map(item => item.key), ...profiles.map(item => item.key)];
+  const args = [
+    String(expectedRouteUpdatedAt || ''),
+    JSON.stringify(routeRecord),
+    String(updates.length),
+    String(profiles.length),
+    ...updates.flatMap(item => [
+      String(Number(item.expectedSessionVersion || 1)),
+      JSON.stringify(item.user)
+    ]),
+    ...profiles.map(item => JSON.stringify(item.profile))
+  ];
   const script = `
 local expectedRouteUpdatedAt = ARGV[1]
 local routeJson = ARGV[2]
+local userCount = tonumber(ARGV[3]) or 0
+local profileCount = tonumber(ARGV[4]) or 0
 local currentRoute = redis.call('GET', KEYS[1])
 if expectedRouteUpdatedAt ~= '' then
   if not currentRoute then return 'ROUTE_CONFLICT' end
@@ -328,19 +338,28 @@ else
   if currentRoute then return 'ROUTE_CONFLICT' end
 end
 
-for i = 2, #KEYS do
-  local argIndex = 3 + (i - 2) * 2
+for i = 1, userCount do
+  local keyIndex = 1 + i
+  local argIndex = 5 + (i - 1) * 2
   local expectedVersion = tonumber(ARGV[argIndex]) or 1
-  local currentUser = redis.call('GET', KEYS[i])
+  local currentUser = redis.call('GET', KEYS[keyIndex])
   if not currentUser then return 'USER_CONFLICT' end
   local ok, obj = pcall(cjson.decode, currentUser)
   if not ok or tonumber(obj.sessionVersion or 1) ~= expectedVersion then return 'USER_CONFLICT' end
 end
 
 redis.call('SET', KEYS[1], routeJson)
-for i = 2, #KEYS do
-  local argIndex = 3 + (i - 2) * 2
-  redis.call('SET', KEYS[i], ARGV[argIndex + 1])
+
+for i = 1, userCount do
+  local keyIndex = 1 + i
+  local argIndex = 5 + (i - 1) * 2
+  redis.call('SET', KEYS[keyIndex], ARGV[argIndex + 1])
+end
+
+local profileArgStart = 5 + userCount * 2
+for i = 1, profileCount do
+  local keyIndex = 1 + userCount + i
+  redis.call('SET', KEYS[keyIndex], ARGV[profileArgStart + i - 1])
 end
 return 'OK'
 `;
