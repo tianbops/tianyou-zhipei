@@ -1,7 +1,7 @@
 // 天友智配One V1.0 - 系统管理：线路绑定
 import { requireSystemAdmin } from '../_auth.js';
 import { baseKey as v3BaseKey, routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route, getUserProfile } from '../v3/data.js';
-import { getUser, normalizeRoute, encodeKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand } from '../_data.js';
+import { getUser, normalizeRoute, encodeKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, scanUsers } from '../_data.js';
 
 export async function onRequest({ request, env }) {
   const admin = await requireSystemAdmin(request, env);
@@ -63,6 +63,24 @@ export async function onRequest({ request, env }) {
           });
         }
       } while (cursor !== '0');
+
+      // 历史数据可能出现“用户已绑定，但线路主记录没有同步人员字段”的情况。
+      // 管理页的绑定状态必须以用户实际 boundRouteId + routeDuty 为兜底，避免错误显示“未绑定”。
+      const allUsers = await scanUsers(env).catch(() => []);
+      const usersById = new Map(allUsers.map(user => [String(user.id || ''), user]));
+      for (const routeRecord of records.values()) {
+        const canonicalRoute = normalizeRoute(routeRecord.id);
+        const bound = allUsers.filter(user =>
+          String(user.status || 'active') !== 'disabled' &&
+          normalizeRoute(user.boundRouteId || user.route) === canonicalRoute &&
+          String(user.routeDuty || '').toLowerCase() !== ''
+        );
+        const driver = bound.find(user => String(user.routeDuty).toLowerCase() === 'driver');
+        const delivery = bound.find(user => String(user.routeDuty).toLowerCase() === 'delivery');
+        if (!routeRecord.driverUserId && driver?.id) routeRecord.driverUserId = String(driver.id);
+        if (!routeRecord.deliveryUserId && delivery?.id) routeRecord.deliveryUserId = String(delivery.id);
+        routeRecord.boundUserIds = [...new Set([routeRecord.driverUserId, routeRecord.deliveryUserId].filter(Boolean))];
+      }
 
       const routeList = [...records.values()].sort((a, b) =>
         String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true })
