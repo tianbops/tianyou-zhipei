@@ -15,7 +15,10 @@ export async function onRequest({ request, env }) {
         return json({ success: true, route: record });
       }
 
-      const records = [];
+      // 管理员“线路”页必须展示当前 Redis 中已经存在的全部线路。
+      // 正常线路有 v3 route 主记录；历史数据可能只有 route:<线路>:base，
+      // 两种都纳入列表，但只读修复，不在 GET 请求中偷偷改写业务数据。
+      const records = new Map();
       let cursor = '0';
       do {
         const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', 'zpei:v3:route:*', 'COUNT', '200']);
@@ -25,14 +28,43 @@ export async function onRequest({ request, env }) {
           if ((key.match(/:/g)||[]).length !== 3) continue;
           const value = await redisCommand(env, ['GET', key]).catch(() => null);
           if (!value || typeof value !== 'object' || !value.id) continue;
-          records.push(value);
+          records.set(normalizeRoute(value.id), value);
         }
       } while (cursor !== '0');
 
-      return json({
-        success: true,
-        routes: records.sort((a, b) => String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true }))
-      });
+      // 补充仅存在基准库的历史线路，避免管理员页面显示“暂无线路”。
+      cursor = '0';
+      do {
+        const result = await redisCommand(env, ['SCAN', cursor, 'MATCH', 'zpei:v3:route:*:base', 'COUNT', '200']);
+        cursor = String(result?.[0] || '0');
+        const keys = Array.isArray(result?.[1]) ? result[1] : [];
+        for (const key of keys) {
+          const match = String(key).match(/^zpei:v3:route:(.+):base$/);
+          if (!match) continue;
+          const routeId = normalizeRoute(match[1]);
+          if (!routeId || records.has(routeId)) continue;
+          const base = await redisCommand(env, ['GET', key]).catch(() => null);
+          if (!base || typeof base !== 'object') continue;
+          records.set(routeId, {
+            schemaVersion: 3,
+            id: routeId,
+            name: routeId,
+            driverUserId: '',
+            deliveryUserId: '',
+            boundUserIds: [],
+            status: 'active',
+            createdAt: base.createdAt || base.updatedAt || '',
+            updatedAt: base.updatedAt || '',
+            migrationRequired: true
+          });
+        }
+      } while (cursor !== '0');
+
+      const routeList = [...records.values()].sort((a, b) =>
+        String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true })
+      );
+
+      return json({ success: true, routes: routeList, total: routeList.length });
     }
 
     if (request.method === 'POST') {
