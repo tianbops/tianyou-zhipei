@@ -19,7 +19,6 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   $('#resetDataBtn').onclick=resetData;
   $('#toggleResetKey').onclick=()=>toggleResetKey();
   $('#saveRoute').onclick=saveRoute;
-  $('#backBtn').onclick=()=>Auth.logout();
   await boot();
 });
 
