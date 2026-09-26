@@ -1,4 +1,4 @@
-// 天友智配One - 前端认证
+// 智配One - 前端认证
 // 服务器 Session 是唯一身份来源；浏览器不保存密码、Session Token 或线路身份。
 // 注意：本文件必须保持零语法错误，否则整个 window.Auth 都不会注册。
 window.Auth = {
