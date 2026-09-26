@@ -1,0 +1,1 @@
+export async function onRequest(){return Response.json({success:true,name:"智配One",version:"rebuild-2026-09-26"});}

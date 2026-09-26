@@ -1,83 +1,26 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-<meta name="theme-color" content="#05070A">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>智配One</title>
-<link rel="stylesheet" href="css/style.css?v=20260925-43">
-<link rel="stylesheet" href="css/icons.css?v=20260921-1">
-
-  <link rel="prefetch" href="pages/order_detail.html" as="document">
+<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-
-<div class="app-container">
-<header class="top-bar">
-  <div class="brand-info"><div class="brand-name">智配One</div><div class="brand-sub">Zhipei One</div></div>
-  <button class="menu-btn" type="button" onclick="openHomeMenu()" aria-label="打开菜单"><svg class="z-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-</header>
-<div id="homeMenu" class="home-menu">
-  <div class="current-line" id="menuRoute">加载中...</div><label class="dispatch-route-wrap">调度线路<select id="dispatchRouteSelect" class="dispatch-route-select"></select></label>
-  <div class="home-menu-item" onclick="location.href='settings.html'"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c.7-3.5 2.9-5.3 6.5-5.3s5.8 1.8 6.5 5.3"/></svg></span>账户设置</div>
-  <div class="home-menu-item" onclick="goToRouteEdit()"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3.5"/></svg></span>线路编辑</div>
-  <div class="home-menu-item logout-item" onclick="logout()"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 16l4-4-4-4M18 12H9"/></svg></span>退出登录</div>
-</div>
-<section class="task-card" id="taskCard">
-  <div class="task-title"><div class="task-name">今日任务 <span class="status-dot" id="statusDot" aria-label="今日运单笔数">0</span></div><div class="vehicle-area" id="homeRoute"><span class="z-icon vehicle-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></span><span class="vehicle-text">加载中...</span></div></div>
-  <div class="task-main">
-    <div class="task-info"><div>门店汇总：<strong id="storeCount">无数据</strong></div><div>重量汇总：<strong id="totalWeight">无数据</strong></div></div>
-    <div class="delivery-man"><img src="assets/delivery-route.png" alt="配送线路" onerror="this.style.display='none';this.parentElement.innerHTML='<span class="z-icon lg" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>'"></div>
-  </div>
+<main class="shell">
+<header class="topbar"><strong>智配One</strong><button id="logout" class="text-button">退出</button></header>
+<section class="card">
+<h2>上传运单</h2>
+<p>识别、提取、匹配、规划</p>
+<input id="waybill" type="file" accept="image/*,.pdf">
+<button id="process">开始处理</button>
+<p id="status" class="message"></p>
 </section>
-<div class="function-list">
-  <button class="function-btn" type="button" onclick="toggleUpload()"><span class="function-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></span>上传运单</button>
-  <button class="function-btn" type="button" onclick="goToOrderDetail()"><span class="function-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11.1A7 7 0 0 0 5 9.9C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/><path d="M4 18.5h3M17 18.5h3"/></svg></span>当日线路</button>
-  <button class="function-btn" type="button" onclick="goToHistory()"><span class="function-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 5v4h4"/><path d="M12 7.5v5l3.2 1.9"/></svg></span>历史查询</button>
-</div>
-<div class="upload-overlay" id="uploadOverlay">
-  <div class="upload-sheet">
-    <div class="sheet-handle" aria-hidden="true"></div>
-    <div class="upload-source-menu active" id="uploadSourceMenu" aria-hidden="false">
-      <div class="source-menu-title">上传运单</div>
-      <div class="source-menu-options">
-        <label class="source-option" aria-label="拍摄运单"><input id="ocrCameraInput" type="file" accept="image/*" capture="environment"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h4l1.5-2h5L16 7h4v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><strong>拍摄</strong></label>
-        <label class="source-option" aria-label="从相册选择运单"><input id="ocrAlbumInput" type="file" accept="image/*" multiple><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 3.5 3.5 2.5-2.5 5 5"/></svg></span><strong>相册</strong></label>
-        <button class="source-option" id="fileSourceButton" type="button" onclick="openFileManager()" aria-label="选择运单文件"><span class="z-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v10H3z"/></svg></span><strong>文件</strong></button><input id="ocrFileInput" class="fallback-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-hidden="true">
-      </div>
-      <button class="upload-cancel-btn" type="button" onclick="cancelUpload()">取消</button>
-    </div>
-  </div>
-</div>
-</div>
-<script src="js/auth.js?v=20260924-6"></script>
-<script src="js/home_status.js?v=20260925-10"></script>
-<script src="js/waybill/task.js?v=20260926-2"></script>
-<script src="js/home.js?v=20260926-17"></script>
-<script src="js/paddle_ocr.js?v=20260926-16"></script>
-<script>
-/* 首页基础交互保护：保证核心入口不因业务模块异常而失去点击响应 */
-(function(){
-  'use strict';
-  document.addEventListener('DOMContentLoaded',function(){
-    const byId=id=>document.getElementById(id);
-    const go=url=>window.location.assign(url);
-    const menuBtn=document.querySelector('.menu-btn');
-    const buttons=[...document.querySelectorAll('.function-btn')];
-    const uploadBtn=buttons.find(x=>String(x.textContent||'').includes('上传运单'));
-    const orderBtn=buttons.find(x=>String(x.textContent||'').includes('当日线路'));
-    const historyBtn=buttons.find(x=>String(x.textContent||'').includes('历史查询'));
-    if(menuBtn && typeof window.openHomeMenu!=='function')menuBtn.addEventListener('click',function(){
-      const menu=byId('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block';
-    });
-    if(uploadBtn && typeof window.toggleUpload!=='function')uploadBtn.addEventListener('click',function(){
-      const overlay=byId('uploadOverlay');if(overlay)overlay.classList.add('active');
-      const source=byId('uploadSourceMenu');if(source)source.classList.add('active');
-    });
-    if(orderBtn && typeof window.goToOrderDetail!=='function')orderBtn.addEventListener('click',function(){go('pages/order_detail.html');});
-    if(historyBtn && typeof window.goToHistory!=='function')historyBtn.addEventListener('click',function(){go('pages/history.html');});
-  });
-})();
-</script>
+<nav class="grid">
+<a href="/pages/order_detail.html">今日线路</a>
+<a href="/pages/history.html">历史查询</a>
+</nav>
+</main>
+<script src="/js/home.js"></script>
 </body>
 </html>

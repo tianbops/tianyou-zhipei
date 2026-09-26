@@ -1,0 +1,2 @@
+const form=document.getElementById("loginForm");const msg=document.getElementById("message");
+form?.addEventListener("submit",async e=>{e.preventDefault();msg.textContent="正在登录…";try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({username:username.value.trim(),password:password.value})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw Error(d.message||"登录失败");location.replace("/home.html")}catch(e){msg.textContent=e.message;msg.className="message error"}});

@@ -1,47 +1,25 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-<meta name="theme-color" content="#05070A">
-<title>智配One · 登录</title>
-<link rel="stylesheet" href="css/login.css?v=20260926-1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>智配One</title>
+<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<main class="login-container">
-<section class="logo-area">
-<img src="assets/logo.png" alt="智配One" class="logo">
-<div class="brand-sub">智能配送&nbsp;&nbsp;一路领先</div>
-</section>
-<form class="login-card" id="authCard" autocomplete="on" onsubmit="event.preventDefault();registerMode?registerUser():login()">
-<h1 class="form-title" id="formTitle">登录</h1>
-<div class="input-box"><input id="username" type="text" placeholder="请输入用户名" autocomplete="username" inputmode="text" maxlength="32" autofocus></div>
-<div class="input-box password-box"><input id="password" type="password" placeholder="请输入密码" autocomplete="current-password"><button type="button" class="eye-btn" onclick="togglePassword('password',this)" aria-label="显示密码" aria-pressed="false"><span class="eye-icon eye-icon-off" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-5.5 9.5-5.5S21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="eye-icon eye-icon-on" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.9C11.05 5.8 11.52 5.75 12 5.75c6 0 9.5 6.25 9.5 6.25a18.7 18.7 0 0 1-3.05 3.55"/><path d="M6.35 8.05C3.9 9.65 2.5 12 2.5 12s3.5 6.25 9.5 6.25c1.25 0 2.35-.23 3.32-.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></span></button></div>
-<div class="input-box register-only"><input id="inviteCode" type="text" placeholder="请输入邀请码" autocomplete="off" inputmode="text" maxlength="9" autocapitalize="characters"></div>
-<div class="input-box register-only password-box"><input id="confirmPassword" type="password" placeholder="再次输入密码" autocomplete="new-password"><button type="button" class="eye-btn" onclick="togglePassword('confirmPassword',this)" aria-label="显示密码" aria-pressed="false"><span class="eye-icon eye-icon-off" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-5.5 9.5-5.5S21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="eye-icon eye-icon-on" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.9C11.05 5.8 11.52 5.75 12 5.75c6 0 9.5 6.25 9.5 6.25a18.7 18.7 0 0 1 9.5 6.25a18.7 18.7 0 0 1-3.05 3.55"/><path d="M6.35 8.05C3.9 9.65 2.5 12 2.5 12s3.5 6.25 9.5 6.25c1.25 0 2.35-.23 3.32-.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></span></button></div>
-<button class="login-btn login-only" id="loginButton" type="button" onclick="login()">登录</button>
-<button class="login-btn register-only" id="registerButton" type="button" onclick="registerUser()">注册</button>
-<button class="switch-btn" id="switchButton" type="button" onclick="toggleMode()">没有账号？立即注册</button>
-<div id="authError" role="alert" aria-live="polite"></div>
-<div class="form-tip register-only">注册完成后进入系统，再设置姓名、线路和车辆。</div>
-</form>
+<main class="shell">
+  <section class="brand">
+    <img src="/assets/logo.png" alt="智配One">
+    <h1>智配One</h1>
+    <p>Zhipei One</p>
+  </section>
+  <form id="loginForm" class="card">
+    <label>账号<input id="username" autocomplete="username" required></label>
+    <label>密码<input id="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit">登录</button>
+    <p id="message" class="message"></p>
+  </form>
 </main>
-<script>
-'use strict';
-const card=document.getElementById('authCard');
-let registerMode=false;
-function showError(message){document.getElementById('authError').textContent=message}
-function hideError(){document.getElementById('authError').textContent=''}
-function togglePassword(id,button){const input=document.getElementById(id);const visible=input.type==='text';input.type=visible?'password':'text';button.classList.toggle('is-visible',!visible);button.setAttribute('aria-pressed',String(!visible));button.setAttribute('aria-label',visible?'显示密码':'隐藏密码')}
-function focusUsername(){const input=document.getElementById('username');if(input)input.focus({preventScroll:true})}
-function focusNextField(id){const input=document.getElementById(id);if(input)input.focus({preventScroll:true})}
-function toggleMode(){registerMode=!registerMode;card.classList.toggle('register-mode',registerMode);document.getElementById('formTitle').textContent=registerMode?'注册':'登录';document.getElementById('switchButton').textContent=registerMode?'已有账号？返回登录':'没有账号？立即注册';document.getElementById('password').autocomplete=registerMode?'new-password':'current-password';hideError();focusUsername()}
-async function apiLogin(username,password){const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({username,password})});const data=await response.json().catch(()=>({}));if(!response.ok||!data?.success){const error=new Error(data?.error||`登录失败（HTTP ${response.status}）`);error.status=response.status;throw error}return data.user||null}
-async function login(){const username=document.getElementById('username').value.trim();const password=document.getElementById('password').value;const button=document.getElementById('loginButton');hideError();if(!username)return showError('请输入用户名');if(!password)return showError('请输入密码');button.disabled=true;button.textContent='登录中…';try{const user=await apiLogin(username,password);const isPrimaryAdmin=user?.role==='system_admin'&&user?.adminLevel==='primary';location.replace(isPrimaryAdmin?'admin.html':'home.html')}catch(error){showError(error?.status===401?'用户名或密码错误，请重试':(error?.message||'网络异常，请稍后重试'))}finally{button.disabled=false;button.textContent='登录'}}
-async function registerUser(){const username=document.getElementById('username').value.trim();const password=document.getElementById('password').value;const confirm=document.getElementById('confirmPassword').value;const button=document.getElementById('registerButton');hideError();if(!username)return showError('请输入用户名');if(!/^[a-zA-Z0-9_]{3,32}$/.test(username))return showError('用户名需为3-32位字母、数字或下划线');if(password.length<6)return showError('密码至少6位');if(password!==confirm)return showError('两次输入的密码不一致');const inviteCode=document.getElementById('inviteCode').value.trim();if(!inviteCode)return showError('请输入邀请码');button.disabled=true;button.textContent='注册中…';try{const response=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({username,password,inviteCode})});const data=await response.json().catch(()=>({}));if(!response.ok||!data?.success)throw new Error(data?.error||`注册失败（HTTP ${response.status}）`);location.replace('settings.html')}catch(error){showError(error?.message||'注册失败，请稍后重试')}finally{button.disabled=false;button.textContent='注册'}}
-document.addEventListener('DOMContentLoaded',()=>{focusUsername();setTimeout(focusUsername,120)});
-window.addEventListener('pageshow',()=>{if(!document.hidden)setTimeout(focusUsername,80)});
-['username','password','confirmPassword','inviteCode'].forEach(id=>document.getElementById(id).addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();if(id==='username'){focusNextField('password');return}if(id==='password'&&registerMode){focusNextField('confirmPassword');return}if(id==='confirmPassword'&&registerMode){focusNextField('inviteCode');return}registerMode?registerUser():login()}));
-</script>
+<script src="/js/login.js"></script>
 </body>
 </html>

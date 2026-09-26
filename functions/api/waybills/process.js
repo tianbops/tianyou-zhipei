@@ -1,0 +1,1 @@
+export async function onRequest(context){if(context.request.method!=="POST")return new Response("Method Not Allowed",{status:405});return Response.json({success:false,code:"NOT_IMPLEMENTED",message:"运单核心链路正在按新架构重建，请勿使用旧业务接口。"}, {status:501});}

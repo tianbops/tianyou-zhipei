@@ -1,1 +1,0 @@
-<view class="page"><view wx:if="{{!items.length}}" class="card muted">暂无历史运单</view><view wx:for="{{items}}" wx:key="date" class="card history-item"><view class="date">{{item.date}}</view><view>{{item.count}}家门店 · {{item.weight}}</view></view></view>
