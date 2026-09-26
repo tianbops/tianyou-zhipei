@@ -279,7 +279,7 @@ window.parseManualInput=async(options={})=>{
   return parsedOrders;
  }catch(e){
   if(e?.name==='AbortError'||e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[];}
-  window.handleUploadProcessingFailure?.(e.message||'规划失败，请重新上传',e.code||'PLAN_FAILED');if(auto)throw e;return[];
+  window.handleUploadProcessingFailure?.(e.message||'规划失败，请重新上传',e.code||'PLAN_FAILED',e.stage||'');if(auto)throw e;return[];
  }finally{parseAbortController=null;parseInFlight=false;}
 };
 
