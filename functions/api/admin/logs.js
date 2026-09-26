@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 系统管理日志
+// 智配One V1.0 - 系统管理日志
 import { requireSystemAdmin } from '../_auth.js';
 import { redisGet } from '../_data.js';
 
