@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>智配One · 系统管理</title>
-  <link rel="stylesheet" href="css/admin.css?v=20260926-3">
+  <link rel="stylesheet" href="css/admin.css?v=20260926-4">
 </head>
 <body>
   <main class="admin-shell">
@@ -36,11 +36,20 @@
         <div class="form-actions"><button id="cancelCreateRoute" class="ghost" type="button">取消</button><button id="createRoute" class="primary" type="button">创建线路</button></div>
       </div>
       <div id="routeEditPanel" class="route-form hidden">
-        <div class="route-edit-head"><div><strong>人员配置</strong><span id="routeEditName">选择线路</span></div><button id="cancelRouteEdit" class="ghost" type="button">取消</button></div>
-        <label>线路<select id="routeInput"><option value="">选择线路</option></select></label>
-        <label>驾驶员<select id="driverSelect"></select></label>
-        <label>配送员<select id="deliverySelect"></select></label>
-        <button id="saveRoute" class="primary">保存绑定</button>
+        <div class="route-edit-head"><div><strong>人员配置</strong><span id="routeEditName">选择线路</span></div><button id="cancelRouteEdit" class="ghost" type="button">关闭</button></div>
+        <input id="routeInput" type="hidden">
+        <div class="role-config">
+          <div class="role-row">
+            <div class="role-copy"><span class="role-label">驾驶员</span><strong id="driverName">未绑定</strong><span id="driverStatus" class="role-status">可添加未绑定用户</span></div>
+            <div class="role-actions"><button id="driverUnbind" class="subtle-danger" type="button">解除绑定</button><select id="driverSelect" aria-label="选择驾驶员"></select></div>
+          </div>
+          <div class="role-row">
+            <div class="role-copy"><span class="role-label">配送员</span><strong id="deliveryName">未绑定</strong><span id="deliveryStatus" class="role-status">可添加未绑定用户</span></div>
+            <div class="role-actions"><button id="deliveryUnbind" class="subtle-danger" type="button">解除绑定</button><select id="deliverySelect" aria-label="选择配送员"></select></div>
+          </div>
+        </div>
+        <div class="route-form-note">管理员可以添加未绑定用户或解除当前线路绑定。已绑定其他线路的用户不可直接转移。</div>
+        <div class="form-actions route-save-actions"><button id="cancelRouteEdit2" class="ghost" type="button">取消</button><button id="saveRoute" class="primary">保存配置</button></div>
       </div>
       <div id="routeList" class="route-list"></div>
     </section>
@@ -75,6 +84,6 @@
     </section>
   </main>
   <script src="js/modal.js?v=20260926-2"></script>
-  <script src="js/admin.js?v=20260926-9"></script>
+  <script src="js/admin.js?v=20260926-10"></script>
 </body>
 </html>
