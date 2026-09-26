@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 系统管理：用户
+// 智配One V1.0 - 系统管理：用户
 import { requireSystemAdmin } from '../_auth.js';
 import { normalizeRole, publicUser, redisGet, redisSet, scanUsers, recordAdminLog, redisCommand, encodeKey } from '../_data.js';
 
