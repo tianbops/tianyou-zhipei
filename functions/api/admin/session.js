@@ -1,4 +1,4 @@
-// 天友智配One - 主系统管理员专用会话校验
+// 智配One - 主系统管理员专用会话校验
 import { requireSystemAdmin } from '../_auth.js';
 
 export async function onRequest({ request, env }) {
