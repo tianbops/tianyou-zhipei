@@ -1,8 +1,8 @@
 <view class="page login-page">
   <view class="login-head">
     <image class="logo" src="/assets/logo.png" mode="aspectFit" />
-    <view class="title">智配 One</view>
-    <view class="muted">登录配送工作台</view>
+    <view class="title">智配One</view>
+    <view class="muted">Zhipei One · 配送工作台</view>
   </view>
   <view class="card">
     <input class="input" value="{{username}}" placeholder="账号" bindinput="onUsername" />
