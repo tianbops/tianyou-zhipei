@@ -27,21 +27,28 @@ export async function onRequest({ request, env }) {
       if (id) target = await redisGet(env, `user:${String(id).trim()}`);
     }
     if (!target) return json({ success: false, error: '找不到目标用户' }, 404);
-    if (String(target.adminLevel || '') === 'primary') return json({ success: false, error: '主系统管理员已经初始化，无需重复设置' }, 409);
+    const isReset = String(body.action || '').trim().toLowerCase() === 'reset';
+    if (String(target.adminLevel || '') === 'primary' && !isReset) return json({ success: false, error: '主系统管理员已经初始化，无需重复设置' }, 409);
     const allUsers = await scanUsers(env);
-    const existingAdmins = allUsers.filter(user => String(user?.role || '').trim().toLowerCase() === 'system_admin');
-    if (existingAdmins.length) return json({ success: false, error: '系统已存在系统管理员身份，请先清理后再初始化' }, 409);
+    const existingAdmins = allUsers.filter(user => String(user?.role || '').trim().toLowerCase() === 'system_admin' && String(user?.id || '') !== String(target.id || ''));
+    if (existingAdmins.length) return json({ success: false, error: '系统存在其他系统管理员身份，请先处理后再重置' }, 409);
 
     const updated = {
       ...target,
       role: 'system_admin',
       adminLevel: 'primary',
+      boundRouteId: null,
+      routeDuty: null,
+      route: null,
+      dispatchRoute: null,
+      vehicle: null,
       updatedAt: new Date().toISOString(),
       sessionVersion: Number(target.sessionVersion || 1) + 1
     };
     await redisSet(env, `user:${encodeURIComponent(target.id).replace(/%/g, '_')}`, updated);
-    await redisSet(env, 'system:admin:bootstrap:used', { usedAt: new Date().toISOString(), userId: target.id });
-    return json({ success: true, user: publicUser(updated), message: '系统管理员初始化成功；请立即轮换 ADMIN_BOOTSTRAP_KEY' });
+    await redisSet(env, 'system:admin:primary', { userId: target.id, username: String(target.username || '').trim().toLowerCase(), updatedAt: new Date().toISOString() });
+    await redisSet(env, 'system:admin:bootstrap:used', { usedAt: new Date().toISOString(), userId: target.id, action: isReset ? 'reset' : 'bootstrap' });
+    return json({ success: true, user: publicUser(updated), message: isReset ? '系统管理员已重置；请立即轮换 ADMIN_BOOTSTRAP_KEY' : '系统管理员初始化成功；请立即轮换 ADMIN_BOOTSTRAP_KEY' });
   } catch (error) {
     return json({ success: false, error: error?.message || '初始化失败' }, 503);
   } finally {
