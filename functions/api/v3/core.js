@@ -20,18 +20,36 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  const routeRecord=await getRoute(env,route);
  if(!routeRecord||routeRecord.status==='disabled')throw Object.assign(new Error('线路不存在或已停用'),{code:'ROUTE_NOT_FOUND',stage:'matching'});
  const [base,learning]=await Promise.all([getBase(env,route),getLearning(env,route)]);
- if(!base)throw Object.assign(new Error('线路基准库不存在'),{code:'BASE_MISSING',stage:'matching'});
+ const baseDatabaseAvailable=Boolean(base);
  let candidates;
  try{ candidates=extractStores(text); }
  catch(error){ throw Object.assign(new Error(error?.message||'运单文字提取失败'),{code:error?.code||'EXTRACT_FAILED',stage:'extracting'}); }
  if(!candidates.length)throw Object.assign(new Error('未提取到有效门店'),{code:'EXTRACT_FAILED',stage:'extracting'});
  const finalDate=dateValue(date)||businessDate();
- let matched;
- try{ matched=matchStores(candidates,base,learning,{route,date:finalDate}); }
- catch(error){ throw Object.assign(new Error(error?.message||'门店匹配未完成'),{code:error?.code||'MATCH_FAILED',stage:'matching'}); }
+ let matched={matched:[],pendingStores:[]};
  let deduped;
- try{ deduped=dedupeStores(matched.matched,candidates,matched.pendingStores); }
- catch(error){ throw Object.assign(new Error(error?.message||'门店整理未完成'),{code:error?.code||'MATCH_FAILED',stage:'matching'}); }
+ if(baseDatabaseAvailable){
+   try{ matched=matchStores(candidates,base,learning,{route,date:finalDate}); }
+   catch(error){ throw Object.assign(new Error(error?.message||'门店匹配未完成'),{code:error?.code||'MATCH_FAILED',stage:'matching'}); }
+   try{ deduped=dedupeStores(matched.matched,candidates,matched.pendingStores); }
+   catch(error){ throw Object.assign(new Error(error?.message||'门店整理未完成'),{code:error?.code||'MATCH_FAILED',stage:'matching'}); }
+ }else{
+   // 无基准库：不强行匹配、不生成“新增门店”，直接按OCR提取顺序形成临时运单门店记录并保存。
+   // RAW-* 仅属于本次运单，不进入基准库，也不作为后续门店身份。
+   const rawStores=candidates.map((name,index)=>({
+     storeId:'RAW-'+String(index+1).padStart(4,'0'),
+     name:String(name).trim(),
+     originalName:String(name).trim(),
+     routeOrder:index+1,
+     corrected:false,
+     matchConfidence:0,
+     matchVia:'raw-order',
+     nav:'',
+     needsReview:false,
+     provisional:true
+   }));
+   deduped={stores:rawStores,rawCount:candidates.length,totalStores:rawStores.length,merged:0};
+ }
  let planned;
  try{ planned=routePlan(deduped.stores,deduped.pendingStores); }
  catch(error){ throw Object.assign(new Error(error?.message||'配送顺序生成失败'),{code:error?.code||'PLAN_FAILED',stage:'planning'}); }
@@ -54,7 +72,7 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  if(planned.routeOrder.length!==planned.plannedStores.length||planned.routeOrder.some((id,i)=>String(id)!==String(planned.plannedStores[i].storeId))){
    throw Object.assign(new Error('配送顺序与门店数据不一致'),{code:'PLAN_FAILED',stage:'planning'});
  }
- const result={taskId,route,date:finalDate,vehicle:String(vehicle??'').trim(),totalWeight:String(totalWeight??'').trim(),stores:planned.plannedStores,pendingStores:planned.pendingStores,newStores:planned.pendingStores,rawCount:deduped.rawCount,totalStores:deduped.totalStores,corrections:planned.plannedStores.filter(x=>x.corrected).length,merged:deduped.merged,routeOrder:planned.routeOrder,correctionDetails:planned.plannedStores.filter(x=>x.corrected).map(x=>({storeId:x.storeId,originalName:x.originalName,name:x.name,routeOrder:x.routeOrder,matchConfidence:x.matchConfidence,matchVia:x.matchVia})),createdAt:new Date().toISOString(),schemaVersion:3,ocrVersion,ocrModel};
+ const result={taskId,route,date:finalDate,vehicle:String(vehicle??'').trim(),totalWeight:String(totalWeight??'').trim(),stores:planned.plannedStores,pendingStores:planned.pendingStores,newStores:baseDatabaseAvailable?planned.pendingStores:[],rawCount:deduped.rawCount,totalStores:deduped.totalStores,corrections:baseDatabaseAvailable?planned.plannedStores.filter(x=>x.corrected).length:0,merged:deduped.merged,routeOrder:planned.routeOrder,baseDatabaseAvailable,correctionDetails:planned.plannedStores.filter(x=>x.corrected).map(x=>({storeId:x.storeId,originalName:x.originalName,name:x.name,routeOrder:x.routeOrder,matchConfidence:x.matchConfidence,matchVia:x.matchVia})),createdAt:new Date().toISOString(),schemaVersion:3,ocrVersion,ocrModel};
  let saved;
  try{ saved=await savePlan(env,result); }
  catch(error){ throw Object.assign(new Error(error?.message||'规划结果保存失败'),{code:error?.code||'SAVE_FAILED',stage:'saving'}); }
