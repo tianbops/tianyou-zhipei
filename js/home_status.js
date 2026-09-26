@@ -96,8 +96,11 @@ function reset(){
 function userFriendlyError(message, code=''){
   const text=String(message||'').trim();
   const failureCode=String(code||'').trim();
-  if(failureCode==='STORE_CANDIDATES_INVALID')return '运单文字提取失败，请重新上传清晰的运单图片。';
-  if(failureCode==='BASE_DATABASE_UNAVAILABLE')return '当前线路数据读取失败，请稍后重试。';
+  if(failureCode==='STORE_CANDIDATES_INVALID'||failureCode==='EXTRACT_FAILED')return '运单文字提取失败，请重新上传清晰的运单图片。';
+  if(failureCode==='ROUTE_REQUIRED')return '请先选择调度线路，再上传运单。';
+  if(failureCode==='ROUTE_FORBIDDEN')return '当前账号无权使用所选调度线路，请切换到可用线路。';
+  if(failureCode==='ROUTE_NOT_FOUND')return '所选调度线路不存在或已停用，请重新选择线路。';
+  if(failureCode==='BASE_MISSING'||failureCode==='BASE_DATABASE_UNAVAILABLE')return '当前线路基准库不存在，请先建立线路基准数据。';
   if(failureCode==='MATCH_FAILED')return '门店匹配未完成，请稍后重试。';
   if(failureCode==='PLAN_FAILED')return '配送顺序生成失败，请稍后重试。';
   if(failureCode==='OCR_INVALID')return '运单识别失败，请重新上传清晰的运单图片。';
