@@ -155,110 +155,62 @@ function renderUsers(){
 }
 function renderRoutes(){
   $('#routeList').innerHTML=routes.map(r=>{
-    const driver=findUser(r.driverUserId)?.name||'未绑定';
-    const delivery=findUser(r.deliveryUserId)?.name||'未绑定';
-    const configured=Boolean(r.driverUserId||r.deliveryUserId);
-    const state=configured?'人员已配置':'人员未配置';
-    return `<article class="route-card">
-      <div class="route-card-head">
-        <div><div class="name">${esc(r.name||r.id)}</div><div class="route-id">${esc(r.id||'')}</div></div>
-        <span class="route-state">${state}</span>
-      </div>
-      <div class="route-people">
-        <div class="person-line"><span>驾驶员</span><strong>${esc(driver)}</strong></div>
-        <div class="person-line"><span>配送员</span><strong>${esc(delivery)}</strong></div>
-      </div>
-      <button class="route-manage" type="button" onclick="openRouteEditor('${escAttr(r.id||r.name)}')">人员配置 <span>›</span></button>
-    </article>`;
+    const driver=findUser(r.driverUserId);
+    const delivery=findUser(r.deliveryUserId);
+    const roleRow=(label,user,duty)=>{
+      if(user) return '<div class="person-line"><span>'+esc(label)+'：</span><strong>'+esc(user.name||user.username)+'</strong><button class="subtle-danger" type="button" onclick="unbindRouteRole(\''+escAttr(r.id||r.name)+'\',\''+duty+'\',\''+escAttr(user.id)+'\')">解绑</button></div>';
+      return '<div class="person-line"><span>'+esc(label)+'：</span><strong>未绑定</strong><button class="bind-role" type="button" onclick="bindRouteRole(\''+escAttr(r.id||r.name)+'\',\''+duty+'\')">绑定</button></div>';
+    };
+    return '<article class="route-card"><div class="route-card-head"><div><div class="name">'+esc(r.name||r.id)+'</div></div></div><div class="route-people">'+roleRow('驾驶员',driver,'driver')+roleRow('配送员',delivery,'delivery')+'</div></article>';
   }).join('')||'<div class="empty-state">暂无已登记线路</div>';
 }
-let editingRouteId='';
-function openRouteEditor(routeId){
+function availableUsers(){
+  return users.filter(u=>u.status==='active'&&u.role!=='system_admin'&&!String(u.boundRouteId||'').trim());
+}
+async function bindRouteRole(routeId,duty){
   const route=routes.find(x=>String(x.id||x.name)===String(routeId));
   if(!route)return;
-  editingRouteId=route.id||route.name||'';
-  $('#routeInput').value=editingRouteId;
-  $('#routeEditName').textContent=route.name||route.id||'';
-  fillRoleSelects(route);
-  updateRoleView(route);
-  $('#routeEditPanel').classList.remove('hidden');
-  $('#routeEditPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+  const list=availableUsers();
+  if(!list.length){await OneModal.notice('暂无未绑定用户',{title:duty==='driver'?'选择驾驶员':'选择配送员'});return;}
+  const selected=await selectUnboundUser(duty==='driver'?'选择驾驶员':'选择配送员',list);
+  if(!selected)return;
+  const body={route:route.id||route.name,driverUserId:String(route.driverUserId||''),deliveryUserId:String(route.deliveryUserId||'')};
+  if(duty==='driver')body.driverUserId=selected;else body.deliveryUserId=selected;
+  if(body.driverUserId&&body.deliveryUserId&&body.driverUserId===body.deliveryUserId){notice('同一用户不能同时担任驾驶员和配送员',true);return;}
+  try{const r=await api('/api/admin/routes',{method:'PUT',body});if(!r.success)throw new Error(r.error||'绑定失败');notice('绑定成功');await Promise.all([loadUsers(),loadRoutes()]);}catch(e){notice(e.message||'绑定失败',true)}
 }
-function closeRouteEditor(){
-  editingRouteId='';
-  $('#routeEditPanel').classList.add('hidden');
+function selectUnboundUser(title,list){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');overlay.className='one-shared-dialog';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');
+    const box=document.createElement('section');box.className='one-shared-dialog__box';
+    const head=document.createElement('div');head.className='one-shared-dialog__head';head.innerHTML='<div class="one-shared-dialog__title"></div><button type="button" class="one-shared-dialog__close" aria-label="关闭">×</button>';
+    head.querySelector('.one-shared-dialog__title').textContent=title;box.appendChild(head);
+    const listEl=document.createElement('div');listEl.className='admin-user-select-list';
+    let selected='';
+    list.forEach(u=>{
+      const label=document.createElement('label');label.className='admin-user-option';
+      label.innerHTML='<input type="radio" name="admin-bind-user"><span class="admin-user-option-copy"><strong></strong><small>未绑定</small></span>';
+      label.querySelector('input').value=String(u.id);label.querySelector('strong').textContent=u.name||u.username;
+      label.querySelector('input').addEventListener('change',()=>{selected=String(u.id);confirm.disabled=false});
+      listEl.appendChild(label);
+    });
+    box.appendChild(listEl);
+    const actions=document.createElement('div');actions.className='one-shared-dialog__actions';
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='one-shared-dialog__secondary';cancel.textContent='取消';
+    const confirm=document.createElement('button');confirm.type='button';confirm.className='one-shared-dialog__primary';confirm.textContent='确定';confirm.disabled=true;
+    actions.append(cancel,confirm);box.appendChild(actions);overlay.appendChild(box);document.body.appendChild(overlay);
+    const finish=v=>{overlay.remove();resolve(v)};
+    cancel.onclick=()=>finish(null);head.querySelector('.one-shared-dialog__close').onclick=()=>finish(null);confirm.onclick=()=>finish(selected);
+  });
 }
-function fillSelects(){
-  const routeOptions='<option value="">选择线路</option>'+routes.map(r=>`<option value="${escAttr(r.id||r.name)}">${esc(r.name||r.id)}</option>`).join('');
-  if($('#routeInput').tagName==='SELECT') $('#routeInput').innerHTML=routeOptions;
-  const route=routes.find(x=>String(x.id||x.name)===String(editingRouteId));
-  if(route) fillRoleSelects(route);
-}
-function fillRoleSelects(route){
-  const currentDriver=String(route?.driverUserId||'');
-  const currentDelivery=String(route?.deliveryUserId||'');
-  const available=(role,currentId)=>{
-    return users.filter(u=>{
-      if(u.status!=='active'||u.role==='system_admin') return false;
-      const bound=String(u.boundRouteId||'').trim();
-      return !bound || String(u.id)===currentId;
-    }).map(u=>{
-      const selected=String(u.id)===currentId?' selected':'';
-      const label=(u.name||u.username)+(u.boundRouteId?' · '+u.boundRouteId:' · 未绑定');
-      return `<option value="${escAttr(u.id)}"${selected}>${esc(label)}</option>`;
-    }).join('');
-  };
-  $('#driverSelect').innerHTML='<option value="">添加未绑定用户</option>'+available('driver',currentDriver);
-  $('#deliverySelect').innerHTML='<option value="">添加未绑定用户</option>'+available('delivery',currentDelivery);
-}
-function updateRoleView(route){
-  const driver=findUser(route?.driverUserId);
-  const delivery=findUser(route?.deliveryUserId);
-  $('#driverName').textContent=driver?.name||driver?.username||'未绑定';
-  $('#deliveryName').textContent=delivery?.name||delivery?.username||'未绑定';
-  $('#driverStatus').textContent=driver?'已绑定 · 可解除':'可添加未绑定用户';
-  $('#deliveryStatus').textContent=delivery?'已绑定 · 可解除':'可添加未绑定用户';
-  $('#driverUnbind').disabled=!driver;
-  $('#deliveryUnbind').disabled=!delivery;
-  $('#driverSelect').value=route?.driverUserId||'';
-  $('#deliverySelect').value=route?.deliveryUserId||'';
-}
-function clearRole(role){
-  const route=routes.find(x=>String(x.id||x.name)===String(editingRouteId));
-  if(!route)return;
-  const userId=role==='driver'?route.driverUserId:route.deliveryUserId;
-  const user=findUser(userId);
-  if(!user)return;
-  const duty=role==='driver'?'驾驶员':'配送员';
-  if(!confirmUnbind(user,duty)) return;
-  if(role==='driver') $('#driverSelect').value='';
-  else $('#deliverySelect').value='';
-  const nameEl=role==='driver'?'#driverName':'#deliveryName';
-  const statusEl=role==='driver'?'#driverStatus':'#deliveryStatus';
-  const buttonEl=role==='driver'?'#driverUnbind':'#deliveryUnbind';
-  $(nameEl).textContent='未绑定';
-  $(statusEl).textContent='可添加未绑定用户';
-  $(buttonEl).disabled=true;
-}
-async function confirmUnbind(user,duty){
-  return await OneModal.confirm(`确定解除“${user.name||user.username}”与当前线路的${duty}绑定吗？解除后该用户会恢复为未绑定状态。`,{title:'解除线路绑定',confirmText:'解除绑定',danger:true});
-}
-async function saveRoute(){
-  const route=$('#routeInput').value.trim();
-  const driverUserId=$('#driverSelect').value;
-  const deliveryUserId=$('#deliverySelect').value;
-  if(!route){notice('请选择线路');return}
-  if(driverUserId && deliveryUserId && driverUserId===deliveryUserId){notice('同一用户不能同时担任驾驶员和配送员',true);return}
-  const current=routes.find(x=>String(x.id||x.name)===String(route));
-  const changed = String(current?.driverUserId||'')!==driverUserId || String(current?.deliveryUserId||'')!==deliveryUserId;
-  if(!changed){closeRouteEditor();return}
-  try{
-    const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});
-    if(!r.success)throw new Error(r.error||'线路人员配置失败');
-    notice('线路人员配置已保存');
-    closeRouteEditor();
-    await Promise.all([loadUsers(),loadRoutes()]);
-  }catch(e){notice(e.message,true)}
+async function unbindRouteRole(routeId,duty,userId){
+  const route=routes.find(x=>String(x.id||x.name)===String(routeId));if(!route)return;
+  const user=findUser(userId);if(!user)return;
+  const dutyName=duty==='driver'?'驾驶员':'配送员';
+  if(!await OneModal.confirm('确定解除“'+(user.name||user.username)+'”的'+dutyName+'绑定？',{title:'解除绑定',confirmText:'确定',danger:true}))return;
+  const body={route:route.id||route.name,driverUserId:String(route.driverUserId||''),deliveryUserId:String(route.deliveryUserId||'')};
+  if(duty==='driver')body.driverUserId='';else body.deliveryUserId='';
+  try{const r=await api('/api/admin/routes',{method:'PUT',body});if(!r.success)throw new Error(r.error||'解除绑定失败');notice('已解除绑定');await Promise.all([loadUsers(),loadRoutes()]);}catch(e){notice(e.message||'解除绑定失败',true)}
 }
 async function resetPassword(id){const password=await OneModal.prompt('输入新的6-72位密码',{title:'重置密码',placeholder:'6-72位密码',password:true,confirmText:'重置'});if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
