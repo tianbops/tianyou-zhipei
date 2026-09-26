@@ -62,7 +62,7 @@ button.secondary,.secondary-btn,.btn-cancel,.cancel-btn{height:44px!important}
 .dialog-box p,.dialog-box .hint{color:var(--text-secondary)}
 
 
-/* UI 2.0 · 线路基准维护 */
+/* UI 2.0 · 线路资料 */
 
 .app-container{max-width:430px;padding-left:14px;padding-right:14px}.top-bar{height:50px}
 .app-title{font-size:18px;color:#F2F5F7}.back-btn{width:42px;height:42px;flex-basis:42px;border-radius:13px;background:#151D26;border:1px solid var(--line)}
