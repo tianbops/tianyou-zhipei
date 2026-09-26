@@ -25,9 +25,11 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 async function boot(){
   try{
     // 管理页是独立模式：只做一次服务器管理员身份校验，不进入业务认证链。
-    const me = await Auth.getCurrentServerUser(true);
-    if(!me) throw new Error('管理员会话验证失败，请重新登录');
-    if(me.role!=='system_admin'||me.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
+    const response = await fetch('/api/admin/session', { cache:'no-store', credentials:'same-origin' });
+    const sessionData = await response.json().catch(()=>null);
+    if(!response.ok || !sessionData?.success) throw new Error(sessionData?.error || '管理员会话验证失败，请重新登录');
+    const me = sessionData.user;
+    if(me?.role!=='system_admin'||me?.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
     $('#adminUser').textContent=(me.name||me.username)+' · 主系统管理员';
     const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadInvites(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
