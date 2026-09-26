@@ -1,4 +1,4 @@
-// 天友智配One V3 · 业务数据边界
+// 智配One V3 · 业务数据边界
 import { get as redisGet, set as redisSet, evalRedis, v3Key } from './_redis.js';
 export { v3Key };
 export function routeKey(route){return v3Key('route',normalizeRoute(route));}
