@@ -36,6 +36,12 @@ async function boot(){
     if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
   }catch(e){notice(e.message||'管理员身份验证失败',true)}
 }
+window.addEventListener('zhipei-auth-failed', event => {
+  const message = event.detail?.message || '管理员会话验证失败';
+  const el = $('#adminUser');
+  if (el) el.textContent = message + '，请重新登录';
+  notice(message, true);
+});
 async function loadUsers(){
   try{const r=await api('/api/admin/users'); if(!r.success) throw new Error(r.error||'用户读取失败'); users=r.users||[]; renderUsers(); fillSelects()}catch(e){notice(e.message,true)}
 }
