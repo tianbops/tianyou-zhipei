@@ -64,13 +64,13 @@ window.addEventListener('zhipei-auth-failed', event => {
   notice(message, true);
 });
 async function loadUsers(){
-  try{const r=await api('/api/admin/users'); if(!r.success) throw new Error(r.error||'用户读取失败'); users=r.users||[]; renderUsers(); fillSelects()}catch(e){notice(e.message,true)}
+  try{const r=await api('/api/admin/users'); if(!r.success) throw new Error(r.error||'用户读取失败'); users=r.users||[]; renderUsers();}catch(e){notice(e.message,true)}
 }
 async function createRoute(){
   const input=$('#newRouteInput'); const route=input.value.trim();
   if(!route){notice('请输入线路，例如 17号线',true);return}
   const button=$('#createRoute'); button.disabled=true; button.textContent='创建中…';
-  try{const r=await api('/api/admin/routes',{method:'POST',body:{route}});if(!r.success)throw new Error(r.error||'线路创建失败');input.value='';$('#routeCreatePanel').classList.add('hidden');notice('线路 '+r.route.name+' 已创建');await loadRoutes();fillSelects()}catch(e){notice(e.message||'线路创建失败',true)}finally{button.disabled=false;button.textContent='创建线路'}
+  try{const r=await api('/api/admin/routes',{method:'POST',body:{route}});if(!r.success)throw new Error(r.error||'线路创建失败');input.value='';$('#routeCreatePanel').classList.add('hidden');notice('线路 '+r.route.name+' 已创建');await loadRoutes()}catch(e){notice(e.message||'线路创建失败',true)}finally{button.disabled=false;button.textContent='创建线路'}
 }
 async function loadRoutes(){
   try{
@@ -78,8 +78,6 @@ async function loadRoutes(){
     if(!r.success) throw new Error(r.error||'线路读取失败');
     routes=r.routes||[];
     renderRoutes();
-    // 路线列表与下拉选择必须使用同一份最新数据，避免并发加载时下拉框停留在旧列表。
-    fillSelects();
   }catch(e){notice(e.message,true)}
 }
 async function loadRequests(){
