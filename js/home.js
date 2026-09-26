@@ -306,7 +306,8 @@ window.parseManualInput=async(options={})=>{
   const parsedRoute=String(result.route||route).trim();if(parsedRoute&&Auth.setDispatchRoute)Auth.setDispatchRoute(parsedRoute);
   pendingMeta={parseContextId:String(result.taskId||plannerTask.id),userId:String(Auth.serverUser?.id||''),route:parsedRoute,date:result.date||body.date,vehicle:result.vehicle||body.vehicle,totalWeight:result.totalWeight||body.totalWeight,rawOrderCount:Number(result.rawCount)||0,matchedCount:parsedOrders.length,newStoreCount:Array.isArray(result.newStores)?result.newStores.length:0,reviewCount:Array.isArray(result.pendingStores)?result.pendingStores.length:0,duplicateCount:Number(result.merged)||0,recognizedCount:Number(result.rawCount)||0,uniqueStoreCount:Number(result.totalStores)||parsedOrders.length,baseDatabaseAvailable:result.baseDatabaseAvailable!==false,source};
   window.__zspParseContext={...pendingMeta,stores:parsedOrders};
-  reviewMode=true;window.renderUnifiedStatus('success',100,'规划完成');window.onOrderParsed?.({success:true,...result,stores:parsedOrders});
+  // 规划结果已保存：直接进入详情页，不再渲染“处理完成”中间状态，避免出现一帧/半秒的卡顿页面。
+  reviewMode=true;window.onOrderParsed?.({success:true,...result,stores:parsedOrders});
   return parsedOrders;
  }catch(e){
   if(e?.name==='AbortError'||e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[];}
