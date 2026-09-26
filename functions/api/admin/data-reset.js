@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 安全数据重置
+// 智配One V1.0 - 安全数据重置
 // 仅清理智配One已核实的Redis业务键，不执行FLUSHDB，不触碰Cloudflare环境变量。
 import { requireSystemAdmin } from '../_auth.js';
 import { redisCommand } from '../_data.js';
