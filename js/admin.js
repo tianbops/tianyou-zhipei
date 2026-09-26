@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     bind('cancelCreateRoute','click',()=>$('#routeCreatePanel').classList.add('hidden'));
     bind('createRoute','click',createRoute);
     bind('cancelRouteEdit','click',closeRouteEditor);
+    bind('cancelRouteEdit2','click',closeRouteEditor);
     bind('refreshRequests','click',loadRequests);
     bind('refreshInvites','click',loadInvites);
     bind('showCreateInvite','click',()=>$('#inviteCreatePanel').classList.remove('hidden'));
@@ -27,6 +28,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     bind('resetDataBtn','click',resetData);
     bind('toggleResetKey','click',toggleResetKey);
     bind('saveRoute','click',saveRoute);
+    bind('driverUnbind','click',()=>clearRole('driver'));
+    bind('deliveryUnbind','click',()=>clearRole('delivery'));
   }catch(e){
     notice('管理员页面控件初始化异常：'+(e.message||'未知错误'),true);
   }
@@ -154,39 +157,108 @@ function renderRoutes(){
   $('#routeList').innerHTML=routes.map(r=>{
     const driver=findUser(r.driverUserId)?.name||'未绑定';
     const delivery=findUser(r.deliveryUserId)?.name||'未绑定';
+    const configured=Boolean(r.driverUserId||r.deliveryUserId);
+    const state=configured?'人员已配置':'人员未配置';
     return `<article class="route-card">
-      <div class="route-card-head"><div><div class="name">${esc(r.name||r.id)}</div><div class="route-id">${esc(r.id||'')}</div></div><button class="route-manage" type="button" onclick="openRouteEditor('${escAttr(r.id||r.name)}')">管理人员配置</button></div>
+      <div class="route-card-head">
+        <div><div class="name">${esc(r.name||r.id)}</div><div class="route-id">${esc(r.id||'')}</div></div>
+        <span class="route-state">${state}</span>
+      </div>
       <div class="route-people">
         <div class="person-line"><span>驾驶员</span><strong>${esc(driver)}</strong></div>
         <div class="person-line"><span>配送员</span><strong>${esc(delivery)}</strong></div>
       </div>
+      <button class="route-manage" type="button" onclick="openRouteEditor('${escAttr(r.id||r.name)}')">人员配置 <span>›</span></button>
     </article>`;
   }).join('')||'<div class="empty-state">暂无已登记线路</div>';
 }
+let editingRouteId='';
 function openRouteEditor(routeId){
   const route=routes.find(x=>String(x.id||x.name)===String(routeId));
   if(!route)return;
-  fillSelects();
-  $('#routeInput').value=route.id||route.name||'';
+  editingRouteId=route.id||route.name||'';
+  $('#routeInput').value=editingRouteId;
   $('#routeEditName').textContent=route.name||route.id||'';
-  $('#driverSelect').value=route.driverUserId||'';
-  $('#deliverySelect').value=route.deliveryUserId||'';
+  fillRoleSelects(route);
+  updateRoleView(route);
   $('#routeEditPanel').classList.remove('hidden');
   $('#routeEditPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function closeRouteEditor(){
+  editingRouteId='';
   $('#routeEditPanel').classList.add('hidden');
 }
 function fillSelects(){
-  const options='<option value="">未绑定</option>'+users.filter(u=>u.status==='active'&&u.role!=='system_admin').map(u=>`<option value="${escAttr(u.id)}">${esc(u.name||u.username)} · ${esc(u.boundRouteId||'未绑定')}</option>`).join('');
-  $('#driverSelect').innerHTML=options;$('#deliverySelect').innerHTML=options;
   const routeOptions='<option value="">选择线路</option>'+routes.map(r=>`<option value="${escAttr(r.id||r.name)}">${esc(r.name||r.id)}</option>`).join('');
-  $('#routeInput').innerHTML=routeOptions;
+  if($('#routeInput').tagName==='SELECT') $('#routeInput').innerHTML=routeOptions;
+  const route=routes.find(x=>String(x.id||x.name)===String(editingRouteId));
+  if(route) fillRoleSelects(route);
+}
+function fillRoleSelects(route){
+  const currentDriver=String(route?.driverUserId||'');
+  const currentDelivery=String(route?.deliveryUserId||'');
+  const available=(role,currentId)=>{
+    return users.filter(u=>{
+      if(u.status!=='active'||u.role==='system_admin') return false;
+      const bound=String(u.boundRouteId||'').trim();
+      return !bound || String(u.id)===currentId;
+    }).map(u=>{
+      const selected=String(u.id)===currentId?' selected':'';
+      const label=(u.name||u.username)+(u.boundRouteId?' · '+u.boundRouteId:' · 未绑定');
+      return `<option value="${escAttr(u.id)}"${selected}>${esc(label)}</option>`;
+    }).join('');
+  };
+  $('#driverSelect').innerHTML='<option value="">添加未绑定用户</option>'+available('driver',currentDriver);
+  $('#deliverySelect').innerHTML='<option value="">添加未绑定用户</option>'+available('delivery',currentDelivery);
+}
+function updateRoleView(route){
+  const driver=findUser(route?.driverUserId);
+  const delivery=findUser(route?.deliveryUserId);
+  $('#driverName').textContent=driver?.name||driver?.username||'未绑定';
+  $('#deliveryName').textContent=delivery?.name||delivery?.username||'未绑定';
+  $('#driverStatus').textContent=driver?'已绑定 · 可解除':'可添加未绑定用户';
+  $('#deliveryStatus').textContent=delivery?'已绑定 · 可解除':'可添加未绑定用户';
+  $('#driverUnbind').disabled=!driver;
+  $('#deliveryUnbind').disabled=!delivery;
+  $('#driverSelect').value=route?.driverUserId||'';
+  $('#deliverySelect').value=route?.deliveryUserId||'';
+}
+function clearRole(role){
+  const route=routes.find(x=>String(x.id||x.name)===String(editingRouteId));
+  if(!route)return;
+  const userId=role==='driver'?route.driverUserId:route.deliveryUserId;
+  const user=findUser(userId);
+  if(!user)return;
+  const duty=role==='driver'?'驾驶员':'配送员';
+  if(!confirmUnbind(user,duty)) return;
+  if(role==='driver') $('#driverSelect').value='';
+  else $('#deliverySelect').value='';
+  const nameEl=role==='driver'?'#driverName':'#deliveryName';
+  const statusEl=role==='driver'?'#driverStatus':'#deliveryStatus';
+  const buttonEl=role==='driver'?'#driverUnbind':'#deliveryUnbind';
+  $(nameEl).textContent='未绑定';
+  $(statusEl).textContent='可添加未绑定用户';
+  $(buttonEl).disabled=true;
+}
+async function confirmUnbind(user,duty){
+  return await OneModal.confirm(`确定解除“${user.name||user.username}”与当前线路的${duty}绑定吗？解除后该用户会恢复为未绑定状态。`,{title:'解除线路绑定',confirmText:'解除绑定',danger:true});
 }
 async function saveRoute(){
-  const route=$('#routeInput').value.trim(),driverUserId=$('#driverSelect').value,deliveryUserId=$('#deliverySelect').value;
+  const route=$('#routeInput').value.trim();
+  const driverUserId=$('#driverSelect').value;
+  const deliveryUserId=$('#deliverySelect').value;
   if(!route){notice('请选择线路');return}
-  try{const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});if(!r.success)throw new Error(r.error||'线路绑定失败');notice('线路人员配置已保存');closeRouteEditor();await Promise.all([loadUsers(),loadRoutes()])}catch(e){notice(e.message,true)}
+  if(driverUserId && deliveryUserId && driverUserId===deliveryUserId){notice('同一用户不能同时担任驾驶员和配送员',true);return}
+  const current=routes.find(x=>String(x.id||x.name)===String(route));
+  const changed = String(current?.driverUserId||'')!==driverUserId || String(current?.deliveryUserId||'')!==deliveryUserId;
+  if(!changed){closeRouteEditor();return}
+  try{
+    const r=await api('/api/admin/routes',{method:'PUT',body:{route,driverUserId,deliveryUserId}});
+    if(!r.success)throw new Error(r.error||'线路人员配置失败');
+    notice('线路人员配置已保存');
+    closeRouteEditor();
+    await Promise.all([loadUsers(),loadRoutes()]);
+  }catch(e){notice(e.message,true)}
 }
 async function resetPassword(id){const password=await OneModal.prompt('输入新的6-72位密码',{title:'重置密码',placeholder:'6-72位密码',password:true,confirmText:'重置'});if(!password)return;try{const r=await api('/api/admin/reset-password',{method:'POST',body:{userId:id,password}});if(!r.success)throw new Error(r.error);notice('密码已重置，旧设备会话已失效')}catch(e){notice(e.message,true)}}
 async function toggleUser(id,status){try{const r=await api('/api/admin/users',{method:'PATCH',body:{userId:id,status}});if(!r.success)throw new Error(r.error);await loadUsers()}catch(e){notice(e.message,true)}}
