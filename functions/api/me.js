@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 当前登录用户
+// 智配One V1.0 - 当前登录用户
 import { authRequired } from './_auth.js';
 import { publicUser } from './_data.js';
 
