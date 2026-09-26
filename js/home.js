@@ -253,10 +253,12 @@ window.onOrderParsed=(result={})=>{
   if(!route)return;
   const params=new URLSearchParams({route,date});
   if(batch)params.set('orderBatchId',batch);
+  // 规划完成后直接切换到详情页，不再停留“处理完成”状态框，避免出现中间卡顿感。
+  if(typeof window.resetProcessingStatus==='function')window.resetProcessingStatus();
   resultNavigateTimer=setTimeout(()=>{
     resultNavigateTimer=null;
     location.assign('pages/order_detail.html?'+params.toString());
-  },560);
+  },0);
 };
 window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度线路不是你的绑定线路，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
 window.goToOrderDetail=async()=>{
