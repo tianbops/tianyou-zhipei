@@ -49,7 +49,8 @@ async function createInvite(request,env,admin){
     status:'active',
     createdAt:new Date(now).toISOString(),
     createdBy:String(admin.id||''),
-    lastUsedAt:''
+    lastUsedAt:'',
+    code
   };
   const script=`
 local key=KEYS[1]
@@ -97,7 +98,8 @@ function publicInvite(invite){
     expiresAt:Number(invite.expiresAt||0),
     status,
     createdAt:String(invite.createdAt||''),
-    lastUsedAt:String(invite.lastUsedAt||'')
+    lastUsedAt:String(invite.lastUsedAt||''),
+    code:String(invite.code||'')
   };
 }
 function normalizeUses(value){
