@@ -18,8 +18,6 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     bind('showCreateRoute','click',()=>{$('#routeCreatePanel').classList.remove('hidden');$('#newRouteInput').focus();});
     bind('cancelCreateRoute','click',()=>$('#routeCreatePanel').classList.add('hidden'));
     bind('createRoute','click',createRoute);
-    bind('cancelRouteEdit','click',closeRouteEditor);
-    bind('cancelRouteEdit2','click',closeRouteEditor);
     bind('refreshRequests','click',loadRequests);
     bind('refreshInvites','click',loadInvites);
     bind('showCreateInvite','click',()=>$('#inviteCreatePanel').classList.remove('hidden'));
@@ -28,9 +26,6 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     bind('refreshLogs','click',loadLogs);
     bind('resetDataBtn','click',resetData);
     bind('toggleResetKey','click',toggleResetKey);
-    bind('saveRoute','click',saveRoute);
-    bind('driverUnbind','click',()=>clearRole('driver'));
-    bind('deliveryUnbind','click',()=>clearRole('delivery'));
   }catch(e){
     notice('管理员页面控件初始化异常：'+(e.message||'未知错误'),true);
   }
