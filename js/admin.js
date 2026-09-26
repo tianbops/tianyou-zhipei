@@ -24,9 +24,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 async function boot(){
   try{
-    // 管理页只复用全局 Auth 守卫，禁止再次单独请求 /api/me。
-    // 这样可避免 DOMContentLoaded 时产生两套并发身份验证，导致页面反复加载。
-    // 管理页已由 auth.js 全局守卫排除，身份验证只在这里执行一次。
+    // 管理页是独立模式：只做一次服务器管理员身份校验，不进入业务认证链。
     const me = await Auth.getCurrentServerUser(true);
     if(!me) throw new Error('管理员会话验证失败，请重新登录');
     if(me.role!=='system_admin'||me.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
