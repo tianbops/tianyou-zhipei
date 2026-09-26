@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 管理员审核线路绑定申请
+// 智配One V1.0 - 管理员审核线路绑定申请
 import { requireSystemAdmin } from '../_auth.js';
 import { routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route, bindingRequestKey, bindingRequestUserKey, bindingRequestIndexKey, getUserProfile } from '../v3/data.js';
 import {
