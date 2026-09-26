@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 首个系统管理员初始化
+// 智配One V1.0 - 首个系统管理员初始化
 // 仅在环境变量 ADMIN_BOOTSTRAP_KEY 存在时可用；执行成功后立即删除/轮换该环境变量。
 import { redisCommand, redisGet, redisSet, publicUser, scanUsers } from '../_data.js';
 
