@@ -43,6 +43,14 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  if(invalidStore){
    throw Object.assign(new Error('配送顺序包含无效门店数据'),{code:'PLAN_FAILED',stage:'planning'});
  }
+ const invalidPending=planned.pendingStores.find(x=>!x||!String(x.name||'').trim());
+ if(invalidPending){
+   throw Object.assign(new Error('待定门店数据无效'),{code:'PLAN_FAILED',stage:'planning'});
+ }
+ const allIds=new Set(planned.plannedStores.map(x=>String(x.storeId)));
+ if(planned.pendingStores.some(x=>x.storeId&&allIds.has(String(x.storeId)))){
+   throw Object.assign(new Error('待定门店与已规划门店重复'),{code:'PLAN_FAILED',stage:'planning'});
+ }
  if(planned.routeOrder.length!==planned.plannedStores.length||planned.routeOrder.some((id,i)=>String(id)!==String(planned.plannedStores[i].storeId))){
    throw Object.assign(new Error('配送顺序与门店数据不一致'),{code:'PLAN_FAILED',stage:'planning'});
  }
