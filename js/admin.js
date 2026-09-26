@@ -3,29 +3,46 @@ let users=[];
 let routes=[];
 
 document.addEventListener('DOMContentLoaded', async ()=>{
-  document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
-  $('#refreshUsers').onclick=loadUsers;
-  $('#refreshRoutes').onclick=loadRoutes;
-  $('#showCreateRoute').onclick=()=>{$('#routeCreatePanel').classList.remove('hidden');$('#newRouteInput').focus();};
-  $('#cancelCreateRoute').onclick=()=>$('#routeCreatePanel').classList.add('hidden');
-  $('#createRoute').onclick=createRoute;
-  $('#cancelRouteEdit').onclick=closeRouteEditor;
-  $('#refreshRequests').onclick=loadRequests;
-  $('#refreshInvites').onclick=loadInvites;
-  $('#showCreateInvite').onclick=()=>$('#inviteCreatePanel').classList.remove('hidden');
-  $('#cancelCreateInvite').onclick=()=>$('#inviteCreatePanel').classList.add('hidden');
-  $('#createInvite').onclick=createInvite;
-  $('#refreshLogs').onclick=loadLogs;
-  $('#resetDataBtn').onclick=resetData;
-  $('#toggleResetKey').onclick=()=>toggleResetKey();
-  $('#saveRoute').onclick=saveRoute;
+  // 管理员身份校验必须先执行；任何管理页控件绑定异常都不能阻断管理员认证。
   await boot();
+  try{
+    document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
+    const bind=(id,event,handler)=>{
+      const el=$('#'+id);
+      if(!el) return;
+      el.addEventListener(event,handler);
+    };
+    bind('refreshUsers','click',loadUsers);
+    bind('refreshRoutes','click',loadRoutes);
+    bind('showCreateRoute','click',()=>{$('#routeCreatePanel').classList.remove('hidden');$('#newRouteInput').focus();});
+    bind('cancelCreateRoute','click',()=>$('#routeCreatePanel').classList.add('hidden'));
+    bind('createRoute','click',createRoute);
+    bind('cancelRouteEdit','click',closeRouteEditor);
+    bind('refreshRequests','click',loadRequests);
+    bind('refreshInvites','click',loadInvites);
+    bind('showCreateInvite','click',()=>$('#inviteCreatePanel').classList.remove('hidden'));
+    bind('cancelCreateInvite','click',()=>$('#inviteCreatePanel').classList.add('hidden'));
+    bind('createInvite','click',createInvite);
+    bind('refreshLogs','click',loadLogs);
+    bind('resetDataBtn','click',resetData);
+    bind('toggleResetKey','click',toggleResetKey);
+    bind('saveRoute','click',saveRoute);
+  }catch(e){
+    notice('管理员页面控件初始化异常：'+(e.message||'未知错误'),true);
+  }
 });
 
 async function boot(){
   try{
     // 管理页是独立模式：只做一次服务器管理员身份校验，不进入业务认证链。
-    const response = await fetch('/api/admin/session', { cache:'no-store', credentials:'same-origin' });
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(), 8000);
+    let response;
+    try{
+      response = await fetch('/api/admin/session', { cache:'no-store', credentials:'same-origin', signal:controller.signal });
+    }finally{
+      clearTimeout(timeout);
+    }
     const sessionData = await response.json().catch(()=>null);
     if(!response.ok || !sessionData?.success) throw new Error(sessionData?.error || '管理员会话验证失败，请重新登录');
     const me = sessionData.user;
@@ -34,7 +51,12 @@ async function boot(){
     const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadInvites(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
     if (failed.length) notice(`管理接口异常：${failed.map(x => x.reason?.message || '未知错误').join('；')}`, true);
-  }catch(e){notice(e.message||'管理员身份验证失败',true)}
+  }catch(e){
+    const message=e?.name==='AbortError'?'管理员会话验证超时（8秒），请检查登录会话或刷新页面':(e.message||'管理员身份验证失败');
+    const el=$('#adminUser');
+    if(el) el.textContent=message;
+    notice(message,true);
+  }
 }
 window.addEventListener('zhipei-auth-failed', event => {
   const message = event.detail?.message || '管理员会话验证失败';
