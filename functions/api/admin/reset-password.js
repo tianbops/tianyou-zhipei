@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 系统管理员重置用户密码
+// 智配One V1.0 - 系统管理员重置用户密码
 import { requireSystemAdmin } from '../_auth.js';
 import { redisGet, redisSet, recordAdminLog } from '../_data.js';
 
