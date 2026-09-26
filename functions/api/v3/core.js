@@ -1,4 +1,4 @@
-// 天友智配One V3 · 一体化规划编排器
+// 智配One V3 · 一体化规划编排器
 
 import { getRoute, getBase, getLearning, normalizeRoute, canUseRoute } from './data.js';
 import { extractStores } from './extract.js';
