@@ -92,6 +92,15 @@ function reset(){
     modal.setAttribute('aria-hidden','true');
   }
 }
+function destroy(){
+  if(successTimer){clearTimeout(successTimer);successTimer=null;}
+  setVisible(false);
+  if(modal){
+    modal.remove();
+    modal=null;
+  }
+  try{document.body.classList.remove('zpei-processing');}catch(_){}
+}
 
 function userFriendlyError(message, code=''){
   const text=String(message||'').trim();
@@ -141,6 +150,7 @@ function showError(message='',code=''){
 }
 
 function render(status='idle',progress=0,message='',code=''){
+  if(window.__zpeiNavigatingToOrder)return;
   const state=['idle','loading','success','error','cancelled'].includes(status)?status:'idle';
   if(state==='idle'||state==='cancelled'){
     reset();
@@ -177,5 +187,6 @@ function render(status='idle',progress=0,message='',code=''){
 window.renderUnifiedStatus=(status='idle',progress=0,message='',code='')=>render(status,progress,message,code);
 window.handleUploadProcessingFailure=(message='',code='',stage='')=>{window.__zpeiLastFailureStage=String(stage||'').trim();render('error',100,message,code);};
 window.resetProcessingStatus=reset;
+window.destroyProcessingStatus=destroy;
 
 })();
