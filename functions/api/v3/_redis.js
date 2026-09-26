@@ -23,7 +23,7 @@ export async function set(env,key,value){
  return true;
 }
 export async function evalRedis(env,script,keys=[],args=[]){
- const r=await request(env,'/eval',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify([script,keys.length,...keys,...args])});
+ const r=await request(env,'',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(['EVAL',script,String(keys.length),...keys,...args])});
  if(!r.ok)throw new Error(`Redis事务执行失败（HTTP ${r.status}）`);
  const d=await r.json().catch(()=>({}));
  if(d.error)throw new Error(String(d.error));
