@@ -1,1 +1,2 @@
-export async function onRequest(){return Response.json({success:true,name:"智配One",version:"rebuild-2026-09-26"});}
+import {json} from "./_json.js";
+export async function onRequest(){return json({success:true,service:"Zhipei One",status:"ok"})}
