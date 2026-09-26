@@ -1,4 +1,4 @@
-// 天友智配One V3 · 唯一自动规划入口
+// 智配One V3 · 唯一自动规划入口
 import { authRequired } from './_auth.js';
 import { runPlan } from './v3/core.js';
 
