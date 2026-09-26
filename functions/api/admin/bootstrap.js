@@ -14,9 +14,10 @@ export async function onRequest({ request, env }) {
   const lockResult = await redisCommand(env, ['SET', lockKey, lockToken, 'NX', 'EX', '15']);
   if (lockResult !== 'OK') return json({ success: false, error: '系统管理员初始化正在处理中，请稍后重试' }, 409);
   try {
-    const alreadyUsed = await redisGet(env, 'system:admin:bootstrap:used');
-    if (alreadyUsed) return json({ success: false, error: '系统管理员初始化密钥已经使用过，请先轮换 ADMIN_BOOTSTRAP_KEY 后再操作' }, 409);
     const body = await request.json().catch(() => ({}));
+    const isReset = String(body.action || '').trim().toLowerCase() === 'reset';
+    const alreadyUsed = await redisGet(env, 'system:admin:bootstrap:used');
+    if (alreadyUsed && !isReset) return json({ success: false, error: '系统管理员初始化密钥已经使用过，请先轮换 ADMIN_BOOTSTRAP_KEY 后再操作' }, 409);
     const userId = String(body.userId || '').trim();
     const username = String(body.username || '').trim().toLowerCase();
     let target = null;
@@ -27,7 +28,6 @@ export async function onRequest({ request, env }) {
       if (id) target = await redisGet(env, `user:${String(id).trim()}`);
     }
     if (!target) return json({ success: false, error: '找不到目标用户' }, 404);
-    const isReset = String(body.action || '').trim().toLowerCase() === 'reset';
     if (String(target.adminLevel || '') === 'primary' && !isReset) return json({ success: false, error: '主系统管理员已经初始化，无需重复设置' }, 409);
     const allUsers = await scanUsers(env);
     const existingAdmins = allUsers.filter(user => String(user?.role || '').trim().toLowerCase() === 'system_admin' && String(user?.id || '') !== String(target.id || ''));
