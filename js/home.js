@@ -251,13 +251,18 @@ window.onOrderParsed=(result={})=>{
   const date=String(result.date||currentDate()).trim();
   const batch=String(result.taskId||'').trim();
   if(!route)return;
+
+  // 进入详情页后，禁止首页任何迟到回调再次显示处理中状态。
+  window.__zpeiNavigatingToOrder=true;
+  document.body.classList.remove('zpei-processing','is-leaving');
+  // 直接销毁状态框 DOM。跨文档导航等待目标页加载时，浏览器可能短暂保留旧文档快照；
+  // 仅隐藏 active 会留下“空状态框/一横”的旧快照。
+  if(typeof window.destroyProcessingStatus==='function')window.destroyProcessingStatus();
+
   const params=new URLSearchParams({route,date});
   if(batch)params.set('orderBatchId',batch);
-  // 规划完成后直接切换到详情页，不再停留“处理完成”状态框，避免出现中间卡顿感。
-  if(typeof window.resetProcessingStatus==='function')window.resetProcessingStatus();
   resultNavigateTimer=null;
-  // 直接替换当前首页文档，避免 location.assign 产生中间空白页面/过渡文档。
-  location.replace('pages/order_detail.html?'+params.toString());
+  window.location.replace('pages/order_detail.html?'+params.toString());
 };
 window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度线路不是你的绑定线路，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
 window.goToOrderDetail=async()=>{
