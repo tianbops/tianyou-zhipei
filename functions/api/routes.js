@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 线路与基准数据库 API
+// 智配One V1.0 - 线路与基准数据库 API
 import { authRequired } from './_auth.js';
 import { baseKey as v3BaseKey, getBase as getV3Base, getRoute as getV3Route, isRouteMaintainer as isV3RouteMaintainer } from './v3/data.js';
 import { normalizeStores, normalizeRoute } from './_data.js';
