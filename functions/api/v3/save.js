@@ -10,7 +10,9 @@ async function fingerprintOf(result){
     String(result?.date||'').trim(),
     String(result?.vehicle||'').trim().toUpperCase(),
     String(result?.totalWeight||'').trim(),
-    storeIds.join(',')
+    storeIds.join(','),
+    (Array.isArray(result?.stores)?result.stores:[]).map(x=>String(x?.originalName||x?.name||'')).join('\u001f'),
+    (Array.isArray(result?.pendingStores)?result.pendingStores:[]).map(x=>String(x?.name||x?.rawName||'')).join('\u001f')
   ].join('|');
   const bytes=new TextEncoder().encode(source);
   const digest=await crypto.subtle.digest('SHA-256',bytes);
