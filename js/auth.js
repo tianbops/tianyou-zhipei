@@ -135,6 +135,11 @@ window.Auth = {
     if (this.authPromise) return this.authPromise;
     this.authPromise = this.getCurrentServerUser(force).then(user => {
       if (!user) {
+        // 管理员页认证失败时不要跳回登录页，否则会形成“登录→管理员页→登录”的循环。
+        if (page === 'admin.html') {
+          window.dispatchEvent(new CustomEvent('zhipei-auth-failed', { detail: { message: '管理员会话验证失败' } }));
+          return false;
+        }
         location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
         return false;
       }
@@ -148,7 +153,11 @@ window.Auth = {
         return false;
       }
       return true;
-    }).catch(() => {
+    }).catch((error) => {
+      if (page === 'admin.html') {
+        window.dispatchEvent(new CustomEvent('zhipei-auth-failed', { detail: { message: error?.message || '管理员会话验证失败' } }));
+        return false;
+      }
       location.replace(location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
       return false;
     }).finally(() => {
