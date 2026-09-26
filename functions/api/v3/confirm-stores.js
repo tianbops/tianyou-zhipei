@@ -1,4 +1,4 @@
-// 天友智配One V3 · 待定/新增门店确认
+// 智配One V3 · 待定/新增门店确认
 import { authRequired } from '../_auth.js';
 import { isRouteMaintainer, getBase, getLearning, normalizeRoute, acquireRouteDateLock, releaseRouteDateLock, planKey, todayWaybillKey, todayCorrectionKey, confirmationKey, baseKey, learningKey } from './data.js';
 import { get, set, evalRedis } from './_redis.js';
