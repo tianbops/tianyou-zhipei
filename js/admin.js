@@ -219,7 +219,6 @@ function formatAdminLogTime(value){
   const pad=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-}
 function renderUsers(){
   $('#userCount').textContent=users.length+' 个账号';
   const orderedUsers=[...users].sort((a,b)=>(a?.adminLevel==='primary'?0:1)-(b?.adminLevel==='primary'?0:1));
