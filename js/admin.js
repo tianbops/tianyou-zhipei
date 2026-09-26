@@ -78,6 +78,8 @@ async function loadRoutes(){
     if(!r.success) throw new Error(r.error||'线路读取失败');
     routes=r.routes||[];
     renderRoutes();
+    // 线路与用户列表存在交叉身份信息；线路刷新后同步重绘用户身份，避免并行加载造成旧显示。
+    if(users.length) renderUsers();
   }catch(e){notice(e.message,true)}
 }
 async function loadRequests(){
