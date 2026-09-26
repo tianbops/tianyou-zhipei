@@ -2,6 +2,8 @@ const $=s=>document.querySelector(s);
 const routeActionStyle=document.createElement('style');routeActionStyle.textContent='.person-line{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;background:#141C24;border:1px solid rgba(255,255,255,.045)}.person-line span{color:var(--muted2);font-size:11px}.person-line strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bind-role,.subtle-danger{border:1px solid var(--line2);border-radius:9px;padding:7px 10px;background:#1A232D;color:#DDE3E8;font-size:11px;font-weight:600;white-space:nowrap}.subtle-danger{border-color:rgba(182,75,75,.25);background:#20181A;color:#C99595}.admin-user-select-list{display:grid;gap:6px;margin-top:14px;max-height:48vh;overflow:auto}.admin-user-option{display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;gap:9px;padding:10px 11px;border:1px solid rgba(255,255,255,.06);border-radius:11px;background:#101820;cursor:pointer}.admin-user-option input{margin:0}.admin-user-option-copy strong{display:block;font-size:13px}.admin-user-option-copy small{display:block;color:var(--muted2);font-size:10px;margin-top:1px}';document.head.appendChild(routeActionStyle);
 let users=[];
 let routes=[];
+// 仅在当前管理员会话内保留刚创建的邀请码明文，便于再次点击“复制”；服务端列表仍只返回掩码。
+const invitePlainCodes=new Map();
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   // 管理员身份校验必须先执行；任何管理页控件绑定异常都不能阻断管理员认证。
@@ -114,7 +116,9 @@ async function createInvite(){
     if(!r.success) throw new Error(r.error||'邀请码创建失败');
     $('#inviteCreatePanel').classList.add('hidden'); await loadInvites();
     const code=r.invite?.code||'';
-    if(code){ const copied=await navigator.clipboard?.writeText(code).then(()=>true).catch(()=>false); await OneModal.alert('邀请码：'+code+(copied?'\\n\\n已自动复制。':'\\n\\n请立即复制保存；出于安全考虑，之后管理员页面不会再次显示完整明文。'),{title:'邀请码已创建'}); }
+    const hash=r.invite?.hash||'';
+    if(code&&hash) invitePlainCodes.set(String(hash),String(code));
+    if(code){ const copied=await navigator.clipboard?.writeText(code).then(()=>true).catch(()=>false); await OneModal.alert('邀请码：'+code+(copied?'\\n\\n已自动复制。':'\\n\\n请点击“复制”保存；出于安全考虑，刷新后不会再次显示完整明文。'),{title:'邀请码已创建'}); }
     else notice('邀请码已创建');
   }catch(e){notice(e.message||'邀请码创建失败',true)}
   finally{button.disabled=false;button.textContent='创建邀请码'}
@@ -124,9 +128,21 @@ function renderInvites(list){
     const uses=x.maxUses===0?'不限':(x.usedCount+'/'+x.maxUses+' 次');
     const expiry=x.expiresAt?new Date(x.expiresAt).toLocaleDateString('zh-CN'):'永久';
     const label=x.status==='active'?'有效':x.status==='exhausted'?'已用完':x.status==='expired'?'已过期':'已停用';
-    const action=x.status==='active'?'<button onclick="setInviteStatus(\''+escAttr(x.hash)+'\',\'disabled\')">停用</button>':'';
+    const hash=String(x.hash||'');
+    const copyAction=invitePlainCodes.has(hash)?'<button onclick="copyInviteCode(\\''+escAttr(hash)+'\\')">复制</button>':'';
+    const action=x.status==='active'?copyAction+'<button onclick="setInviteStatus(\\''+escAttr(hash)+'\\',\\'disabled\\')">停用</button>':copyAction;
     return '<article class="invite-card"><div class="invite-main"><div><div class="name">邀请码 '+esc(x.maskedCode||'••••-••••')+'</div><div class="meta">'+esc(uses)+' · '+esc(expiry)+'</div></div><span class="badge">'+esc(label)+'</span></div><div class="meta">创建：'+esc(x.createdAt||'')+(x.lastUsedAt?' · 最后使用：'+esc(x.lastUsedAt):'')+'</div><div class="actions">'+action+'</div></article>';
   }).join('')||'<div class="empty-state">暂无邀请码</div>';
+}
+async function copyInviteCode(hash){
+  const code=invitePlainCodes.get(String(hash));
+  if(!code){notice('完整邀请码仅在创建时提供，刷新后无法恢复明文',true);return}
+  try{
+    await navigator.clipboard.writeText(code);
+    notice('邀请码已复制');
+  }catch(e){
+    await OneModal.alert('邀请码：'+code+'\\n\\n请手动复制保存。',{title:'复制失败'});
+  }
 }
 async function setInviteStatus(hash,status){
   if(!await OneModal.confirm('确定停用这个邀请码吗？停用后无法继续注册使用。',{title:'停用邀请码',confirmText:'停用',danger:true})) return;
