@@ -96,7 +96,7 @@ function reset(){
 function userFriendlyError(message, code=''){
   const text=String(message||'').trim();
   const failureCode=String(code||'').trim();
-  if(failureCode==='STORE_CANDIDATES_INVALID'||failureCode==='EXTRACT_FAILED')return '运单文字提取失败，请重新上传清晰的运单图片。';
+  // 真实业务回归期间：只要后端提供错误代码，优先显示阶段、CODE和原始信息，避免被友好文案吞掉。\n  if(failureCode)return (window.__zpeiLastFailureStage?String(window.__zpeiLastFailureStage)+'阶段失败：':'处理失败：')+failureCode+(text?'（'+text+'）':'');\n  if(failureCode==='STORE_CANDIDATES_INVALID'||failureCode==='EXTRACT_FAILED')return '运单文字提取失败，请重新上传清晰的运单图片。';
   if(failureCode==='ROUTE_REQUIRED')return '请先选择调度线路，再上传运单。';
   if(failureCode==='ROUTE_FORBIDDEN')return '当前账号无权使用所选调度线路，请切换到可用线路。';
   if(failureCode==='ROUTE_NOT_FOUND')return '所选调度线路不存在或已停用，请重新选择线路。';
