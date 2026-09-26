@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 统一多端身份认证
+// 智配One V1.0 - 统一多端身份认证
 // Web：HttpOnly Cookie；微信小程序/Android：Bearer Token。
 // 所有客户端最终映射到同一个 userId，并实时校验用户状态与 sessionVersion。
 import { getUser, normalizeRoute, normalizeRole } from './_data.js';
