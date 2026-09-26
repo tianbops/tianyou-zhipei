@@ -38,7 +38,8 @@ async function loadDispatchRoutes(){
   const normalizedSelected=Auth.formatRouteCode?Auth.formatRouteCode(selected):String(selected||'').trim();
   const validSelected=routesLoaded ? (normalizedSelected&&available.includes(normalizedSelected)?normalizedSelected:'') : normalizedSelected;
   const validBound=routesLoaded ? (normalizedBound&&available.includes(normalizedBound)?normalizedBound:'') : normalizedBound;
-  const initial=validSelected || validBound || available[0] || '';
+  // 不再因为线路列表异常或旧会话残留而静默切换到第一条线路，避免运单误规划到错误线路。
+  const initial=validSelected || validBound || '';
   if(select){
     select.innerHTML=available.map(route=>`<option value="${route}">${route}</option>`).join('');
     if(initial){
@@ -290,6 +291,16 @@ window.parseManualInput=async(options={})=>{
   return parsedOrders;
  }catch(e){
   if(e?.name==='AbortError'||e?.code==='PARSE_CANCELLED'){window.renderUnifiedStatus('cancelled',0,'已取消');return[];}
+  if(e?.code==='ROUTE_NOT_FOUND'){
+    // 服务端已确认当前调度线路失效：立即清掉旧会话线路并刷新真实线路列表，
+    // 但绝不自动切换到任意其他线路，避免运单误规划。
+    Auth.clearDispatchRoute?.();
+    await loadDispatchRoutes().catch(()=>{});
+    const message='当前调度线路已不存在或已停用，请重新选择线路';
+    window.handleUploadProcessingFailure?.(message,'ROUTE_NOT_FOUND',e.stage||'matching');
+    if(auto)throw Object.assign(new Error(message),{code:'ROUTE_NOT_FOUND',stage:e.stage||'matching'});
+    return[];
+  }
   window.handleUploadProcessingFailure?.(e.message||'规划失败，请重新上传',e.code||'PLAN_FAILED',e.stage||'');if(auto)throw e;return[];
  }finally{parseAbortController=null;parseInFlight=false;}
 };
