@@ -5,7 +5,7 @@ body{margin:0;background:radial-gradient(circle at 50% -12%,rgba(104,124,142,.12
 button,input,select{font:inherit}
 button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .admin-shell{max-width:1040px;margin:0 auto;padding:22px 18px 56px}
-.admin-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;padding:6px 2px 20px}
+.admin-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;padding:6px 2px 20px}.admin-logout{flex:0 0 auto;margin-top:2px}
 .eyebrow{color:#7F8D99;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
 .admin-head h1{margin:4px 0 3px;font-size:27px;line-height:1.15;letter-spacing:-.035em;font-weight:720}
 .admin-head p{margin:0;color:var(--muted);font-size:12px}
