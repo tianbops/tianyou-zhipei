@@ -1,4 +1,4 @@
-// 天友智配One V3 · 统一显示统计口径
+// 智配One V3 · 统一显示统计口径
 export function weightToTons(value){
   if(value===null||value===undefined||value==='')return 0;
   const s=String(value).trim().replace(/,/g,'');
