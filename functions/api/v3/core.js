@@ -20,7 +20,7 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  const routeRecord=await getRoute(env,route);
  if(!routeRecord||routeRecord.status==='disabled')throw Object.assign(new Error('线路不存在或已停用'),{code:'ROUTE_NOT_FOUND',stage:'matching'});
  const [base,learning]=await Promise.all([getBase(env,route),getLearning(env,route)]);
- const baseDatabaseAvailable=Boolean(base);
+ const baseDatabaseAvailable=Array.isArray(base?.stores)&&base.stores.length>0;
  let candidates;
  try{ candidates=extractStores(text); }
  catch(error){ throw Object.assign(new Error(error?.message||'运单文字提取失败'),{code:error?.code||'EXTRACT_FAILED',stage:'extracting'}); }
