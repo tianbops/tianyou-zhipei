@@ -52,7 +52,7 @@ export function publicUser(user) {
     username: String(user?.username || ''),
     name: String(user?.name || user?.username || ''),
     phone: String(user?.phone || ''),
-    role: normalizeRole(user?.role),
+    role: normalizeRole(user?.role, user?.adminLevel),
     adminLevel: String(user?.adminLevel || ''),
     boundRouteId: normalizeRoute(user?.boundRouteId),
     route: normalizeRoute(user?.boundRouteId || user?.route),
@@ -61,8 +61,13 @@ export function publicUser(user) {
   };
 }
 
-export function normalizeRole(value) {
+export function normalizeRole(value, adminLevel = '') {
+  // 主系统管理员身份由 adminLevel=primary 与 role=system_admin 共同构成。
+  // 对历史账号做一致性归一：只要明确标记为 primary，就恢复为系统管理员角色，
+  // 避免旧版本曾把 role 写成 driver 后导致管理员登录被错误送入业务首页。
+  const level = String(adminLevel || '').trim().toLowerCase();
   const role = String(value || '').trim().toLowerCase();
+  if (level === 'primary') return ROLES.SYSTEM_ADMIN;
   return Object.values(ROLES).includes(role) ? role : ROLES.DRIVER;
 }
 
