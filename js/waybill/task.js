@@ -1,4 +1,4 @@
-// 天友智配One V3 · 前端唯一任务状态机
+// 智配One V3 · 前端唯一任务状态机
 (function(){
   const STAGES=['IDLE','RECOGNIZING','EXTRACTING','MATCHING','PLANNING','SAVING','COMPLETED','FAILED','CANCELLED','TIMEOUT'];
   let task=null,controller=null;
