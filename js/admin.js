@@ -139,7 +139,7 @@ function renderUsers(){
   const orderedUsers=[...users].sort((a,b)=>(a?.adminLevel==='primary'?0:1)-(b?.adminLevel==='primary'?0:1));
   $('#userList').innerHTML=orderedUsers.map(u=>`<article class="user-card">
     <div class="user-main"><div><div class="name">${esc(u.name||u.username)}</div><div class="meta">${esc(u.username)} · ${esc(u.id)}</div></div><span class="badge">${esc(u.adminLevel==='primary'?'主系统管理员':u.status==='active'?'正常':'停用')}</span></div>
-    <div class="meta">角色：${esc(u.adminLevel==='primary'?'主系统管理员':'业务用户')}${u.adminLevel==='primary'?'':' · 绑定：'+esc(u.boundRouteId||'未绑定')+(u.routeDuty?' · '+esc(u.routeDuty):'')}</div>
+    <div class="meta">${u.adminLevel==='primary'?'角色：主系统管理员':'角色：'+esc(u.routeDuty==='driver'?'驾驶员':u.routeDuty==='delivery'?'配送员':'业务用户')+' · 绑定：'+esc(u.boundRouteId||'未绑定')}</div>
     <div class="actions">
       ${u.adminLevel==='primary'?'':'<button onclick="toggleUser(\''+escAttr(u.id)+'\',\''+(u.status==='active'?'disabled':'active')+'\')">'+(u.status==='active'?'停用':'启用')+'</button>'}
       <button onclick="resetPassword('${escAttr(u.id)}')">重置密码</button>
