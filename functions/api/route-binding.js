@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 用户线路申请/解除绑定
+// 智配One V1.0 - 用户线路申请/解除绑定
 import { authRequired } from './_auth.js';
 import {
   encodeKey, getUser, normalizeRoute, publicUser,
