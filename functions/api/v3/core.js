@@ -21,14 +21,24 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  if(!routeRecord||routeRecord.status==='disabled')throw Object.assign(new Error('线路不存在或已停用'),{code:'ROUTE_NOT_FOUND',stage:'matching'});
  const [base,learning]=await Promise.all([getBase(env,route),getLearning(env,route)]);
  if(!base)throw Object.assign(new Error('线路基准库不存在'),{code:'BASE_MISSING',stage:'matching'});
- const candidates=extractStores(text);
+ let candidates;
+ try{ candidates=extractStores(text); }
+ catch(error){ throw Object.assign(new Error(error?.message||'运单文字提取失败'),{code:error?.code||'EXTRACT_FAILED',stage:'extracting'}); }
  if(!candidates.length)throw Object.assign(new Error('未提取到有效门店'),{code:'EXTRACT_FAILED',stage:'extracting'});
  const finalDate=dateValue(date)||businessDate();
- const matched=matchStores(candidates,base,learning,{route,date:finalDate});
- const deduped=dedupeStores(matched.matched,candidates,matched.pendingStores);
- const planned=routePlan(deduped.stores,deduped.pendingStores);
+ let matched;
+ try{ matched=matchStores(candidates,base,learning,{route,date:finalDate}); }
+ catch(error){ throw Object.assign(new Error(error?.message||'门店匹配未完成'),{code:error?.code||'MATCH_FAILED',stage:'matching'}); }
+ let deduped;
+ try{ deduped=dedupeStores(matched.matched,candidates,matched.pendingStores); }
+ catch(error){ throw Object.assign(new Error(error?.message||'门店整理未完成'),{code:error?.code||'MATCH_FAILED',stage:'matching'}); }
+ let planned;
+ try{ planned=routePlan(deduped.stores,deduped.pendingStores); }
+ catch(error){ throw Object.assign(new Error(error?.message||'配送顺序生成失败'),{code:error?.code||'PLAN_FAILED',stage:'planning'}); }
  const result={taskId,route,date:finalDate,vehicle:String(vehicle??'').trim(),totalWeight:String(totalWeight??'').trim(),stores:planned.plannedStores,pendingStores:planned.pendingStores,newStores:planned.pendingStores,rawCount:deduped.rawCount,totalStores:deduped.totalStores,corrections:planned.plannedStores.filter(x=>x.corrected).length,merged:deduped.merged,routeOrder:planned.routeOrder,correctionDetails:planned.plannedStores.filter(x=>x.corrected).map(x=>({storeId:x.storeId,originalName:x.originalName,name:x.name,routeOrder:x.routeOrder,matchConfidence:x.matchConfidence,matchVia:x.matchVia})),createdAt:new Date().toISOString(),schemaVersion:3,ocrVersion,ocrModel};
- const saved=await savePlan(env,result);
+ let saved;
+ try{ saved=await savePlan(env,result); }
+ catch(error){ throw Object.assign(new Error(error?.message||'规划结果保存失败'),{code:error?.code||'SAVE_FAILED',stage:'saving'}); }
  if(saved?.result){
    return {
      ...saved.result,
