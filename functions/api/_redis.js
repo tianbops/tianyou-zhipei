@@ -6,5 +6,5 @@ export async function set(env,key,value){return command(env,["SET",PREFIX+key,ty
 export async function del(env,key){return command(env,["DEL",PREFIX+key])}
 export function cookieName(){return COOKIE}
 export function sessionCookie(token,maxAge=604800){return COOKIE+"="+encodeURIComponent(token)+"; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age="+maxAge}
-export function clearSessionCookie(){return COOKIE+"=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0}
+export function clearSessionCookie(){return COOKIE+"=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0"}
 export function newId(){return crypto.randomUUID()}
