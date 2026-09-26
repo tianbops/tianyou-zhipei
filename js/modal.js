@@ -39,6 +39,8 @@
       }
       const confirm=document.createElement('button');confirm.type='button';confirm.className=danger?'one-shared-dialog__danger':'one-shared-dialog__primary';confirm.textContent=confirmText;actions.appendChild(confirm);
       confirm.addEventListener('click',()=>finish(input?(field?.value||''):true));
+      // 关键：将操作按钮容器加入弹窗，否则标题/正文/X 会显示而取消、确认按钮不会出现在页面。
+      box.appendChild(actions);
       overlay.appendChild(box);document.body.appendChild(overlay);
       let closed=false;
       const finish=value=>{if(closed)return;closed=true;document.removeEventListener('keydown',onKey);overlay.remove();resolve(value)};
