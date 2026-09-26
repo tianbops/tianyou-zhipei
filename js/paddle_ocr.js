@@ -239,11 +239,16 @@
   }
 
   function putText(text) {
+    const value = normalizeText(text);
+    // OCR文字不能依赖首页隐藏/已清理的手工输入框作为数据通道。
+    // 有输入框时仅用于调试/兼容显示；规划链路直接使用返回值。
     const input = $('manualOrderInput');
-    if (!input) return;
-    input.value = text;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.scrollTop = 0;
+    if (input) {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.scrollTop = 0;
+    }
+    return value;
   }
 
   async function process(file, options = {}) {
@@ -357,8 +362,11 @@
     }
     if (!results.length) throw failed[0]?.error || new Error('没有识别到有效文字，请重新拍摄清晰、完整的运单图片');
     if (!isUploadTaskActive(taskId) || cancelRequested) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
-    const combined = results.map(item => item.rawText).filter(Boolean).join('\n\n');
-    putText(combined);
+    const combined = normalizeText(results.map(item => item.rawText).filter(Boolean).join('\n\n'));
+    const ocrText = putText(combined);
+    if (!ocrText) {
+      throw Object.assign(new Error('OCR未返回有效文字'), { code: 'OCR_EMPTY', stage: 'recognizing' });
+    }
     const totalLines = results.reduce((sum, item) => sum + (Number(item.itemCount) || 0), 0);
     if (list.length > 1) {
       const message = failed.length ? ('已读取 ' + results.length + '/' + list.length + ' 张运单，' + failed.length + ' 张未成功') : ('已读取 ' + results.length + ' 张运单');
@@ -367,7 +375,7 @@
     // OCR完成后直接进入规划，用户无需再次点击“规划路线”；识别文字仍原样保留在输入框。
     if (typeof window.parseManualInput === 'function') {
       if (!isUploadTaskActive(taskId)) throw Object.assign(new Error('已取消'), { code: 'OCR_CANCELLED' });
-      await window.parseManualInput({ auto: true, source: 'ocr', taskId });
+      await window.parseManualInput({ auto: true, source: 'ocr', taskId, ocrText });
     }
     return { rawText: combined, source: 'paddleocr-browser-v6', ocrVersion: OCR_VERSION, ocrModel: OCR_MODEL, itemCount: totalLines, fileCount: list.length, successCount: results.length, failedCount: failed.length, failedFiles: failed.map(item => item.file?.name || '未命名图片') };
   }
