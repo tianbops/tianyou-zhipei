@@ -42,7 +42,9 @@ async function getOrder(date,isHistory,batch){
   const d=await r.json();
   if(batch){
     if(!d?.waybill)return null;
-    return {...d.waybill,_todaySummary:{storeCount:Number(d.waybill.totalStores)||d.waybill.stores?.length||0,totalWeight:d.waybill.totalWeight||''},_todayWaybillCount:1};
+    // V3 今日接口返回的是保存结果中的 stores；详情页内部统一使用 orders。
+    // 自动规划完成后通过 taskId 进入详情时，必须在这里完成字段交接，否则会被后续的 orders 校验当成空数据。
+    return {...d.waybill,orders:Array.isArray(d.waybill.stores)?d.waybill.stores:[],_todaySummary:{storeCount:Number(d.waybill.totalStores)||d.waybill.stores?.length||0,totalWeight:d.waybill.totalWeight||''},_todayWaybillCount:1};
   }
   if(d?.today)return {...d.today,_todaySummary:d.todaySummary||null,_todayWaybillCount:Number(d.todayWaybillCount)||0};
   return null;
