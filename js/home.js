@@ -185,9 +185,16 @@ async function parseOrderText(text,taskId=0){
   if(taskId&&!isUploadTaskActive(taskId))throw Object.assign(new Error('已取消处理'),{code:'PARSE_CANCELLED'});
   if(!window.WaybillPlanner?.run)throw Error('智能规划模块未加载，请刷新页面后重试');
   try{
+    const sourceText=String(text||'').trim();
     const result=await window.WaybillPlanner.run({
       route,
-      ocrText:String(text||'').trim(),
+      ocrText:sourceText,
+      waybill:{
+        route,
+        date:parseDateFromText(sourceText)||currentDate(),
+        vehicle:parseVehicleFromText(sourceText),
+        totalWeight:parseWeightFromText(sourceText)
+      },
       taskId:taskId||undefined
     });
     if(String(currentRoute()||'').trim()!==String(route).trim())throw Object.assign(new Error('调度线路已发生变化，当前运单已失效，请重新上传'),{code:'ROUTE_CHANGED'});
