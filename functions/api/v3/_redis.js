@@ -1,4 +1,4 @@
-// 天友智配One V3 · Redis边界
+// 智配One V3 · Redis边界
 export function v3Key(...parts){return ['zpei:v3',...parts.map(v=>encodeURIComponent(String(v??'')))].join(':');}
 function ready(env){return Boolean(String(env.UPSTASH_REDIS_REST_URL||'').trim()&&String(env.UPSTASH_REDIS_REST_TOKEN||'').trim());}
 async function request(env,path,options={}){
