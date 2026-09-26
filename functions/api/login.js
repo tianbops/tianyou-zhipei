@@ -1,7 +1,7 @@
 // Zhipei One - 多用户登录
 // Web 与微信小程序共用同一用户资料和密码体系。
 import { createAndroidToken, createMiniToken, createSession, sessionCookie } from './_auth.js';
-import { normalizeRoute, normalizeRole, publicUser, redisGet } from './_data.js';
+import { normalizeRoute, normalizeRole, publicUser, redisGet, redisSet } from './_data.js';
 
 export async function onRequest({ request, env }) {
   if (request.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
@@ -26,8 +26,32 @@ export async function onRequest({ request, env }) {
     if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
       return json({ success: false, error: '用户名或密码错误' }, 401);
     }
-    const normalizedRole = normalizeRole(user.role, user.adminLevel);
-    const isPrimaryAdmin = normalizedRole === 'system_admin' && String(user.adminLevel || '') === 'primary';
+    // 主管理员恢复保护：数据重置会保留 system:admin:primary 标记。
+    // 若该标记明确指向当前账号，但用户记录中的 role/adminLevel 因历史数据问题丢失，
+    // 登录时只对“被服务器主管理员标记明确指向的同一账号”做自愈，不允许普通账号自提权。
+    let effectiveUser = user;
+    let normalizedRole = normalizeRole(user.role, user.adminLevel);
+    let adminLevel = String(user.adminLevel || '');
+    if (!(normalizedRole === 'system_admin' && adminLevel === 'primary')) {
+      const primaryMarker = await redisGet(env, 'system:admin:primary').catch(() => null);
+      const markerUserId = String(primaryMarker?.userId || '').trim();
+      const markerUsername = String(primaryMarker?.username || '').trim().toLowerCase();
+      const currentUserId = String(user.id || '').trim();
+      const currentUsername = String(user.username || '').trim().toLowerCase();
+      if (markerUserId && markerUserId === currentUserId && markerUsername === currentUsername) {
+        effectiveUser = {
+          ...user,
+          role: 'system_admin',
+          adminLevel: 'primary',
+          updatedAt: new Date().toISOString(),
+          sessionVersion: Number(user.sessionVersion || 1) + 1
+        };
+        await redisSet(env, `user:${encodeURIComponent(effectiveUser.id).replace(/%/g, '_')}`, effectiveUser);
+        normalizedRole = 'system_admin';
+        adminLevel = 'primary';
+      }
+    }
+    const isPrimaryAdmin = normalizedRole === 'system_admin' && adminLevel === 'primary';
     // 主系统管理员是纯系统管理身份：Web 可进入管理端，业务客户端不得签发业务 Token。
     if (isPrimaryAdmin && client !== 'web') {
       return json({ success: false, error: '主系统管理员仅可使用系统管理端登录' }, 403);
@@ -35,8 +59,8 @@ export async function onRequest({ request, env }) {
 
     // 登录只读取用户资料并签发当前版本 Token，不回写整份用户对象。
     // 避免登录与管理员绑定/停用等并发更新时发生“整对象覆盖”而丢失最新业务状态。
-    const normalizedBoundRoute = normalizeRoute(user.boundRouteId);
-    const updatedUser = { ...user, role: normalizedRole, boundRouteId: normalizedBoundRoute, route: normalizedBoundRoute };
+    const normalizedBoundRoute = normalizeRoute(effectiveUser.boundRouteId);
+    const updatedUser = { ...effectiveUser, role: normalizedRole, adminLevel, boundRouteId: normalizedBoundRoute, route: normalizedBoundRoute };
     const safeUser = publicUser(updatedUser);
     if (client === 'miniprogram') {
       const token = await createMiniToken(env, updatedUser);
