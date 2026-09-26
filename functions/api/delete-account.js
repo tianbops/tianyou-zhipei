@@ -1,4 +1,4 @@
-// 天友智配One - 注销账号
+// 智配One - 注销账号
 // 注销需验证当前密码；删除该用户的账号、订单、历史记录与学习数据，不删除线路公共基准库。
 import { authRequired, clearSessionCookie } from './_auth.js';
 import { redisCommand } from './_data.js';
