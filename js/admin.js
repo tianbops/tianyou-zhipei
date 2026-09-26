@@ -129,7 +129,8 @@ function renderInvites(list){
     const expiry=x.expiresAt?new Date(x.expiresAt).toLocaleDateString('zh-CN'):'永久';
     const label=x.status==='active'?'有效':x.status==='exhausted'?'已用完':x.status==='expired'?'已过期':'已停用';
     const hash=String(x.hash||'');
-    const copyAction=invitePlainCodes.has(hash)?'<button class="copy-invite-btn" onclick="copyInviteCode(\''+escAttr(hash)+'\',this)">复制</button>':'';
+    if(x.code) invitePlainCodes.set(hash,String(x.code));
+    const copyAction='<button class="copy-invite-btn" onclick="copyInviteCode(\''+escAttr(hash)+'\',this)">复制</button>';
     const action=x.status==='active'?copyAction+'<button onclick="setInviteStatus(\''+escAttr(hash)+'\',\'disabled\')">停用</button>':copyAction;
     return '<article class="invite-card"><div class="invite-main"><div><div class="name">邀请码 '+esc(x.maskedCode||'••••-••••')+'</div><div class="meta">'+esc(uses)+' · '+esc(expiry)+'</div></div><span class="badge">'+esc(label)+'</span></div><div class="meta">创建：'+esc(x.createdAt||'')+(x.lastUsedAt?' · 最后使用：'+esc(x.lastUsedAt):'')+'</div><div class="actions">'+action+'</div></article>';
   }).join('')||'<div class="empty-state">暂无邀请码</div>';
