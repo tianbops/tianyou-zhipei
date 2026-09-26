@@ -26,7 +26,7 @@ export async function onRequest({ request, env }) {
     if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
       return json({ success: false, error: '用户名或密码错误' }, 401);
     }
-    const normalizedRole = normalizeRole(user.role);
+    const normalizedRole = normalizeRole(user.role, user.adminLevel);
     const isPrimaryAdmin = normalizedRole === 'system_admin' && String(user.adminLevel || '') === 'primary';
     // 主系统管理员是纯系统管理身份：Web 可进入管理端，业务客户端不得签发业务 Token。
     if (isPrimaryAdmin && client !== 'web') {
