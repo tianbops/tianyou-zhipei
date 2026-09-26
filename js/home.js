@@ -241,6 +241,23 @@ window.toggleUpload=()=>{
 window.openHomeMenu=()=>{const menu=$('homeMenu');if(menu)menu.style.display=menu.style.display==='block'?'none':'block'};
 function navigateApp(url){location.href=url}
 window.navigateApp=navigateApp;
+
+// 自动规划完成后的唯一前端交接点：服务器已保存结果后进入当日运单详情。
+// 这里不再依赖已删除的旧 onOrderParsed/UI 监听器，避免“处理完成后只剩空状态框”。
+let resultNavigateTimer=null;
+window.onOrderParsed=(result={})=>{
+  if(resultNavigateTimer)clearTimeout(resultNavigateTimer);
+  const route=String(result.route||currentRoute()||'').trim();
+  const date=String(result.date||currentDate()).trim();
+  const batch=String(result.taskId||'').trim();
+  if(!route)return;
+  const params=new URLSearchParams({route,date});
+  if(batch)params.set('orderBatchId',batch);
+  resultNavigateTimer=setTimeout(()=>{
+    resultNavigateTimer=null;
+    location.assign('pages/order_detail.html?'+params.toString());
+  },560);
+};
 window.goToRouteEdit=()=>{const selected=currentRoute();const bound=Auth.getBoundRoute?Auth.getBoundRoute():Auth.getCurrentRoute();if(!selected||selected!==bound){toast('当前调度线路不是你的绑定线路，不能修改基准数据','error');return}navigateApp('pages/route_edit.html')};
 window.goToOrderDetail=async()=>{
   const route=String(currentRoute()||'').trim();
