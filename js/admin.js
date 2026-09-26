@@ -129,19 +129,34 @@ function renderInvites(list){
     const expiry=x.expiresAt?new Date(x.expiresAt).toLocaleDateString('zh-CN'):'永久';
     const label=x.status==='active'?'有效':x.status==='exhausted'?'已用完':x.status==='expired'?'已过期':'已停用';
     const hash=String(x.hash||'');
-    const copyAction=invitePlainCodes.has(hash)?'<button onclick="copyInviteCode(\''+escAttr(hash)+'\')">复制</button>':'';
+    const copyAction=invitePlainCodes.has(hash)?'<button class="copy-invite-btn" onclick="copyInviteCode(\''+escAttr(hash)+'\',this)">复制</button>':'';
     const action=x.status==='active'?copyAction+'<button onclick="setInviteStatus(\''+escAttr(hash)+'\',\'disabled\')">停用</button>':copyAction;
     return '<article class="invite-card"><div class="invite-main"><div><div class="name">邀请码 '+esc(x.maskedCode||'••••-••••')+'</div><div class="meta">'+esc(uses)+' · '+esc(expiry)+'</div></div><span class="badge">'+esc(label)+'</span></div><div class="meta">创建：'+esc(x.createdAt||'')+(x.lastUsedAt?' · 最后使用：'+esc(x.lastUsedAt):'')+'</div><div class="actions">'+action+'</div></article>';
   }).join('')||'<div class="empty-state">暂无邀请码</div>';
 }
-async function copyInviteCode(hash){
+async function copyInviteCode(hash,button){
   const code=invitePlainCodes.get(String(hash));
-  if(!code){notice('完整邀请码仅在创建时提供，刷新后无法恢复明文',true);return}
+  if(!code){
+    if(button){button.textContent='不可复制';setTimeout(()=>{button.textContent='复制'},1400)}
+    return;
+  }
+  const restore=()=>{
+    if(!button) return;
+    button.textContent='复制';
+    button.disabled=false;
+  };
   try{
     await navigator.clipboard.writeText(code);
-    notice('邀请码已复制');
+    if(button){
+      button.textContent='✓ 已复制';
+      button.disabled=true;
+      setTimeout(restore,1600);
+    }
   }catch(e){
-    await OneModal.alert('邀请码：'+code+'\\n\\n请手动复制保存。',{title:'复制失败'});
+    if(button){
+      button.textContent='复制失败';
+      setTimeout(restore,1600);
+    }
   }
 }
 async function setInviteStatus(hash,status){
