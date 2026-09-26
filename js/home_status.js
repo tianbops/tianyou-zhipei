@@ -105,7 +105,8 @@ function userFriendlyError(message, code=''){
   if(failureCode==='PLAN_FAILED')return '配送顺序生成失败，请稍后重试。';
   if(failureCode==='OCR_INVALID')return '运单识别失败，请重新上传清晰的运单图片。';
   if(failureCode==='TIMEOUT')return '网络或服务器处理超时，请稍后重试。';
-  if(failureCode==='SAVE_FAILED')return '运单保存失败，请稍后重试。';
+  // 真实业务回归阶段：直接显示后端错误代码和原始信息，便于定位实际故障。
+  if(failureCode)return (window.__zpeiLastFailureStage?String(window.__zpeiLastFailureStage)+'阶段失败：':'处理失败：')+failureCode+(text?'（'+text+'）':'');
   if(failureCode==='WAYBILL_DATE_MISSING')return '未识别到运单日期，请重新上传清晰的运单图片。';
   if(failureCode==='WEIGHT_MISSING')return '未识别到商品总量，请重新上传清晰的运单图片。';
   if(failureCode==='REVIEW_REQUIRED')return '仍有待定门店未确认，请先完成门店确认。';
@@ -116,9 +117,6 @@ function userFriendlyError(message, code=''){
   if(/线路/.test(text))return '当前线路发生变化，请重新上传运单。';
   // 真实回归期间禁止吞掉后端失败原因：后端已有 code/stage 时直接显示，
   // 便于根据真实运行结果定位“识别 → 提取 → 匹配 → 规划”断点。
-  const stageLabels={start:'启动',auth:'登录',extracting:'提取',matching:'匹配',planning:'规划',saving:'保存',complete:'完成'};
-  const stageLabel=stageLabels[String(window.__zpeiLastFailureStage||'').trim()]||'处理';
-  if(failureCode)return stageLabel+'失败：'+failureCode+(text?'（'+text+'）':'');
   return text||'运单处理未完成，请重新上传。';
 }
 
