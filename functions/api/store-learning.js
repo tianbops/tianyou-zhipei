@@ -1,4 +1,4 @@
-// 天友智配One V3 · 确认后的门店学习
+// 智配One V3 · 确认后的门店学习
 import { authRequired } from './_auth.js';
 import { isRouteMaintainer, getBase, getLearning, setLearning, normalizeRoute } from './v3/data.js';
 const MAX_ALIASES=1000,MAX_BATCH=100;
