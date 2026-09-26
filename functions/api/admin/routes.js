@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 系统管理：线路绑定
+// 智配One V1.0 - 系统管理：线路绑定
 import { requireSystemAdmin } from '../_auth.js';
 import { baseKey as v3BaseKey, routeKey as v3RouteKey, userProfileKey, getRoute as getV3Route, getUserProfile } from '../v3/data.js';
 import { getUser, normalizeRoute, encodeKey, atomicRouteBinding, publicUser, recordAdminLog, redisCommand, scanUsers } from '../_data.js';
