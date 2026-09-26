@@ -5,6 +5,15 @@ let routes=[];
 // 仅在当前管理员会话内保留刚创建的邀请码明文，便于再次点击“复制”；服务端列表仍只返回掩码。
 const invitePlainCodes=new Map();
 
+async function adminLogout(){
+  const button=$('#adminLogout');
+  if(button) button.disabled=true;
+  try{
+    await fetch('/api/logout',{method:'POST',credentials:'same-origin',cache:'no-store'});
+  }catch(_){}
+  location.replace('index.html');
+}
+
 document.addEventListener('DOMContentLoaded', async ()=>{
   // 管理员身份校验必须先执行；任何管理页控件绑定异常都不能阻断管理员认证。
   await boot();
