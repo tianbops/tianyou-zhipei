@@ -114,7 +114,12 @@ function userFriendlyError(message, code=''){
   if(/OCR|识别引擎|OCR文字|无法识别运单/.test(text))return '运单识别失败，请重新上传清晰的运单图片。';
   if(/超时|网络|请求/.test(text))return '网络或服务器处理超时，请稍后重试。';
   if(/线路/.test(text))return '当前线路发生变化，请重新上传运单。';
-  return '运单处理未完成，请重新上传。';
+  // 真实回归期间禁止吞掉后端失败原因：后端已有 code/stage 时直接显示，
+  // 便于根据真实运行结果定位“识别 → 提取 → 匹配 → 规划”断点。
+  const stageLabels={start:'启动',auth:'登录',extracting:'提取',matching:'匹配',planning:'规划',saving:'保存',complete:'完成'};
+  const stageLabel=stageLabels[String(window.__zpeiLastFailureStage||'').trim()]||'处理';
+  if(failureCode)return stageLabel+'失败：'+failureCode+(text?'（'+text+'）':'');
+  return text||'运单处理未完成，请重新上传。';
 }
 
 function showError(message='',code=''){
@@ -172,7 +177,7 @@ function render(status='idle',progress=0,message='',code=''){
 }
 
 window.renderUnifiedStatus=(status='idle',progress=0,message='',code='')=>render(status,progress,message,code);
-window.handleUploadProcessingFailure=(message='',code='')=>render('error',100,message,code);
+window.handleUploadProcessingFailure=(message='',code='',stage='')=>{window.__zpeiLastFailureStage=String(stage||'').trim();render('error',100,message,code);};
 window.resetProcessingStatus=reset;
 
 })();
