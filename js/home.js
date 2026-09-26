@@ -259,8 +259,19 @@ window.parseManualInput=async(options={})=>{
  const auto=options?.auto===true,source=String(options?.source||'manual'),taskId=Number(options?.taskId)||ensureUploadTask();
  if(taskId&&!isUploadTaskActive(taskId))return[];
  if(parseInFlight)return auto?[]:toast('运单正在处理，请勿重复操作','warning');
- const text=$('manualOrderInput')?.value||'';
- if(!text.trim()){if(auto)window.renderUnifiedStatus('error',0,'未识别到运单文字，请重试');else toast('请先输入或识别运单文字','warning');return[];}
+ const text=String(options?.ocrText ?? $('manualOrderInput')?.value ?? '').trim();
+ if(!text){
+  const code=auto?'OCR_EMPTY':'OCR_TEXT_EMPTY';
+  const stage=auto?'recognizing':'extracting';
+  const message=auto?'OCR未返回有效文字':'请先输入或识别运单文字';
+  if(auto){
+    const error=Object.assign(new Error(message),{code,stage});
+    window.handleUploadProcessingFailure?.(message,code,stage);
+    throw error;
+  }
+  toast(message,'warning');
+  return[];
+ }
  parseInFlight=true;parseCancelled=false;parseAbortController=new AbortController();
  try{
   window.renderUnifiedStatus('loading',45,'正在规划线路…');
