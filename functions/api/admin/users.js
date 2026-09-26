@@ -1,0 +1,9 @@
+import {json,body} from "../_json.js";
+import {currentUser} from "../_auth.js";
+import {get,set} from "../_redis.js";
+async function read(env,id){const raw=await get(env,"user:"+id);if(!raw)return null;try{return typeof raw==="string"?JSON.parse(raw):raw}catch{return null}}
+async function ids(env){const raw=await get(env,"users:index");if(!raw)return [];try{return typeof raw==="string"?JSON.parse(raw):raw}catch{return []}}
+async function saveIds(env,a){return set(env,"users:index",a)}
+function safe(u){return {id:u.id,username:u.username,name:u.name||"",role:u.role||"user",disabled:!!u.disabled,boundRouteId:u.boundRouteId||null,routeDuty:u.routeDuty||null,createdAt:u.createdAt||null}}
+export async function onRequestGet({request,env}){const actor=await currentUser(request,env);if(!actor||actor.role!=="admin")return json({success:false,error:"无权限"},403);const list=[];for(const id of await ids(env)){const u=await read(env,id);if(u)list.push(safe(u))}return json({success:true,users:list})}
+export async function onRequestPost({request,env}){const actor=await currentUser(request,env);if(!actor||actor.role!=="admin")return json({success:false,error:"无权限"},403);const input=await body(request);const action=String(input.action||"");const id=String(input.userId||"");const u=await read(env,id);if(!u)return json({success:false,error:"用户不存在"},404);if(u.role==="admin")return json({success:false,error:"系统管理员账号不能通过此接口修改"},403);if(action==="disable"||action==="enable"){u.disabled=action==="disable";u.sessionVersion=(u.sessionVersion??1)+1;await set(env,"user:"+id,u);return json({success:true,user:safe(u)})}if(action==="rename"){const name=String(input.name||"").trim();if(!name)return json({success:false,error:"名称不能为空"},400);u.name=name.slice(0,40);await set(env,"user:"+id,u);return json({success:true,user:safe(u)})}return json({success:false,error:"不支持的操作"},400)}
