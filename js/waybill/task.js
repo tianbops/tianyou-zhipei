@@ -48,6 +48,7 @@
       target.ocrText=ocr.text;
       setStageFor(target,'EXTRACTING');
       setStageFor(target,'MATCHING');
+      setStageFor(target,'PLANNING');
 
       const r=await fetch('/api/auto-plan',{
         method:'POST',
