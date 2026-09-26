@@ -172,9 +172,13 @@ function renderUsers(){
   $('#userCount').textContent=users.length+' 个账号';
   const orderedUsers=[...users].sort((a,b)=>(a?.adminLevel==='primary'?0:1)-(b?.adminLevel==='primary'?0:1));
   $('#userList').innerHTML=orderedUsers.map(u=>{
-    const roleText=u.adminLevel==='primary'?'主系统管理员':(()=>{const route=routes.find(r=>String(r.driverUserId||'')===String(u.id))||routes.find(r=>String(r.deliveryUserId||'')===String(u.id));const duty=String(u.routeDuty||'').toLowerCase();const inferredDuty=duty==='driver'||duty==='delivery'?duty:route&&String(route.driverUserId||'')===String(u.id)?'driver':route&&String(route.deliveryUserId||'')===String(u.id)?'delivery':'';return inferredDuty==='driver'?'驾驶员':inferredDuty==='delivery'?'配送员':'业务用户'})();
-    const bindingText=u.adminLevel==='primary'?'角色：主系统管理员':(()=>{const route=routes.find(r=>String(r.driverUserId||'')===String(u.id))||routes.find(r=>String(r.deliveryUserId||'')===String(u.id));return '角色：'+roleText+' · 绑定：'+(route?.id||u.boundRouteId||'未绑定')})();
-    return '<article class="user-card"><div class="user-main"><div><div class="name">'+esc(u.name||u.username)+'</div><div class="meta">'+esc(u.username)+' · '+esc(u.id)+'</div></div><span class="badge">'+esc(u.adminLevel==='primary'?'主系统管理员':'正常')+'</span></div><div class="meta">'+esc(bindingText)+'</div><div class="actions">'+(u.adminLevel==='primary'?'':'<button onclick="resetPassword(\\''+escAttr(u.id)+'\\')">重置密码</button>')+(u.adminLevel==='primary'?'':'<button onclick="deleteUser(\\''+escAttr(u.id)+'\\')">删除账号</button>')+'</div></article>';
+    const route=routes.find(r=>String(r.driverUserId||'')===String(u.id))||routes.find(r=>String(r.deliveryUserId||'')===String(u.id));
+    const duty=String(u.routeDuty||'').toLowerCase();
+    const inferredDuty=duty==='driver'||duty==='delivery'?duty:route&&String(route.driverUserId||'')===String(u.id)?'driver':route&&String(route.deliveryUserId||'')===String(u.id)?'delivery':'';
+    const roleText=u.adminLevel==='primary'?'主系统管理员':inferredDuty==='driver'?'驾驶员':inferredDuty==='delivery'?'配送员':'业务用户';
+    const bindingText=u.adminLevel==='primary'?'角色：主系统管理员':'角色：'+roleText+' · 绑定：'+(route?.id||u.boundRouteId||'未绑定');
+    const actions=u.adminLevel==='primary'?'':`<button onclick="resetPassword('${escAttr(u.id)}')">重置密码</button><button onclick="deleteUser('${escAttr(u.id)}')">删除账号</button>`;
+    return `<article class="user-card"><div class="user-main"><div><div class="name">${esc(u.name||u.username)}</div><div class="meta">${esc(u.username)} · ${esc(u.id)}</div></div><span class="badge">${esc(u.adminLevel==='primary'?'主系统管理员':'正常')}</span></div><div class="meta">${esc(bindingText)}</div><div class="actions">${actions}</div></article>`;
   }).join('')||'<div class="meta">暂无用户</div>';
 }
 function renderRoutes(){
