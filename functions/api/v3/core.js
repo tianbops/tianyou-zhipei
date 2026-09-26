@@ -35,6 +35,17 @@ export async function runPlan({env,session,route,date,vehicle,totalWeight,text,t
  let planned;
  try{ planned=routePlan(deduped.stores,deduped.pendingStores); }
  catch(error){ throw Object.assign(new Error(error?.message||'配送顺序生成失败'),{code:error?.code||'PLAN_FAILED',stage:'planning'}); }
+ // 核心保护：规划器必须返回完整、可保存的结构；不得让异常结果继续进入保存链路
+ if(!planned||!Array.isArray(planned.plannedStores)||!Array.isArray(planned.pendingStores)||!Array.isArray(planned.routeOrder)){
+   throw Object.assign(new Error('配送顺序生成结果无效'),{code:'PLAN_FAILED',stage:'planning'});
+ }
+ const invalidStore=planned.plannedStores.find(x=>!x||!String(x.storeId||'').trim()||!Number.isFinite(Number(x.routeOrder)));
+ if(invalidStore){
+   throw Object.assign(new Error('配送顺序包含无效门店数据'),{code:'PLAN_FAILED',stage:'planning'});
+ }
+ if(planned.routeOrder.length!==planned.plannedStores.length||planned.routeOrder.some((id,i)=>String(id)!==String(planned.plannedStores[i].storeId))){
+   throw Object.assign(new Error('配送顺序与门店数据不一致'),{code:'PLAN_FAILED',stage:'planning'});
+ }
  const result={taskId,route,date:finalDate,vehicle:String(vehicle??'').trim(),totalWeight:String(totalWeight??'').trim(),stores:planned.plannedStores,pendingStores:planned.pendingStores,newStores:planned.pendingStores,rawCount:deduped.rawCount,totalStores:deduped.totalStores,corrections:planned.plannedStores.filter(x=>x.corrected).length,merged:deduped.merged,routeOrder:planned.routeOrder,correctionDetails:planned.plannedStores.filter(x=>x.corrected).map(x=>({storeId:x.storeId,originalName:x.originalName,name:x.name,routeOrder:x.routeOrder,matchConfidence:x.matchConfidence,matchVia:x.matchVia})),createdAt:new Date().toISOString(),schemaVersion:3,ocrVersion,ocrModel};
  let saved;
  try{ saved=await savePlan(env,result); }
