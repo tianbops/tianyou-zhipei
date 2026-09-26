@@ -207,8 +207,18 @@ function renderAdminLog(x){
   else if(action==='create_invite'||action==='update_invite') description='邀请码管理';
   else if(action==='delete_history') description=`历史运单：${targetId}`;
   else if(targetId) description=`${targetType}：${targetId}`;
-  const actor=x.actorName||x.actorUsername||x.actorUserId||'管理员';
-  return `<article class="route-card admin-log-card"><div class="name">${esc(title)}</div><div class="meta">${esc(description)}</div><div class="meta">${esc(actor)} · ${esc(x.createdAt||'')}</div></article>`;
+  const actor=x.actorName||x.actorUsername||'管理员';
+  const time=formatAdminLogTime(x.createdAt);
+  return `<article class="route-card admin-log-card"><div class="name">${esc(title)}</div><div class="meta">${esc(description)}</div><div class="meta">${esc(actor)} · ${esc(time)}</div></article>`;
+}
+function formatAdminLogTime(value){
+  const s=String(value||'').trim();
+  if(!s) return '';
+  const d=new Date(s);
+  if(Number.isNaN(d.getTime())) return s;
+  const pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 }
 function renderUsers(){
   $('#userCount').textContent=users.length+' 个账号';
