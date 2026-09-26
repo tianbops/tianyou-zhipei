@@ -125,7 +125,7 @@ export async function verifySession(request, env) {
     name: String(user.name || session.name || user.username || ''),
     route: normalizeRoute(profile.boundRouteId),
     boundRouteId: normalizeRoute(profile.boundRouteId),
-    role: normalizeRole(user.role),
+    role: normalizeRole(user.role, user.adminLevel),
     routeDuty: String(profile.routeDuty || ''),
     adminLevel: String(user.adminLevel || ''),
     vehicle: String(user.vehicle || ''),
@@ -154,7 +154,7 @@ async function verifyToken(token, env, expectedClient) {
       username: String(payload.username || ''),
       route: normalizeRoute(payload.boundRouteId || payload.route),
       boundRouteId: normalizeRoute(payload.boundRouteId || payload.route),
-      role: normalizeRole(payload.role),
+      role: normalizeRole(payload.role, payload.adminLevel),
       adminLevel: String(payload.adminLevel || ''),
       sessionVersion: Number(payload.sessionVersion || 1),
       client: String(payload.client || '')
