@@ -1,4 +1,4 @@
-// 天友智配One - 更改登录账号
+// 智配One - 更改登录账号
 // 更改账号必须验证当前密码，并原子占用新账号名。
 import { authRequired, createSession, sessionCookie } from './_auth.js';
 import { publicUser, redisCommand } from './_data.js';
