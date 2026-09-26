@@ -1,4 +1,4 @@
-/* 天友智配One - 首页业务逻辑 */
+/* 智配One - 首页业务逻辑 */
 (function(){
 'use strict';
 
