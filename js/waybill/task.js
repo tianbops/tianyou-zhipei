@@ -65,7 +65,7 @@
       setStageFor(target,'PLANNING',{result:data.result,plannedStores:data.result?.stores||[]});
       setStageFor(target,'SAVING');
       setStageFor(target,'COMPLETED',{result:data.result});
-      return target;
+      return task;
     }catch(e){
       if(e?.name==='AbortError'||e?.code==='CANCELLED'){
         setStageFor(target,'CANCELLED');
