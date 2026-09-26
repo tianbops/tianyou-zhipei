@@ -1,4 +1,4 @@
-// 天友智配One V3 · 今日运单/今日修正数据调用接口
+// 智配One V3 · 今日运单/今日修正数据调用接口
 import { authRequired } from '../_auth.js';
 import { canUseRoute, normalizeRoute, todayWaybillKey, todayCorrectionKey, todayIndexKey, getRoute } from './data.js';
 import { get, evalRedis } from './_redis.js';
