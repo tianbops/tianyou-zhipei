@@ -1,4 +1,4 @@
-// 天友智配One V3 · 自适应门店学习
+// 智配One V3 · 自适应门店学习
 // 只接收人工确认结果，形成可追溯的 OCR 变体 -> 稳定 storeId 映射。
 export function normalizeLearningKey(value){
  return String(value??'').replace(/\s+/g,' ').trim().replace(/[\s\u3000，,。；;：:（）()【】\[\]<>《》“”"'‘’·\-_/]/g,'').toLowerCase();
