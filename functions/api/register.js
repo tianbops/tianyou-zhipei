@@ -1,4 +1,4 @@
-// 天友智配One - 内部用户注册
+// 智配One - 内部用户注册
 // 普通账号必须使用管理员签发的邀请码；管理员账号不走此注册流程。
 import { createSession, sessionCookie } from './_auth.js';
 import { publicUser, redisCommand } from './_data.js';
