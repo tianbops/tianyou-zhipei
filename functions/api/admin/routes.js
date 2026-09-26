@@ -60,12 +60,28 @@ export async function onRequest({ request, env }) {
         updatedBy: admin.id,
         source: 'route-create'
       };
-      const script = "if redis.call('exists', KEYS[1]) == 1 then return 0 end if redis.call('exists', KEYS[2]) == 1 then return -1 end redis.call('set', KEYS[1], ARGV[1]) redis.call('set', KEYS[2], ARGV[2]) return 1";
+      // 线路正式记录与基准库必须成对存在。历史版本可能只留下 route:XX号线:base，
+      // 此时不能让管理员“重新创建”失败，也不能覆盖现有基准库；仅补齐缺失的线路主记录。
+      const script = `
+local routeExists = redis.call('exists', KEYS[1])
+local baseExists = redis.call('exists', KEYS[2])
+if routeExists == 1 then return 0 end
+if baseExists == 1 then
+  redis.call('set', KEYS[1], ARGV[1])
+  return 2
+end
+redis.call('set', KEYS[1], ARGV[1])
+redis.call('set', KEYS[2], ARGV[2])
+return 1
+`;
       const result = await redisCommand(env, ['EVAL', script, '2', v3RouteKey(route), v3BaseKey(route), JSON.stringify(record), JSON.stringify({...base, schemaVersion:3, source:'v3-route-create'})]);
       if (Number(result) === 0) return json({ success: false, error: '该线路已存在', code: 'ROUTE_EXISTS' }, 409);
-      if (Number(result) !== 1) return json({ success: false, error: '该线路已有残留基准数据，请先检查后再创建', code: 'ROUTE_BASE_EXISTS' }, 409);
-      await recordAdminLog(env, admin, 'create_route', 'route', route, { status: 'active' }).catch(error => console.warn('create route audit log failed', error));
-      return json({ success: true, route: record, base });
+      const repaired = Number(result) === 2;
+      await recordAdminLog(env, admin, repaired ? 'repair_route_record' : 'create_route', 'route', route, {
+        status: 'active',
+        repairedMissingRouteRecord: repaired
+      }).catch(error => console.warn('route create/repair audit log failed', error));
+      return json({ success: true, route: record, base: repaired ? null : base, repairedMissingRouteRecord: repaired });
     }
 
     if (request.method !== 'PUT') return json({ success: false, error: 'Method not allowed' }, 405);
