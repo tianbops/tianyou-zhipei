@@ -205,7 +205,12 @@ window.Auth = {
   } else {
     guard();
   }
-  window.addEventListener('pageshow', () => guard(true));
+  // 管理员页禁止在每次 BFCache/pageshow 恢复时强制重新验证，避免移动端反复触发 /api/me。
+  window.addEventListener('pageshow', () => {
+    const page = location.pathname.split('/').pop() || 'index.html';
+    if (page === 'admin.html') return;
+    guard(true);
+  });
 })();
 
 // 全站统一返回。这里使用简单的 URL 解析，不使用容易造成语法错误的复杂正则。
