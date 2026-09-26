@@ -208,18 +208,17 @@ window.Auth = {
  * - 不依赖页面自身是否主动调用 checkAuth()
  */
 (function setupGlobalAuthGuard() {
+  const page = location.pathname.split('/').pop() || 'index.html';
+  // 管理员页面由 admin.js 独立完成一次身份验证。
+  // 全局守卫完全退出 admin.html，避免两个守卫互相触发页面导航。
+  if (page === 'admin.html') return;
   const guard = (force = false) => window.Auth?.checkAuth?.(force);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', guard, { once: true });
   } else {
     guard();
   }
-  // 管理员页禁止在每次 BFCache/pageshow 恢复时强制重新验证，避免移动端反复触发 /api/me。
-  window.addEventListener('pageshow', () => {
-    const page = location.pathname.split('/').pop() || 'index.html';
-    if (page === 'admin.html') return;
-    guard(true);
-  });
+  window.addEventListener('pageshow', () => guard(true));
 })();
 
 // 全站统一返回。这里使用简单的 URL 解析，不使用容易造成语法错误的复杂正则。
