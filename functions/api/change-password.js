@@ -1,4 +1,4 @@
-// 天友智配One - 修改登录密码
+// 智配One - 修改登录密码
 // 修改密码必须验证当前密码；新密码仅保存 PBKDF2-SHA256 哈希，不保存明文。
 import { authRequired } from './_auth.js';
 import { redisCommand } from './_data.js';
