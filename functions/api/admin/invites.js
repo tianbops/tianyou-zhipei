@@ -1,4 +1,4 @@
-// 天友智配One - 管理员邀请码
+// 智配One - 管理员邀请码
 import { requireSystemAdmin } from '../_auth.js';
 import { redisCommand, redisGet, recordAdminLog } from '../_data.js';
 
