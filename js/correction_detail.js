@@ -1,4 +1,4 @@
-/* 天友智配One - 当日修正详情：展示指定历史运单保存的真实修正记录 */
+/* 智配One - 当日修正详情：展示指定历史运单保存的真实修正记录 */
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
