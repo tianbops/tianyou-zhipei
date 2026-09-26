@@ -1,4 +1,4 @@
-// 天友智配One V1.0 - 用户资料
+// 智配One V1.0 - 用户资料
 // 用户可以维护个人姓名/手机号/默认车辆，但不能自行修改路线绑定。
 import { authRequired, createAndroidToken, createMiniToken, createSession, sessionCookie } from './_auth.js';
 import { publicUser, redisGet, redisSet } from './_data.js';
