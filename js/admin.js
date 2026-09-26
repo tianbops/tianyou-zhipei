@@ -26,10 +26,10 @@ async function boot(){
   try{
     // 管理页只复用全局 Auth 守卫，禁止再次单独请求 /api/me。
     // 这样可避免 DOMContentLoaded 时产生两套并发身份验证，导致页面反复加载。
-    const allowed = await Auth.checkAuth();
-    if(!allowed) return;
-    const me = Auth.serverUser;
-    if(!me||me.role!=='system_admin'||me.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
+    // 管理页已由 auth.js 全局守卫排除，身份验证只在这里执行一次。
+    const me = await Auth.getCurrentServerUser(true);
+    if(!me) throw new Error('管理员会话验证失败，请重新登录');
+    if(me.role!=='system_admin'||me.adminLevel!=='primary') throw new Error('当前账号不是主系统管理员');
     $('#adminUser').textContent=(me.name||me.username)+' · 主系统管理员';
     const results = await Promise.allSettled([loadUsers(), loadRoutes(), loadRequests(), loadInvites(), loadLogs()]);
     const failed = results.filter(x => x.status === 'rejected');
