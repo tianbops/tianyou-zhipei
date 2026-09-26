@@ -166,8 +166,50 @@ async function setInviteStatus(hash,status){
 }
 async function loadLogs(){
   const endpoint='/api/admin/logs';
-  try{const r=await api(endpoint);if(!r.success)throw new Error(`${endpoint}：${r.error||'日志读取失败'}`);$('#logList').innerHTML=(r.logs||[]).map(x=>`<article class="route-card"><div class="name">${esc(x.action)}</div><div class="meta">${esc(x.createdAt)} · ${esc(x.targetType)} · ${esc(x.targetId)}</div></article>`).join('')||'<div class="meta">暂无日志</div>'; return true}
-  catch(e){notice(e.message,true); throw e}}
+  try{
+    const r=await api(endpoint);
+    if(!r.success) throw new Error(`${endpoint}：${r.error||'日志读取失败'}`);
+    $('#logList').innerHTML=(r.logs||[]).map(renderAdminLog).join('')||'<div class="meta">暂无日志</div>';
+    return true;
+  }catch(e){notice(e.message,true);throw e}
+}
+function renderAdminLog(x){
+  const action=String(x.action||'');
+  const labels={
+    create_route:'新建线路',
+    repair_route_record:'修复线路信息',
+    bind_route:'绑定线路人员',
+    unbind_route:'解除线路绑定',
+    create_user:'创建用户',
+    update_user:'修改用户信息',
+    delete_user:'删除用户',
+    reset_password:'重置密码',
+    create_invite:'创建邀请码',
+    update_invite:'更新邀请码',
+    disable_invite:'停用邀请码',
+    enable_invite:'启用邀请码',
+    approve_route_request:'通过线路绑定申请',
+    reject_route_request:'拒绝线路绑定申请',
+    delete_history:'删除历史运单',
+    data_reset:'系统数据重置'
+  };
+  const targetLabels={user:'用户',route:'线路',route_request:'绑定申请',invite:'邀请码',history:'历史运单',system:'系统'};
+  const title=labels[action]||action||'系统操作';
+  const targetType=targetLabels[String(x.targetType||'')]||String(x.targetType||'操作');
+  const targetId=String(x.targetId||'');
+  const detail=x.detail&&typeof x.detail==='object'?x.detail:{};
+  let description='';
+  if(action==='create_route'||action==='repair_route_record') description=`线路：${targetId}`;
+  else if(action==='bind_route') description=`线路：${targetId}${detail.driverUserId?' · 驾驶员已配置':''}${detail.deliveryUserId?' · 配送员已配置':''}`;
+  else if(action==='delete_user') description=`用户：${detail.username||targetId}`;
+  else if(action==='reset_password'||action==='update_user') description=`用户：${detail.username||targetId}`;
+  else if(action==='approve_route_request'||action==='reject_route_request') description=`申请线路：${detail.route||targetId}`;
+  else if(action==='create_invite'||action==='update_invite') description='邀请码管理';
+  else if(action==='delete_history') description=`历史运单：${targetId}`;
+  else if(targetId) description=`${targetType}：${targetId}`;
+  const actor=x.actorName||x.actorUsername||x.actorUserId||'管理员';
+  return `<article class="route-card admin-log-card"><div class="name">${esc(title)}</div><div class="meta">${esc(description)}</div><div class="meta">${esc(actor)} · ${esc(x.createdAt||'')}</div></article>`;
+}
 function renderUsers(){
   $('#userCount').textContent=users.length+' 个账号';
   const orderedUsers=[...users].sort((a,b)=>(a?.adminLevel==='primary'?0:1)-(b?.adminLevel==='primary'?0:1));
