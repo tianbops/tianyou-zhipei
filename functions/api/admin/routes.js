@@ -29,7 +29,9 @@ export async function onRequest({ request, env }) {
           const raw = await redisCommand(env, ['GET', key]).catch(() => null);
           const value = parseRedisJson(raw);
           if (!value || !value.id) continue;
-          records.set(normalizeRoute(value.id), value);
+          const routeId = normalizeRoute(decodeRouteValue(value.id));
+          if (!routeId) continue;
+          records.set(routeId, { ...value, id: routeId, name: decodeRouteValue(value.name || routeId) });
         }
       } while (cursor !== '0');
 
@@ -42,7 +44,7 @@ export async function onRequest({ request, env }) {
         for (const key of keys) {
           const match = String(key).match(/^zpei:v3:route:(.+):base$/);
           if (!match) continue;
-          const routeId = normalizeRoute(match[1]);
+          const routeId = normalizeRoute(decodeRouteValue(match[1]));
           if (!routeId || records.has(routeId)) continue;
           const rawBase = await redisCommand(env, ['GET', key]).catch(() => null);
           const base = parseRedisJson(rawBase);
@@ -248,4 +250,9 @@ function parseRedisJson(value) {
   if (!value) return null;
   if (typeof value === 'object') return value;
   try { return JSON.parse(String(value)); } catch { return null; }
+}
+
+function decodeRouteValue(value) {
+  const s = String(value || '').trim();
+  try { return decodeURIComponent(s); } catch { return s; }
 }
