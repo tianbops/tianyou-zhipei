@@ -26,8 +26,9 @@ export async function onRequest({ request, env }) {
         const keys = Array.isArray(result?.[1]) ? result[1] : [];
         for (const key of keys) {
           if ((key.match(/:/g)||[]).length !== 3) continue;
-          const value = await redisCommand(env, ['GET', key]).catch(() => null);
-          if (!value || typeof value !== 'object' || !value.id) continue;
+          const raw = await redisCommand(env, ['GET', key]).catch(() => null);
+          const value = parseRedisJson(raw);
+          if (!value || !value.id) continue;
           records.set(normalizeRoute(value.id), value);
         }
       } while (cursor !== '0');
@@ -43,7 +44,8 @@ export async function onRequest({ request, env }) {
           if (!match) continue;
           const routeId = normalizeRoute(match[1]);
           if (!routeId || records.has(routeId)) continue;
-          const base = await redisCommand(env, ['GET', key]).catch(() => null);
+          const rawBase = await redisCommand(env, ['GET', key]).catch(() => null);
+          const base = parseRedisJson(rawBase);
           if (!base || typeof base !== 'object') continue;
           records.set(routeId, {
             schemaVersion: 3,
@@ -240,4 +242,10 @@ return 1
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+function parseRedisJson(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(String(value)); } catch { return null; }
 }
