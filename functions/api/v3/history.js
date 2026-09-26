@@ -1,4 +1,4 @@
-// 天友智配One V3 · 统一历史数据出口
+// 智配One V3 · 统一历史数据出口
 import { authRequired } from '../_auth.js';
 import { canUseRoute, isRouteMaintainer, normalizeRoute, getRoute, historyIndexKey, planKey, todayWaybillKey, todayCorrectionKey, todayIndexKey, acquireRouteDateLock, releaseRouteDateLock } from './data.js';
 import { get, evalRedis } from './_redis.js';
