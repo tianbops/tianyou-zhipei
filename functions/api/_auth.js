@@ -101,6 +101,26 @@ export async function verifySession(request, env) {
   if (!user || user.status === 'disabled') return null;
   if (Number(user.sessionVersion || 1) !== Number(session.sessionVersion || 1)) return null;
 
+  // 主系统管理员是独立的系统管理身份，不依赖业务用户 profile、线路绑定或调度状态。
+  // 管理端认证走这里的轻量分支，避免管理员登录被业务 profile 链路阻塞。
+  const isPrimaryAdmin = normalizeRole(user.role, user.adminLevel) === 'system_admin' && String(user.adminLevel || '') === 'primary';
+  if (isPrimaryAdmin) {
+    return {
+      ...session,
+      username: String(user.username || session.username || ''),
+      name: String(user.name || session.name || user.username || ''),
+      route: '',
+      boundRouteId: '',
+      role: 'system_admin',
+      routeDuty: '',
+      adminLevel: 'primary',
+      vehicle: '',
+      status: String(user.status || 'active'),
+      v3Profile: null,
+      user
+    };
+  }
+
   const profile = await getUserProfile(env, user.id) || {
     userId: String(user.id),
     boundRouteId: normalizeRoute(user.boundRouteId),
