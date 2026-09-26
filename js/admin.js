@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   // 管理员身份校验必须先执行；任何管理页控件绑定异常都不能阻断管理员认证。
   await boot();
   try{
+    $('#adminLogout')?.addEventListener('click', adminLogout);
     document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
     const bind=(id,event,handler)=>{
       const el=$('#'+id);
